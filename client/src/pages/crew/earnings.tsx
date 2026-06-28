@@ -3,11 +3,14 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Coins, Zap, Clock, TrendingUp, Loader2, Lock, Link as LinkIcon, Share2, MessageCircle,
-  Dumbbell, Truck, KeyRound, Wrench, Copy
+  Dumbbell, Truck, KeyRound, Wrench, Copy, Image as ImageIcon, Sparkles
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Link } from "wouter";
@@ -65,6 +68,18 @@ interface CrewPayout {
   serviceType?: string | null;
 }
 
+interface MarketingAdDraft {
+  headline: string;
+  facebookPost: string;
+  shortText: string;
+  hashtags: string[];
+  ctaLabel: string;
+  photoSuggestion: string;
+  provider: string;
+  fallbackUsed: boolean;
+  reason?: string;
+}
+
 const REWARD_LABELS: Record<string, string> = {
   mining: "Mining Reward",
   daily_checkin: "Daily Check-in",
@@ -110,10 +125,17 @@ const ALL_CAPABILITIES: { key: string; label: string; icon: LucideIcon }[] = [
   { key: "uhaul", label: "U-Haul Access", icon: KeyRound },
 ];
 
+const AD_FOCUS_OPTIONS = ["Moving help", "Junk removal", "Delivery help", "Last-minute labor"];
+
 export default function CrewEarningsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [animatedTokens, setAnimatedTokens] = useState(0);
+  const [adArea, setAdArea] = useState("Ironwood / Northwoods");
+  const [adFocus, setAdFocus] = useState("Moving help");
+  const [adNotes, setAdNotes] = useState("");
+  const [adPhotoUrl, setAdPhotoUrl] = useState("");
+  const [adDraft, setAdDraft] = useState<MarketingAdDraft | null>(null);
 
   const { data: wallet } = useQuery<{ balance: string; tokenBalance?: string; totalEarned?: string }>({ queryKey: ["/api/rewards/wallet"] });
   const { data: miningStatus } = useQuery<MiningStatus>({ queryKey: ["/api/mining/status"], refetchInterval: 15000, refetchIntervalInBackground: false, retry: 1 });
@@ -146,6 +168,18 @@ export default function CrewEarningsPage() {
     referralLink,
   ].filter(Boolean).join("\n\n");
   const referralSmsHref = `sms:?&body=${encodeURIComponent(referralShareText)}`;
+  const trackedAdLink = useMemo(() => {
+    try {
+      const url = new URL(referralLink);
+      url.searchParams.set("utm_source", "crew_ad");
+      url.searchParams.set("utm_medium", "facebook");
+      url.searchParams.set("utm_campaign", `${adArea}-${adFocus}`.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""));
+      return url.toString();
+    } catch {
+      return referralLink;
+    }
+  }, [adArea, adFocus, referralLink]);
+  const facebookShareHref = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(trackedAdLink)}`;
 
   useEffect(() => {
     if (!miningStatus?.currentSession) { setAnimatedTokens(0); return; }
@@ -189,6 +223,28 @@ export default function CrewEarningsPage() {
       notificationService.notifyNewReward("mining", claimed);
     },
     onError: (e: Error) => toast({ title: "Claim Failed", description: e.message, variant: "destructive" }),
+  });
+
+  const adDraftMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/crew/marketing/ad-draft", {
+        area: adArea,
+        focus: adFocus,
+        rawText: adNotes,
+        photoUrl: adPhotoUrl,
+        referralLink: trackedAdLink,
+        promoCode: referralCode,
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setAdDraft(data.draft);
+      toast({
+        title: "Ad draft ready",
+        description: data.draft?.fallbackUsed ? "Template draft created. OpenAI fallback was used." : "ChatGPT-powered copy created.",
+      });
+    },
+    onError: (e: Error) => toast({ title: "Ad draft failed", description: e.message, variant: "destructive" }),
   });
 
   const tokenBalance = parseFloat(wallet?.tokenBalance || wallet?.balance || "0");
@@ -258,6 +314,144 @@ export default function CrewEarningsPage() {
             <Copy className="h-3.5 w-3.5" /> Copy post
           </button>
         </div>
+      </div>
+
+      <div className="rounded-2xl border border-blue-500/25 bg-blue-500/10 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-widest text-blue-300">1-2-3 ad builder</p>
+            <h2 className="mt-1 text-lg font-black text-white">Create a local Facebook post</h2>
+            <p className="mt-1 text-xs leading-relaxed text-slate-300">
+              Pick the area, pick the job focus, add a photo link or note, then copy the post with your tracked booking link.
+            </p>
+          </div>
+          <Sparkles className="h-5 w-5 shrink-0 text-blue-300" />
+        </div>
+
+        <div className="mt-4 grid gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="ad-area" className="text-xs text-slate-300">Area</Label>
+              <Input
+                id="ad-area"
+                value={adArea}
+                onChange={(event) => setAdArea(event.target.value)}
+                className="border-slate-700 bg-slate-950/50 text-white"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-slate-300">Focus</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {AD_FOCUS_OPTIONS.map((focus) => (
+                  <button
+                    key={focus}
+                    type="button"
+                    onClick={() => setAdFocus(focus)}
+                    className={`rounded-lg border px-2 py-2 text-xs font-black transition ${
+                      adFocus === focus
+                        ? "border-blue-400 bg-blue-500 text-white"
+                        : "border-slate-700 bg-slate-950/40 text-slate-300 hover:border-blue-500/60"
+                    }`}
+                  >
+                    {focus}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="ad-photo" className="text-xs text-slate-300">Photo URL</Label>
+            <Input
+              id="ad-photo"
+              value={adPhotoUrl}
+              onChange={(event) => setAdPhotoUrl(event.target.value)}
+              placeholder="Optional: paste a photo link"
+              className="border-slate-700 bg-slate-950/50 text-white"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="ad-notes" className="text-xs text-slate-300">Post note</Label>
+            <Textarea
+              id="ad-notes"
+              value={adNotes}
+              onChange={(event) => setAdNotes(event.target.value)}
+              placeholder="Example: crew openings Friday, U-Haul unloads, garage cleanouts, senior move help..."
+              className="min-h-[86px] border-slate-700 bg-slate-950/50 text-white"
+            />
+          </div>
+
+          <Button
+            type="button"
+            disabled={adDraftMutation.isPending}
+            onClick={() => adDraftMutation.mutate()}
+            className="bg-blue-600 text-white hover:bg-blue-500"
+          >
+            <Sparkles className="mr-2 h-4 w-4" />
+            {adDraftMutation.isPending ? "Writing..." : "Generate Ad"}
+          </Button>
+        </div>
+
+        {adDraft && (
+          <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/50 p-3">
+            <div className="flex items-start gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-700 bg-slate-900">
+                {adPhotoUrl ? (
+                  <img src={adPhotoUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <ImageIcon className="h-5 w-5 text-slate-500" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-black text-white">{adDraft.headline}</p>
+                <p className="mt-1 text-[11px] text-slate-400">{adDraft.photoSuggestion}</p>
+              </div>
+            </div>
+            <pre className="mt-3 whitespace-pre-wrap rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs leading-relaxed text-slate-200">
+{adDraft.facebookPost}
+            </pre>
+            {adDraft.hashtags?.length > 0 && (
+              <p className="mt-2 text-xs font-semibold text-blue-200">{adDraft.hashtags.join(" ")}</p>
+            )}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-3 py-2 text-xs font-black text-white hover:bg-blue-400"
+                onClick={() => {
+                  const post = `${adDraft.facebookPost}\n\n${adDraft.hashtags?.join(" ") || ""}`.trim();
+                  navigator.clipboard?.writeText(post)
+                    .then(() => toast({ title: "Ad copied", description: "Paste it into Facebook, Messenger, or a local group." }))
+                    .catch(() => toast({ title: "Copy failed", description: "Long-press the post text to copy it.", variant: "destructive" }));
+                }}
+              >
+                <Copy className="h-3.5 w-3.5" /> Copy ad
+              </button>
+              <a
+                href={facebookShareHref}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-lg border border-blue-500/40 bg-slate-950/40 px-3 py-2 text-xs font-black text-blue-200 hover:bg-blue-500/10"
+              >
+                <Share2 className="h-3.5 w-3.5" /> Open Facebook
+              </a>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-950/40 px-3 py-2 text-xs font-black text-slate-200 hover:bg-slate-800"
+                onClick={() => {
+                  navigator.clipboard?.writeText(adDraft.shortText)
+                    .then(() => toast({ title: "Short text copied", description: "Good for SMS or Messenger." }))
+                    .catch(() => toast({ title: "Copy failed", description: "Long-press the short text to copy it.", variant: "destructive" }));
+                }}
+              >
+                <MessageCircle className="h-3.5 w-3.5" /> Copy short
+              </button>
+            </div>
+            {adDraft.fallbackUsed && (
+              <p className="mt-2 text-[11px] text-amber-300">Template fallback used: {adDraft.reason || "AI unavailable"}</p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Crew Capabilities (read-only) */}

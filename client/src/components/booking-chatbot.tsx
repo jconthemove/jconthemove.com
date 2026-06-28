@@ -17,6 +17,7 @@ import { getDepositInfo } from "@shared/depositRules";
 import { PlacesAutocomplete } from "@/components/places-autocomplete";
 import { buildBookingIntakeFromChatbot, type BookingIntakeResult } from "@shared/bookingIntake";
 import { calculateMovingTravelCharge, getMovingDistanceBracketFromMiles, getMovingTravelFeeForBracket } from "@shared/movingPricing";
+import { applySmartBookingAnswer, shouldSkipSmartBookingStep } from "@shared/smartBookingEngine";
 
 // ─────────────────────────────────────────────
 // Service categories
@@ -2833,6 +2834,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
   const visibleSteps = useMemo(
     () => STEPS.filter(s => {
       if (s.employeeOnly && !isEmployee) return false;
+      if (shouldSkipSmartBookingStep(s.id, answers as Record<string, unknown>)) return false;
       return !s.show || s.show(answers);
     }),
     [answers, isEmployee]
@@ -2902,7 +2904,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
   }
 
   function advanceStep(stepId: string, value: string | string[]) {
-    const newAnswers = { ...answers };
+    let newAnswers: Answers = { ...answers };
 
     if (stepId === "contact") {
       newAnswers.contactName = contactName.trim();
@@ -2924,6 +2926,11 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
     // but JC272 was already set by package selection, keep it intact.
     if (stepId === "promoCode" && (!value || value === "(none)") && answers.promoCode === "JC272") {
       newAnswers.promoCode = "JC272";
+    }
+
+    if (stepId !== "contact") {
+      const smartPatch = applySmartBookingAnswer(newAnswers as Record<string, unknown>, stepId, value);
+      newAnswers = smartPatch.answers as Answers;
     }
 
     setAnswers(newAnswers);
@@ -2967,6 +2974,7 @@ export function BookingChatbot({ onClose, onSuccess, embedded = false, showClose
 
     const nextVisibleSteps = STEPS.filter(s => {
       if (s.employeeOnly && !isEmployee) return false;
+      if (shouldSkipSmartBookingStep(s.id, newAnswers as Record<string, unknown>)) return false;
       return !s.show || s.show(newAnswers);
     });
     let nextIdx = stepIdx + 1;

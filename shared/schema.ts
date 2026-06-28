@@ -280,6 +280,24 @@ export const quoteApprovals = pgTable("quote_approvals", {
   index("idx_quote_approvals_status").on(table.status),
 ]);
 
+export const quoteConsensusVotes = pgTable("quote_consensus_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  leadId: varchar("lead_id").notNull().references(() => leads.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  choiceKey: text("choice_key").notNull(),
+  choiceLabel: text("choice_label").notNull(),
+  authorityTier: text("authority_tier").notNull().default("bronze"),
+  notes: text("notes"),
+  metadata: jsonb("metadata").default("{}"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  uniqueIndex("uq_quote_consensus_vote_lead_user").on(table.leadId, table.userId),
+  index("idx_quote_consensus_votes_lead").on(table.leadId),
+  index("idx_quote_consensus_votes_choice").on(table.leadId, table.choiceKey),
+  index("idx_quote_consensus_votes_user").on(table.userId),
+]);
+
 export const quoteAttributions = pgTable("quote_attributions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   leadId: varchar("lead_id").references(() => leads.id),

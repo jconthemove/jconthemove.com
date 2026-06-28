@@ -41,8 +41,8 @@ export const MARKETPLACE_REQUEST_SHAPES: MarketplaceRequestShape[] = [
     shape: "Fast Quote",
     references: "Google, Yelp, Facebook, Craigslist",
     customer: "ZIP/date, service, contact, notes, optional photos.",
-    worker: "Hidden until staff prices or opens the card.",
-    company: "Owner alert, funnel tracking, quote_requested lead card.",
+    worker: "Bronze marketers can pick guided quote options; matching picks raise confidence.",
+    company: "Owner alert, funnel tracking, quote_requested lead card, consensus quote safety net.",
     pricingServices: [],
   },
   {
@@ -68,8 +68,8 @@ export const MARKETPLACE_REQUEST_SHAPES: MarketplaceRequestShape[] = [
     shape: "Repeat Loop",
     references: "McDonald's, JCMOVES, reviews, rep links",
     customer: "Simple offer, review, reward credit, next-service shortcut.",
-    worker: "Advertise, accept, complete, earn task and job bonuses.",
-    company: "Webhook ads, payout safety, referral attribution, review follow-up.",
+    worker: "Advertise, sample quote, accept, complete, earn task and job bonuses.",
+    company: "Webhook ads, payout safety, referral attribution, quote consensus, review follow-up.",
     pricingServices: [],
   },
 ];

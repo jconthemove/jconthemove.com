@@ -13,7 +13,7 @@ type AuthorityTask = {
   taskKey: string;
   title: string;
   instructions: string;
-  minTier: "silver" | "gold" | "platinum";
+  minTier: "bronze" | "silver" | "gold" | "platinum";
   bonusTokens: number;
   leadId: string;
   orderNumber?: string | number | null;
@@ -26,6 +26,9 @@ type AuthorityTask = {
   canComplete: boolean;
   completionReason: string;
   actionUrl: string;
+  quoteChoices?: QuoteConsensusChoice[];
+  quoteConsensus?: QuoteConsensus;
+  myQuoteChoice?: string | null;
 };
 
 type AuthorityOption = {
@@ -41,6 +44,27 @@ type AuthorityStage = {
   minTier: AuthorityTask["minTier"];
   bonusTokens: number;
   instructions: string;
+};
+
+type QuoteConsensusChoice = {
+  key: string;
+  label: string;
+  description: string;
+  basePrice: number | null;
+  totalPrice: number | null;
+  crewSize: number | null;
+  hours: number | null;
+  autoApplies: boolean;
+};
+
+type QuoteConsensus = {
+  byChoice?: Array<{ choiceKey: string; choiceLabel: string; votes: number }>;
+  totalVotes?: number;
+  topChoiceKey?: string | null;
+  topChoiceLabel?: string | null;
+  topVotes?: number;
+  softApproved?: boolean;
+  autoApproved?: boolean;
 };
 
 type AuthorityTasksResponse = {
@@ -65,6 +89,7 @@ const localTierRank: Record<string, number> = {
 };
 
 const tierStyles: Record<AuthorityTask["minTier"], string> = {
+  bronze: "border-orange-400/30 bg-orange-400/10 text-orange-200",
   silver: "border-slate-400/30 bg-slate-400/10 text-slate-200",
   gold: "border-yellow-400/30 bg-yellow-400/10 text-yellow-200",
   platinum: "border-purple-400/30 bg-purple-400/10 text-purple-200",
@@ -133,6 +158,29 @@ export default function AuthorityTasksCard({ className = "" }: { className?: str
     },
   });
 
+  const voteMutation = useMutation({
+    mutationFn: async ({ task, choiceKey }: { task: AuthorityTask; choiceKey: string }) => {
+      const res = await apiRequest("POST", `/api/workers/quote-consensus/leads/${task.leadId}/vote`, { choiceKey });
+      return res.json();
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/ops-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rewards/history"] });
+      toast({
+        title: result.applied ? "Quote consensus applied" : "Quote pick saved",
+        description: result.consensus?.autoApproved
+          ? "3 matching picks moved the card forward."
+          : result.consensus?.softApproved
+            ? "2 matching picks created a strong recommendation."
+            : "Waiting for matching marketer picks.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Quote pick not saved", description: error.message, variant: "destructive" });
+    },
+  });
+
   if (isLoading) {
     return (
       <Card className={`border-slate-800 bg-slate-900/60 ${className}`}>
@@ -178,7 +226,7 @@ export default function AuthorityTasksCard({ className = "" }: { className?: str
               <SimpleEmpty label="No authority tasks ready." />
             ) : (
               openTasks.map((task) => (
-                <TaskRow key={task.id} task={task} completeMutation={completeMutation} />
+                <TaskRow key={task.id} task={task} completeMutation={completeMutation} voteMutation={voteMutation} />
               ))
             )}
           </TabsContent>
@@ -300,10 +348,13 @@ function OptionButton({ option }: { option: AuthorityOption }) {
 function TaskRow({
   task,
   completeMutation,
+  voteMutation,
 }: {
   task: AuthorityTask;
   completeMutation: UseMutationResult<any, Error, AuthorityTask, unknown>;
+  voteMutation: UseMutationResult<any, Error, { task: AuthorityTask; choiceKey: string }, unknown>;
 }) {
+  const isQuoteSample = task.taskKey === "quote_sample" && Array.isArray(task.quoteChoices) && task.quoteChoices.length > 0;
   return (
     <div className="rounded-md border border-slate-800 bg-slate-950/50 p-3">
       <div className="flex items-start justify-between gap-3">
@@ -330,35 +381,107 @@ function TaskRow({
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-2">
+      {isQuoteSample ? (
+        <QuoteChoicePanel task={task} voteMutation={voteMutation} />
+      ) : (
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <a
+            href={task.actionUrl}
+            className="inline-flex min-h-[38px] items-center justify-center gap-1.5 rounded-md border border-slate-700 bg-slate-900 px-3 text-xs font-bold text-slate-200 hover:bg-slate-800"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Open
+          </a>
+          <Button
+            size="sm"
+            disabled={!task.canComplete || task.completed || completeMutation.isPending}
+            onClick={() => completeMutation.mutate(task)}
+            className="min-h-[38px] bg-emerald-600 text-xs font-bold text-white hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500"
+            title={task.canComplete ? "Complete verified task" : task.completionReason}
+          >
+            {completeMutation.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : task.canComplete ? (
+              <>
+                <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                Complete
+              </>
+            ) : (
+              <>
+                <Lock className="h-3.5 w-3.5 mr-1" />
+                Waiting
+              </>
+            )}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function QuoteChoicePanel({
+  task,
+  voteMutation,
+}: {
+  task: AuthorityTask;
+  voteMutation: UseMutationResult<any, Error, { task: AuthorityTask; choiceKey: string }, unknown>;
+}) {
+  const consensus = task.quoteConsensus || {};
+  const byChoice = consensus.byChoice || [];
+  const choices = task.quoteChoices || [];
+  const statusText = consensus.autoApproved
+    ? "3-match approved"
+    : consensus.softApproved
+      ? "2-match ready"
+      : `${consensus.totalVotes || 0} pick${consensus.totalVotes === 1 ? "" : "s"}`;
+
+  return (
+    <div className="mt-3 space-y-2">
+      <div className="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2">
+        <p className="text-xs font-bold text-slate-300">{statusText}</p>
         <a
           href={task.actionUrl}
-          className="inline-flex min-h-[38px] items-center justify-center gap-1.5 rounded-md border border-slate-700 bg-slate-900 px-3 text-xs font-bold text-slate-200 hover:bg-slate-800"
+          className="inline-flex items-center gap-1 text-xs font-bold text-blue-300 hover:text-blue-200"
         >
-          <ExternalLink className="h-3.5 w-3.5" />
           Open
+          <ExternalLink className="h-3 w-3" />
         </a>
-        <Button
-          size="sm"
-          disabled={!task.canComplete || task.completed || completeMutation.isPending}
-          onClick={() => completeMutation.mutate(task)}
-          className="min-h-[38px] bg-emerald-600 text-xs font-bold text-white hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500"
-          title={task.canComplete ? "Complete verified task" : task.completionReason}
-        >
-          {completeMutation.isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : task.canComplete ? (
-            <>
-              <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-              Complete
-            </>
-          ) : (
-            <>
-              <Lock className="h-3.5 w-3.5 mr-1" />
-              Waiting
-            </>
-          )}
-        </Button>
+      </div>
+      <div className="grid gap-2">
+        {choices.map((choice) => {
+          const count = byChoice.find((item) => item.choiceKey === choice.key)?.votes || 0;
+          const selected = task.myQuoteChoice === choice.key;
+          const top = consensus.topChoiceKey === choice.key && count > 0;
+          const price = choice.totalPrice != null ? `$${Number(choice.totalPrice).toFixed(0)}` : "review";
+          return (
+            <button
+              key={choice.key}
+              type="button"
+              disabled={voteMutation.isPending}
+              onClick={() => voteMutation.mutate({ task, choiceKey: choice.key })}
+              className={`rounded-md border px-3 py-2 text-left transition-colors ${
+                selected
+                  ? "border-blue-400/60 bg-blue-500/15"
+                  : top
+                    ? "border-emerald-400/50 bg-emerald-500/10"
+                    : "border-slate-800 bg-slate-950/60 hover:border-blue-500/40 hover:bg-blue-500/10"
+              }`}
+            >
+              <span className="flex items-center justify-between gap-2">
+                <span className="text-sm font-bold text-white">{choice.label}</span>
+                <span className="shrink-0 rounded-full border border-slate-700 px-2 py-0.5 text-[10px] font-black uppercase text-slate-300">
+                  {price}
+                </span>
+              </span>
+              <span className="mt-1 flex items-center justify-between gap-2">
+                <span className="line-clamp-1 text-xs text-slate-500">{choice.description}</span>
+                <span className="shrink-0 text-[10px] font-bold uppercase text-orange-300">
+                  {count} match{count === 1 ? "" : "es"}
+                </span>
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

@@ -22,7 +22,7 @@ import { z } from "zod";
 import { EncryptionService } from "./services/encryption";
 import { eq, desc, sql, and, gte, lte, or, ilike, inArray, isNull } from 'drizzle-orm';
 import { db, pool } from './db';
-import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, treasuryAccounts, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews, rewardCategories, rewardItems, rewardRedemptions, buybackFund, laborQuotes, jobTradeRequests, workerProfiles, quoteApprovals, quoteAttributions, marketingReps, marketingCallEvents, insertMarketingRepSchema, jobPayoutSettings, referralPartners, jobAssignments, jobPayoutCalculations, jobWorkerPayouts } from '@shared/schema';
+import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, treasuryAccounts, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews, rewardCategories, rewardItems, rewardRedemptions, buybackFund, laborQuotes, jobTradeRequests, workerProfiles, quoteApprovals, quoteConsensusVotes, quoteAttributions, marketingReps, marketingCallEvents, insertMarketingRepSchema, jobPayoutSettings, referralPartners, jobAssignments, jobPayoutCalculations, jobWorkerPayouts } from '@shared/schema';
 import { DEFAULT_MARKETING_REPS } from '@shared/marketingNetwork';
 import { getFaucetPayService } from "./services/faucetpay";
 import { getAdvertisingService } from "./services/advertising";
@@ -48,6 +48,7 @@ import { emitJobEvent, eventTypeForStatus } from "./services/jobEventBus";
 import { calculateProfitSharingPayout, defaultBonusWeightsForCrew, defaultHourlyRateForRole, normalizeProfitShareSettings } from "./services/profitSharingPayoutEngine";
 import { canFinalizeProfitSharePayout, shouldIssueJcmovesRewardForPayoutStatus, type ProfitShareRole, type ProfitShareWorkerInput } from "@shared/jobPayout";
 import { QUOTE_HELPER_MESSAGE_LIMIT, summarizeQuoteRequest } from "./services/geminiQuoteHelper";
+import { generateMarketingAdDraft, marketingAdDraftSchema } from "./services/marketingAdGenerator";
 import lawnCareRouter from "./routes/lawnCare";
 import serviceRebookRouter from "./routes/serviceRebookReminders";
 import serviceRebookPublicRouter from "./routes/serviceRebookPublic";
@@ -1133,6 +1134,23 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       CREATE INDEX IF NOT EXISTS idx_quote_approvals_lead ON quote_approvals(lead_id);
       CREATE INDEX IF NOT EXISTS idx_quote_approvals_booking ON quote_approvals(booking_id);
       CREATE INDEX IF NOT EXISTS idx_quote_approvals_status ON quote_approvals(status);
+      CREATE TABLE IF NOT EXISTS quote_consensus_votes (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        lead_id VARCHAR NOT NULL REFERENCES leads(id),
+        user_id VARCHAR NOT NULL REFERENCES users(id),
+        choice_key TEXT NOT NULL,
+        choice_label TEXT NOT NULL,
+        authority_tier TEXT NOT NULL DEFAULT 'bronze',
+        notes TEXT,
+        metadata JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_quote_consensus_vote_lead_user
+        ON quote_consensus_votes(lead_id, user_id);
+      CREATE INDEX IF NOT EXISTS idx_quote_consensus_votes_lead ON quote_consensus_votes(lead_id);
+      CREATE INDEX IF NOT EXISTS idx_quote_consensus_votes_choice ON quote_consensus_votes(lead_id, choice_key);
+      CREATE INDEX IF NOT EXISTS idx_quote_consensus_votes_user ON quote_consensus_votes(user_id);
       CREATE TABLE IF NOT EXISTS quote_attributions (
         id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
         lead_id VARCHAR REFERENCES leads(id),
@@ -5420,7 +5438,32 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     return authority.rank >= tierRank.gold;
   };
 
+  app.post("/api/crew/marketing/ad-draft", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const user = req.currentUser || req.user || {};
+      const workerName = [user.firstName, user.lastName].filter(Boolean).join(" ") || user.email || "JC crew";
+      const payload = marketingAdDraftSchema.parse({
+        ...(req.body || {}),
+        workerName: req.body?.workerName || workerName,
+      });
+      const draft = await generateMarketingAdDraft(payload);
+      res.json({ success: true, draft });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid ad request", issues: error.issues });
+      }
+      console.error("[crew/marketing/ad-draft] failed:", error instanceof Error ? error.message : error);
+      res.status(500).json({ error: "Could not create marketing draft" });
+    }
+  });
+
   const OPS_TASK_DEFS = {
+    quote_sample: {
+      title: "Pick quote option",
+      minTier: "bronze",
+      bonusTokens: 125,
+      instructions: "Choose the closest guided quote so matching marketer picks can surface the safest next move.",
+    },
     quote_build: {
       title: "Build quote card",
       minTier: "silver",
@@ -5475,6 +5518,213 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
   };
 
   const leadHasSchedule = (lead: any): boolean => Boolean(lead.confirmedDate || lead.confirmed_date || lead.moveDate || lead.move_date);
+
+  type QuoteConsensusChoice = {
+    key: string;
+    label: string;
+    description: string;
+    basePrice: number | null;
+    totalPrice: number | null;
+    crewSize: number | null;
+    hours: number | null;
+    autoApplies: boolean;
+  };
+
+  const leadLocationText = (lead: any): string => [
+    lead.fromAddress,
+    lead.toAddress,
+    lead.details,
+    lead.zip,
+    lead.postalCode,
+  ].filter(Boolean).join(" ").toLowerCase();
+
+  const leadLooksLocal = (lead: any): boolean => {
+    const text = leadLocationText(lead);
+    return text.includes("ironwood") || text.includes("49938") || text.includes("bessemer") || text.includes("hurley");
+  };
+
+  const buildQuoteConsensusChoices = (lead: any): QuoteConsensusChoice[] => {
+    const service = String(lead?.serviceType || "").toLowerCase();
+    const local = leadLooksLocal(lead);
+    const currentPrice = Math.max(moneyNumber(lead?.totalPrice), moneyNumber(lead?.basePrice));
+    const movingLike = /move|moving|load|unload|labor|residential|commercial|ubox|u-box/.test(service);
+    const baseLocal = movingLike ? 400 : 250;
+    const outsideMid = movingLike ? 625 : 375;
+    const base = currentPrice > 0 ? currentPrice : (local ? baseLocal : outsideMid);
+    const choices: QuoteConsensusChoice[] = [
+      {
+        key: "standard_2x3",
+        label: "2 movers / 3 hours",
+        description: local ? "Local standard package around $400." : "Outside-area standard range midpoint, usually $500-$750.",
+        basePrice: Math.round(base),
+        totalPrice: Math.round(base),
+        crewSize: 2,
+        hours: 3,
+        autoApplies: true,
+      },
+      {
+        key: "fast_3x2",
+        label: "3 movers / 2 hours",
+        description: "Faster crew package when timing matters or stairs/items are heavier.",
+        basePrice: Math.round(base + (movingLike ? 100 : 75)),
+        totalPrice: Math.round(base + (movingLike ? 100 : 75)),
+        crewSize: 3,
+        hours: 2,
+        autoApplies: true,
+      },
+      {
+        key: "small_2x2",
+        label: "2 movers / 2 hours",
+        description: "Small or simple request; keeps the customer warm without overquoting.",
+        basePrice: Math.max(200, Math.round(base - (movingLike ? 100 : 50))),
+        totalPrice: Math.max(200, Math.round(base - (movingLike ? 100 : 50))),
+        crewSize: 2,
+        hours: 2,
+        autoApplies: true,
+      },
+      {
+        key: "custom_review",
+        label: "Needs custom review",
+        description: "Use when photos, access, distance, or risk need Darrell/Gold review.",
+        basePrice: null,
+        totalPrice: null,
+        crewSize: null,
+        hours: null,
+        autoApplies: false,
+      },
+    ];
+
+    if (currentPrice > 0) {
+      choices.unshift({
+        key: "current_quote",
+        label: `Current quote $${Math.round(currentPrice)}`,
+        description: "Use the price already on the card.",
+        basePrice: Math.round(currentPrice),
+        totalPrice: Math.round(currentPrice),
+        crewSize: lead?.crewSize || 2,
+        hours: lead?.confirmedHours || 3,
+        autoApplies: true,
+      });
+    }
+
+    return choices.slice(0, 5);
+  };
+
+  const summarizeQuoteConsensus = async (leadId: string, currentUserId?: string | null) => {
+    const voteResult = await pool.query(
+      `SELECT qcv.id, qcv.lead_id, qcv.user_id, qcv.choice_key, qcv.choice_label,
+              qcv.authority_tier, qcv.notes, qcv.metadata, qcv.created_at, qcv.updated_at,
+              u.first_name, u.last_name
+         FROM quote_consensus_votes qcv
+         LEFT JOIN users u ON u.id = qcv.user_id
+        WHERE qcv.lead_id = $1
+        ORDER BY qcv.updated_at DESC`,
+      [leadId],
+    );
+    const votes = voteResult.rows.map((row) => ({
+      id: row.id,
+      userId: row.user_id,
+      voterName: `${row.first_name || ""} ${row.last_name || ""}`.trim() || "Crew marketer",
+      choiceKey: row.choice_key,
+      choiceLabel: row.choice_label,
+      authorityTier: row.authority_tier,
+      notes: row.notes,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+    const counts = new Map<string, { choiceKey: string; choiceLabel: string; votes: number }>();
+    for (const vote of votes) {
+      const existing = counts.get(vote.choiceKey) || { choiceKey: vote.choiceKey, choiceLabel: vote.choiceLabel, votes: 0 };
+      existing.votes += 1;
+      counts.set(vote.choiceKey, existing);
+    }
+    const byChoice = [...counts.values()].sort((a, b) => b.votes - a.votes || a.choiceLabel.localeCompare(b.choiceLabel));
+    const top = byChoice[0] || null;
+    const myVote = currentUserId ? votes.find((vote) => vote.userId === currentUserId) || null : null;
+    return {
+      votes,
+      byChoice,
+      totalVotes: votes.length,
+      topChoiceKey: top?.choiceKey || null,
+      topChoiceLabel: top?.choiceLabel || null,
+      topVotes: top?.votes || 0,
+      softApproved: Boolean(top && top.votes >= 2),
+      autoApproved: Boolean(top && top.votes >= 3),
+      myVote,
+    };
+  };
+
+  const applyQuoteConsensusIfReady = async (lead: any, choice: QuoteConsensusChoice, consensus: Awaited<ReturnType<typeof summarizeQuoteConsensus>>, user: any) => {
+    if (!choice.autoApplies || consensus.topChoiceKey !== choice.key || consensus.topVotes < 2) {
+      return { applied: false, updatedLead: lead };
+    }
+
+    const currentSnapshot = lead.quoteSnapshot && typeof lead.quoteSnapshot === "object" && !Array.isArray(lead.quoteSnapshot)
+      ? lead.quoteSnapshot
+      : {};
+    const currentStatus = String(lead.status || "quote_requested");
+    const nextStatus = consensus.topVotes >= 3 && ["new", "contacted", "quote_requested", "chatbot_pending", "pending_quote_approval"].includes(currentStatus)
+      ? "quoted"
+      : (currentStatus === "new" || currentStatus === "contacted" ? "quote_requested" : currentStatus);
+    const updateData: Record<string, any> = {
+      quoteSnapshot: {
+        ...currentSnapshot,
+        quoteConsensus: {
+          choiceKey: choice.key,
+          choiceLabel: choice.label,
+          topVotes: consensus.topVotes,
+          totalVotes: consensus.totalVotes,
+          softApproved: consensus.softApproved,
+          autoApproved: consensus.autoApproved,
+          appliedAt: new Date().toISOString(),
+        },
+      },
+      lastQuoteUpdatedAt: new Date(),
+      status: nextStatus as any,
+    };
+
+    if (choice.basePrice != null) updateData.basePrice = choice.basePrice.toFixed(2);
+    if (choice.totalPrice != null) updateData.totalPrice = choice.totalPrice.toFixed(2);
+    if (choice.crewSize != null) updateData.crewSize = choice.crewSize;
+    if (choice.hours != null) updateData.confirmedHours = choice.hours;
+    if (!lead.quoteNotes) {
+      updateData.quoteNotes = `Consensus quote pick: ${choice.label} (${consensus.topVotes} matching marketer picks).`;
+    }
+
+    const [updatedLead] = await db.update(leads).set(updateData).where(eq(leads.id, lead.id)).returning();
+    if (updatedLead && nextStatus !== currentStatus) {
+      try {
+        await writeLeadHistory(
+          lead.id,
+          currentStatus,
+          nextStatus,
+          user?.id ?? null,
+          `Quote consensus ${consensus.topVotes >= 3 ? "auto-approved" : "recommended"}: ${choice.label}`,
+        );
+      } catch (historyError) {
+        console.error("[lead_history] quote consensus history failed:", historyError);
+      }
+    }
+
+    if (updatedLead && consensus.topVotes >= 3) {
+      const existingAuto = await db.select({ id: quoteApprovals.id })
+        .from(quoteApprovals)
+        .where(and(eq(quoteApprovals.leadId, lead.id), eq(quoteApprovals.approvalRole, "consensus_auto"), eq(quoteApprovals.status, "approved")))
+        .limit(1);
+      if (existingAuto.length === 0) {
+        await db.insert(quoteApprovals).values({
+          leadId: lead.id,
+          submittedByUserId: lead.createdByUserId || null,
+          approvedByUserId: user?.id || null,
+          approvalRole: "consensus_auto",
+          status: "approved",
+          notes: `Auto-approved by ${consensus.topVotes} matching quote picks: ${choice.label}`,
+        });
+      }
+    }
+
+    return { applied: true, updatedLead: updatedLead || lead };
+  };
 
   const canUseAdminPanel = (user: any): boolean => (
     user?.role === "admin" || user?.role === "business_owner"
@@ -5550,6 +5800,10 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     if (!lead) return { ok: false, reason: "Lead not found", metadata: {} };
     const status = String(lead.status || "").toLowerCase();
     const hasQuote = leadHasQuoteShape(lead);
+
+    if (taskKey === "quote_sample") {
+      return { ok: false, reason: "Choose one of the guided quote options first.", metadata: { hasQuote } };
+    }
 
     if (taskKey === "quote_build") {
       return hasQuote
@@ -5800,6 +6054,8 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       const completionSet = new Set<string>();
       const approvalCountByLead = new Map<string, number>();
       const payoutCountByLead = new Map<string, number>();
+      const quoteConsensusByLead = new Map<string, Record<string, unknown>>();
+      const myQuoteChoiceByLead = new Map<string, string>();
 
       if (leadIds.length > 0) {
         const completedRows = await pool.query(
@@ -5836,11 +6092,53 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         for (const row of payoutRows) {
           payoutCountByLead.set(row.leadId, Number(row.count || 0));
         }
+
+        const consensusRows = await pool.query(
+          `SELECT lead_id, choice_key, MAX(choice_label) AS choice_label, COUNT(DISTINCT user_id)::int AS votes
+             FROM quote_consensus_votes
+            WHERE lead_id = ANY($1::varchar[])
+            GROUP BY lead_id, choice_key`,
+          [leadIds],
+        );
+        for (const row of consensusRows.rows) {
+          const entry = quoteConsensusByLead.get(row.lead_id) || {
+            byChoice: [],
+            totalVotes: 0,
+            topChoiceKey: null,
+            topChoiceLabel: null,
+            topVotes: 0,
+            softApproved: false,
+            autoApproved: false,
+          };
+          const byChoice = entry.byChoice as Array<Record<string, unknown>>;
+          const votes = Number(row.votes || 0);
+          byChoice.push({ choiceKey: row.choice_key, choiceLabel: row.choice_label, votes });
+          entry.totalVotes = Number(entry.totalVotes || 0) + votes;
+          if (votes > Number(entry.topVotes || 0)) {
+            entry.topChoiceKey = row.choice_key;
+            entry.topChoiceLabel = row.choice_label;
+            entry.topVotes = votes;
+          }
+          entry.softApproved = Number(entry.topVotes || 0) >= 2;
+          entry.autoApproved = Number(entry.topVotes || 0) >= 3;
+          quoteConsensusByLead.set(row.lead_id, entry);
+        }
+
+        const myVoteRows = await pool.query(
+          `SELECT lead_id, choice_key
+             FROM quote_consensus_votes
+            WHERE user_id = $1
+              AND lead_id = ANY($2::varchar[])`,
+          [user.id, leadIds],
+        );
+        for (const row of myVoteRows.rows) {
+          myQuoteChoiceByLead.set(row.lead_id, row.choice_key);
+        }
       }
 
       const canSeeTask = (taskKey: OpsTaskKey) => authority.rank >= tierRank[OPS_TASK_DEFS[taskKey].minTier];
       const tasks: Array<Record<string, unknown>> = [];
-      const addTask = (taskKey: OpsTaskKey, lead: any, canComplete: boolean, completionReason: string) => {
+      const addTask = (taskKey: OpsTaskKey, lead: any, canComplete: boolean, completionReason: string, extra: Record<string, unknown> = {}) => {
         if (!canSeeTask(taskKey)) return;
         const def = OPS_TASK_DEFS[taskKey];
         const completed = completionSet.has(`${taskKey}:${lead.id}`);
@@ -5862,6 +6160,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
           canComplete: canComplete && !completed,
           completionReason: completed ? "Bonus already awarded for this card." : completionReason,
           actionUrl: opsTaskActionUrl(user, lead.id),
+          ...extra,
         });
       };
 
@@ -5871,6 +6170,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         const hasCrew = leadHasCrewAssignment(lead);
         const hasScheduleValue = leadHasSchedule(lead);
         const quoteBuildStage = ["new", "contacted", "quote_requested", "chatbot_pending", "pending_quote_approval", "quoted"].includes(status);
+        const quoteSampleStage = ["new", "contacted", "quote_requested", "chatbot_pending", "pending_quote_approval"].includes(status);
         const quoteApprovalStage = ["quote_requested", "chatbot_pending", "pending_quote_approval", "quoted"].includes(status);
         const dispatchStage = ["quoted", "available", "assigned", "accepted", "in_progress"].includes(status);
         const operational = ["available", "assigned", "accepted", "in_progress", "completed"].includes(status)
@@ -5879,6 +6179,28 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         const payoutCount = payoutCountByLead.get(lead.id) || 0;
         const taskAlreadyCompleted = (taskKey: OpsTaskKey) => completionSet.has(`${taskKey}:${lead.id}`);
         const showTask = (taskKey: OpsTaskKey, stageActive: boolean) => stageActive || taskAlreadyCompleted(taskKey);
+
+        if (showTask("quote_sample", quoteSampleStage)) {
+          addTask(
+            "quote_sample",
+            lead,
+            false,
+            myQuoteChoiceByLead.has(lead.id) ? "Quote option saved. You can change it if needed." : "Pick the closest quote option.",
+            {
+              quoteChoices: buildQuoteConsensusChoices(lead),
+              quoteConsensus: quoteConsensusByLead.get(lead.id) || {
+                byChoice: [],
+                totalVotes: 0,
+                topChoiceKey: null,
+                topChoiceLabel: null,
+                topVotes: 0,
+                softApproved: false,
+                autoApproved: false,
+              },
+              myQuoteChoice: myQuoteChoiceByLead.get(lead.id) || null,
+            },
+          );
+        }
 
         if (showTask("quote_build", quoteBuildStage)) {
           addTask(
@@ -5921,10 +6243,11 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       }
 
       const taskOrder: Record<OpsTaskKey, number> = {
-        quote_build: 1,
-        quote_approve: 2,
-        dispatch_ready: 3,
-        payout_review: 4,
+        quote_sample: 1,
+        quote_build: 2,
+        quote_approve: 3,
+        dispatch_ready: 4,
+        payout_review: 5,
       };
       tasks.sort((a, b) => {
         const ao = taskOrder[a.taskKey as OpsTaskKey] || 99;
@@ -5968,6 +6291,123 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     } catch (error) {
       console.error("ops task completion error:", error);
       res.status(500).json({ error: "Failed to complete task" });
+    }
+  });
+
+  app.get("/api/workers/quote-consensus/leads/:id", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const user = req.currentUser;
+      const authority = await getWorkerAuthority(user);
+      if (authority.rank < tierRank.bronze) {
+        return res.status(403).json({ message: "Bronze or higher authority required" });
+      }
+      const [lead] = await db.select().from(leads).where(eq(leads.id, req.params.id)).limit(1);
+      if (!lead || lead.archivedAt) return res.status(404).json({ message: "Lead not found" });
+      const choices = buildQuoteConsensusChoices(lead);
+      const consensus = await summarizeQuoteConsensus(lead.id, user.id);
+      res.json({ lead, choices, consensus });
+    } catch (error) {
+      console.error("quote consensus load error:", error);
+      res.status(500).json({ message: "Failed to load quote consensus" });
+    }
+  });
+
+  app.post("/api/workers/quote-consensus/leads/:id/vote", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const user = req.currentUser;
+      const authority = await getWorkerAuthority(user);
+      if (authority.rank < tierRank.bronze) {
+        return res.status(403).json({ message: "Bronze or higher authority required" });
+      }
+      const choiceKey = typeof req.body?.choiceKey === "string" ? req.body.choiceKey : "";
+      const notes = typeof req.body?.notes === "string" ? req.body.notes.slice(0, 1000) : null;
+      if (!choiceKey) return res.status(400).json({ message: "choiceKey is required" });
+
+      const [lead] = await db.select().from(leads).where(eq(leads.id, req.params.id)).limit(1);
+      if (!lead || lead.archivedAt) return res.status(404).json({ message: "Lead not found" });
+      const choices = buildQuoteConsensusChoices(lead);
+      const choice = choices.find((item) => item.key === choiceKey);
+      if (!choice) return res.status(400).json({ message: "Unknown quote choice" });
+
+      await db.insert(quoteConsensusVotes).values({
+        leadId: lead.id,
+        userId: user.id,
+        choiceKey: choice.key,
+        choiceLabel: choice.label,
+        authorityTier: authority.authorityTier,
+        notes,
+        metadata: {
+          basePrice: choice.basePrice,
+          totalPrice: choice.totalPrice,
+          crewSize: choice.crewSize,
+          hours: choice.hours,
+          autoApplies: choice.autoApplies,
+        },
+      }).onConflictDoUpdate({
+        target: [quoteConsensusVotes.leadId, quoteConsensusVotes.userId],
+        set: {
+          choiceKey: choice.key,
+          choiceLabel: choice.label,
+          authorityTier: authority.authorityTier,
+          notes,
+          metadata: {
+            basePrice: choice.basePrice,
+            totalPrice: choice.totalPrice,
+            crewSize: choice.crewSize,
+            hours: choice.hours,
+            autoApplies: choice.autoApplies,
+          },
+          updatedAt: new Date(),
+        },
+      });
+
+      const consensus = await summarizeQuoteConsensus(lead.id, user.id);
+      const applyResult = await applyQuoteConsensusIfReady(lead, choice, consensus, user);
+
+      await db.insert(quoteAttributions).values({
+        leadId: lead.id,
+        userId: user.id,
+        attributionType: consensus.autoApproved && consensus.topChoiceKey === choice.key ? "quote_consensus_auto" : "quote_consensus_vote",
+        metadata: {
+          choiceKey: choice.key,
+          choiceLabel: choice.label,
+          topChoiceKey: consensus.topChoiceKey,
+          topVotes: consensus.topVotes,
+          totalVotes: consensus.totalVotes,
+          applied: applyResult.applied,
+          notes,
+        },
+      });
+
+      try {
+        await awardOpsTaskBonus({
+          user,
+          authorityTier: authority.authorityTier,
+          taskKey: "quote_sample",
+          lead,
+          notes: notes || `Quote option selected: ${choice.label}`,
+          metadata: {
+            choiceKey: choice.key,
+            choiceLabel: choice.label,
+            topVotes: consensus.topVotes,
+            totalVotes: consensus.totalVotes,
+            applied: applyResult.applied,
+          },
+        });
+      } catch (bonusError) {
+        console.error("quote sample task bonus failed:", bonusError);
+      }
+
+      res.json({
+        success: true,
+        choices,
+        consensus,
+        applied: applyResult.applied,
+        lead: applyResult.updatedLead,
+      });
+    } catch (error) {
+      console.error("quote consensus vote error:", error);
+      res.status(500).json({ message: "Failed to save quote vote" });
     }
   });
 
