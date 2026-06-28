@@ -6,10 +6,13 @@ import {
   ClipboardList,
   MapPinned,
   Megaphone,
+  Route,
   ShieldCheck,
   Sparkles,
+  Store,
   Truck,
   Users,
+  WalletCards,
 } from "lucide-react";
 import AuthorityTasksCard from "@/components/AuthorityTasksCard";
 
@@ -67,6 +70,41 @@ const humanChecks = [
   "Deleting or archiving real lead cards",
 ];
 
+const blueprint = [
+  {
+    title: "Customer Front Door",
+    icon: Store,
+    sources: "Google, Yelp, Facebook, Craigslist",
+    keep: "Fast discovery, trust signals, clear contact, no dead-end requests.",
+    build: "Book asks zip/date first, then service, truck, crew package, notes, photos, and creates a lead card.",
+    surface: "Book + Funnel + Ops Board",
+  },
+  {
+    title: "Pricing Engine",
+    icon: Route,
+    sources: "U-Haul, MovingHelp, MovingHelper, HireAHelper, PODS",
+    keep: "Crew-size rates, hourly minimums, zone travel, discounts after longer bookings.",
+    build: "Zones and quote snapshots price the job without changing old orders when settings change.",
+    surface: "Pricing + Jobs",
+  },
+  {
+    title: "Crew Operations",
+    icon: Truck,
+    sources: "Two Men and a Truck, Porch Moving Group",
+    keep: "Assigned crews, arrival windows, calendar clarity, completion confirmation.",
+    build: "Lead cards move from quote to available to assigned to completed, then payout and rewards run once.",
+    surface: "Dispatch + Schedule + Crew Tasks",
+  },
+  {
+    title: "Growth Flywheel",
+    icon: WalletCards,
+    sources: "Target, Walmart, Goodwill, McDonald's, JCMOVES",
+    keep: "Simple offers, repeatable local demand, referrals, credits, and easy promos.",
+    build: "Rep links, Discord/webhook ads, JCMOVES credits, Square links, and review loops feed the next card.",
+    surface: "Marketing + Finance + Playbook",
+  },
+];
+
 export default function AdminMarketplacePlaybookPage() {
   return (
     <div className="min-h-screen">
@@ -101,6 +139,35 @@ export default function AdminMarketplacePlaybookPage() {
         </section>
 
         <AuthorityTasksCard className="mt-5" />
+
+        <section className="mt-5 rounded-lg border border-slate-800 bg-slate-900/70 p-5">
+          <div className="flex items-center gap-2">
+            <Store className="h-5 w-5 text-blue-300" />
+            <h2 className="font-black text-white">Best-Of Blueprint</h2>
+          </div>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+            Borrow the useful parts, then make them JC-simple: one request card, one pricing path, one crew path, one
+            money/rewards loop.
+          </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {blueprint.map(({ title, icon: Icon, sources, keep, build, surface }) => (
+              <div key={title} className="rounded-md border border-slate-800 bg-slate-950/60 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-black text-white">{title}</p>
+                    <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">{surface}</p>
+                  </div>
+                  <Icon className="h-5 w-5 shrink-0 text-blue-300" />
+                </div>
+                <div className="mt-3 space-y-2 text-sm leading-6">
+                  <p className="text-slate-400"><span className="font-bold text-slate-200">References:</span> {sources}</p>
+                  <p className="text-slate-400"><span className="font-bold text-slate-200">Keep:</span> {keep}</p>
+                  <p className="text-slate-300"><span className="font-bold text-emerald-300">JC move:</span> {build}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
 
         <section className="mt-5 grid gap-4 lg:grid-cols-[1fr_0.75fr]">
           <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-5">
