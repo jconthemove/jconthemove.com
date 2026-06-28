@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -908,7 +908,7 @@ export default function CrewJobsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [archivingId, setArchivingId] = useState<string | null>(null);
   const [selectedJob, setSelectedJob] = useState<JobBoardLead | EnrichedLead | null>(null);
@@ -1116,6 +1116,13 @@ export default function CrewJobsPage() {
     setSelectedJob(job);
     setDetailOpen(true);
   };
+
+  useEffect(() => {
+    const leadId = new URLSearchParams(location.split("?")[1] || "").get("lead");
+    if (!leadId || detailOpen) return;
+    const job = [...boardJobs, ...myJobs].find((item) => item.id === leadId);
+    if (job) openDetail(job);
+  }, [boardJobs, myJobs, location, detailOpen]);
 
   const isAssigned = selectedJob
     ? Array.isArray(selectedJob.crewMembers) && selectedJob.crewMembers.includes(user?.id || "")

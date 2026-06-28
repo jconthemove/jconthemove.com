@@ -28,6 +28,13 @@ type AuthorityTask = {
   actionUrl: string;
 };
 
+type AuthorityOption = {
+  key: string;
+  label: string;
+  href: string;
+  description: string;
+};
+
 type AuthorityTasksResponse = {
   authority: {
     tier: string;
@@ -35,6 +42,7 @@ type AuthorityTasksResponse = {
     canApproveQuote: boolean;
     canManageOps: boolean;
   };
+  options: AuthorityOption[];
   tasks: AuthorityTask[];
 };
 
@@ -75,6 +83,7 @@ export default function AuthorityTasksCard({ className = "" }: { className?: str
   }, [data?.tasks]);
   const openTasks = tasks.filter((task) => !task.completed);
   const doneTasks = tasks.filter((task) => task.completed);
+  const options = data?.options || [];
 
   const completeMutation = useMutation({
     mutationFn: async (task: AuthorityTask) => {
@@ -157,11 +166,15 @@ export default function AuthorityTasksCard({ className = "" }: { className?: str
           </TabsContent>
 
           <TabsContent value="options" className="mt-3">
-            <div className="space-y-2 rounded-md border border-slate-800 bg-slate-950/50 p-3">
-              <OptionLine label="Silver" text="Build quote cards." />
-              <OptionLine label="Gold" text="Approve quote cards." />
-              <OptionLine label="Platinum" text="Dispatch and payout review." />
-            </div>
+            {options.length === 0 ? (
+              <SimpleEmpty label="No options ready." />
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {options.map((option) => (
+                  <OptionButton key={option.key} option={option} />
+                ))}
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </CardContent>
@@ -177,15 +190,21 @@ function SimpleEmpty({ label }: { label: string }) {
   );
 }
 
-function OptionLine({ label, text }: { label: string; text: string }) {
+function OptionButton({ option }: { option: AuthorityOption }) {
   return (
-    <div className="flex items-center justify-between gap-3 text-sm">
-      <span className="inline-flex items-center gap-2 font-bold text-slate-100">
-        <SlidersHorizontal className="h-3.5 w-3.5 text-blue-300" />
-        {label}
+    <a
+      href={option.href}
+      className="flex min-h-[54px] items-center justify-between gap-3 rounded-md border border-slate-800 bg-slate-950/50 px-3 py-2 text-left hover:border-blue-500/40 hover:bg-blue-500/10"
+    >
+      <span className="min-w-0">
+        <span className="flex items-center gap-2 text-sm font-bold text-slate-100">
+          <SlidersHorizontal className="h-3.5 w-3.5 shrink-0 text-blue-300" />
+          {option.label}
+        </span>
+        <span className="mt-0.5 block truncate text-xs text-slate-500">{option.description}</span>
       </span>
-      <span className="text-right text-slate-400">{text}</span>
-    </div>
+      <ExternalLink className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+    </a>
   );
 }
 

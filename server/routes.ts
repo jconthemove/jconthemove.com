@@ -5473,6 +5473,76 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
 
   const leadHasSchedule = (lead: any): boolean => Boolean(lead.confirmedDate || lead.confirmed_date || lead.moveDate || lead.move_date);
 
+  const canUseAdminPanel = (user: any): boolean => (
+    user?.role === "admin" || user?.role === "business_owner"
+  );
+
+  const opsTaskActionUrl = (user: any, leadId: string): string => (
+    canUseAdminPanel(user)
+      ? `/admin/jobs?lead=${encodeURIComponent(leadId)}`
+      : `/crew/jobs?lead=${encodeURIComponent(leadId)}`
+  );
+
+  const buildAuthorityOptions = (user: any, authority: { rank: number; authorityTier: WorkerTier }) => {
+    const options = [
+      {
+        key: "add_lead",
+        label: "Add Lead",
+        href: "/book?worker=1",
+        description: "Create a customer request.",
+      },
+      {
+        key: "crew_jobs",
+        label: "Jobs",
+        href: "/crew/jobs",
+        description: "Open jobs and assignments.",
+      },
+    ];
+
+    if (authority.rank >= tierRank.silver) {
+      options.push({
+        key: "quote_tasks",
+        label: "Quote Tasks",
+        href: "/crew/jobs?tab=tasks",
+        description: "Prep quote cards.",
+      });
+    }
+
+    if (authority.rank >= tierRank.gold) {
+      options.push({
+        key: "approve_quotes",
+        label: "Approve",
+        href: "/crew/jobs?tab=tasks",
+        description: "Gold quote approvals.",
+      });
+    }
+
+    if (canUseAdminPanel(user)) {
+      options.push(
+        {
+          key: "admin_jobs",
+          label: "Admin Jobs",
+          href: "/admin/jobs",
+          description: "Edit cards.",
+        },
+        {
+          key: "dispatch",
+          label: "Dispatch",
+          href: "/admin/dispatch",
+          description: "Assign crew.",
+        },
+        {
+          key: "finance",
+          label: "Finance",
+          href: "/admin/finance",
+          description: "Payouts.",
+        },
+      );
+    }
+
+    return options.slice(0, 6);
+  };
+
   async function evaluateOpsTaskCompletion(taskKey: OpsTaskKey, lead: any) {
     if (!lead) return { ok: false, reason: "Lead not found", metadata: {} };
     const status = String(lead.status || "").toLowerCase();
@@ -5788,7 +5858,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
           completed,
           canComplete: canComplete && !completed,
           completionReason: completed ? "Bonus already awarded for this card." : completionReason,
-          actionUrl: `/admin/jobs?lead=${encodeURIComponent(lead.id)}`,
+          actionUrl: opsTaskActionUrl(user, lead.id),
         });
       };
 
@@ -5868,6 +5938,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
           taskKey: key,
           ...def,
         })),
+        options: buildAuthorityOptions(user, authority),
         tasks: tasks.slice(0, 60),
       });
     } catch (error) {
