@@ -35,15 +35,33 @@ type AuthorityOption = {
   description: string;
 };
 
+type AuthorityStage = {
+  taskKey: AuthorityTask["taskKey"];
+  title: string;
+  minTier: AuthorityTask["minTier"];
+  bonusTokens: number;
+  instructions: string;
+};
+
 type AuthorityTasksResponse = {
   authority: {
     tier: string;
+    rank?: number;
     canBuildQuote: boolean;
     canApproveQuote: boolean;
     canManageOps: boolean;
   };
+  stages?: AuthorityStage[];
   options: AuthorityOption[];
   tasks: AuthorityTask[];
+};
+
+const localTierRank: Record<string, number> = {
+  worker: 0,
+  bronze: 1,
+  silver: 2,
+  gold: 3,
+  platinum: 4,
 };
 
 const tierStyles: Record<AuthorityTask["minTier"], string> = {
@@ -87,6 +105,9 @@ export default function AuthorityTasksCard({ className = "" }: { className?: str
     const list = data?.tasks || [];
     return [...list].sort((a, b) => Number(a.completed) - Number(b.completed));
   }, [data?.tasks]);
+  const stageByKey = useMemo(() => {
+    return new Map((data?.stages || []).map((stage) => [stage.taskKey, stage]));
+  }, [data?.stages]);
   const openCount = tasks.filter((task) => !task.completed).length;
   const openTasks = tasks.filter((task) => !task.completed).slice(0, 6);
   const options = data?.options || [];
@@ -144,6 +165,8 @@ export default function AuthorityTasksCard({ className = "" }: { className?: str
           </Badge>
         </div>
 
+        <RailSplitSummary authority={authority} stageByKey={stageByKey} />
+
         <Tabs defaultValue={defaultTab} className="mt-4">
           <TabsList className="grid w-full grid-cols-2 border border-slate-800 bg-slate-950/60">
             <TabsTrigger value="tasks" className="text-xs">Tasks</TabsTrigger>
@@ -174,6 +197,77 @@ export default function AuthorityTasksCard({ className = "" }: { className?: str
         </Tabs>
       </CardContent>
     </Card>
+  );
+}
+
+function RailSplitSummary({
+  authority,
+  stageByKey,
+}: {
+  authority: AuthorityTasksResponse["authority"];
+  stageByKey: Map<string, AuthorityStage>;
+}) {
+  const rank = authority.rank ?? localTierRank[String(authority.tier || "worker").toLowerCase()] ?? 0;
+  const quoteBuild = stageByKey.get("quote_build");
+  const quoteApprove = stageByKey.get("quote_approve");
+  const dispatchReady = stageByKey.get("dispatch_ready");
+  const payoutReview = stageByKey.get("payout_review");
+  const quoteBonus = [quoteBuild?.bonusTokens, quoteApprove?.bonusTokens].filter(Boolean).join(" / ");
+  const opsBonus = [dispatchReady?.bonusTokens, payoutReview?.bonusTokens].filter(Boolean).join(" / ");
+  const steps = [
+    {
+      number: "1",
+      label: "Lead",
+      rail: "Bronze+",
+      detail: "Add request card",
+      unlocked: rank >= localTierRank.bronze,
+      bonus: "lead credit",
+    },
+    {
+      number: "2",
+      label: "Quote",
+      rail: "Silver / Gold",
+      detail: "Build, then approve",
+      unlocked: authority.canBuildQuote || authority.canApproveQuote,
+      bonus: quoteBonus ? `${quoteBonus} JCMOVES` : "task bonus",
+    },
+    {
+      number: "3",
+      label: "Dispatch + Pay",
+      rail: "Platinum",
+      detail: "Crew, calendar, payout",
+      unlocked: authority.canManageOps,
+      bonus: opsBonus ? `${opsBonus} JCMOVES` : "task bonus",
+    },
+  ];
+
+  return (
+    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+      {steps.map((step) => (
+        <div
+          key={step.number}
+          className={`rounded-md border px-3 py-2 ${
+            step.unlocked
+              ? "border-blue-400/30 bg-blue-500/10"
+              : "border-slate-800 bg-slate-950/50"
+          }`}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-black ${
+              step.unlocked ? "bg-blue-500 text-white" : "bg-slate-800 text-slate-500"
+            }`}>
+              {step.number}
+            </span>
+            <span className="truncate text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              {step.rail}
+            </span>
+          </div>
+          <p className="mt-2 text-sm font-black text-white">{step.label}</p>
+          <p className="mt-0.5 truncate text-xs text-slate-400">{step.detail}</p>
+          <p className="mt-2 truncate text-[10px] font-bold uppercase text-orange-300">{step.bonus}</p>
+        </div>
+      ))}
+    </div>
   );
 }
 
