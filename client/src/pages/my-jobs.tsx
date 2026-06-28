@@ -10,6 +10,7 @@ import {
   Pause, SkipForward, RotateCw
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import MarketplaceShapeBadge from "@/components/MarketplaceShapeBadge";
 import type { LucideIcon } from "lucide-react";
 
 // Task #130: shape returned by GET /api/customer/bookings — parent bookings
@@ -365,6 +366,7 @@ function JobSheet({ job, open, onClose, onNewJob }: {
             </div>
             <div>
               <SheetTitle className="text-white text-lg font-black">{svc.label}</SheetTitle>
+              <MarketplaceShapeBadge serviceCode={job.serviceType} className="mt-1" />
               <div className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${st.cls}`}>
                 <StatusIcon className="h-3 w-3" />
                 {st.label}
@@ -974,6 +976,7 @@ export default function MyJobsPage() {
                   </div>
 
                   <p className="font-bold text-white text-sm leading-tight mb-1">{svc.label}</p>
+                  <MarketplaceShapeBadge serviceCode={job.serviceType} className="mb-2" />
 
                   {job.moveDate ? (
                     <p className="text-xs text-zinc-500 flex items-center gap-1">
@@ -1046,6 +1049,7 @@ export default function MyJobsPage() {
                         </span>
                       </div>
                       <p className="font-bold text-zinc-300 text-sm leading-tight mb-1">{svc.label}</p>
+                      <MarketplaceShapeBadge serviceCode={job.serviceType} className="mb-2" />
                       {job.moveDate && (
                         <p className="text-xs text-zinc-500 flex items-center gap-1">
                           <Calendar className="h-3 w-3" />

@@ -21,6 +21,7 @@ import LawnJobBrief from "@/components/LawnJobBrief";
 import { PaymentStatusPill } from "@/components/PaymentStatusPill";
 import AuthorityTasksCard from "@/components/AuthorityTasksCard";
 import JobLifecycleRail from "@/components/JobLifecycleRail";
+import MarketplaceShapeBadge from "@/components/MarketplaceShapeBadge";
 
 const SERVICE_ICONS: Record<string, string> = {
   residential: "🚛", commercial: "🏢", junk: "🗑️", snow: "❄️",
@@ -202,6 +203,7 @@ function JobBoardCard({
                 <p className="font-bold text-white text-sm leading-tight">
                   {SERVICE_LABELS[job.serviceType] || job.serviceType}
                 </p>
+                <MarketplaceShapeBadge serviceCode={job.serviceType} className="mt-1" />
                 {(city || state) && (
                   <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
                     <MapPin className="h-3 w-3 text-slate-500 flex-shrink-0" />
@@ -441,6 +443,7 @@ function MyJobCard({
             <div className="flex items-start justify-between gap-2">
               <div>
                 <p className="font-bold text-white text-sm">{SERVICE_LABELS[lead.serviceType] || lead.serviceType}</p>
+                <MarketplaceShapeBadge serviceCode={lead.serviceType} className="mt-1" />
                 <p className="text-xs text-slate-400">{lead.firstName} {lead.lastName}</p>
               </div>
               <div className="text-right">
@@ -711,6 +714,7 @@ function JobDetailSheet({
               <SheetTitle className="text-white text-lg">
                 {SERVICE_LABELS[lead.serviceType] || lead.serviceType}
               </SheetTitle>
+              <MarketplaceShapeBadge serviceCode={lead.serviceType} className="mt-1" />
               {(city || state) && (
                 <p className="text-slate-400 text-sm flex items-center gap-1 mt-0.5">
                   <MapPin className="h-3.5 w-3.5 text-slate-500" />
