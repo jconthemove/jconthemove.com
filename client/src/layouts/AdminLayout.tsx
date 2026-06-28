@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import {
   LayoutDashboard, Radio, Briefcase, Users, Wallet, Sliders, ChevronRight, LogOut,
@@ -50,20 +50,21 @@ function LeadFunnelOutageBanner() {
 }
 
 // Task #171 — Admin sidebar has two sections:
-//   "Daily" = the 5 pages operators use every shift.
-//   "Closet" = everything else, still reachable but tucked away.
+//   "Tasks" = the pages operators use to move jobs right now.
+//   "Options" = settings, reports, marketplace, money, and launch tools.
 // Keep this list in sync with the routes wired in client/src/App.tsx.
-const DAILY = [
+const TASKS = [
   { label: "Ops Board", icon: ClipboardList, path: "/admin/ops-board" },
   { label: "Dispatch", icon: Radio, path: "/admin/dispatch" },
   { label: "Jobs", icon: Briefcase, path: "/admin/jobs" },
+  { label: "Schedule", icon: CalendarDays, path: "/admin/schedule" },
+];
+
+const OPTIONS = [
+  { label: "Overview", icon: LayoutDashboard, path: "/admin/overview" },
   { label: "Pricing", icon: Sliders, path: "/admin/pricing" },
   { label: "People", icon: Users, path: "/admin/people" },
   { label: "Finance", icon: Wallet, path: "/admin/finance" },
-];
-
-const CLOSET = [
-  { label: "Overview", icon: LayoutDashboard, path: "/admin/overview" },
   { label: "Marketplace", icon: ShoppingBag, path: "/admin/marketplace" },
   { label: "Playbook", icon: Lightbulb, path: "/admin/marketplace-playbook" },
   { label: "System", icon: Settings, path: "/admin/system" },
@@ -72,7 +73,6 @@ const CLOSET = [
   { label: "Marketing Ads", icon: Megaphone, path: "/admin/marketing-webhooks" },
   { label: "Analytics", icon: BarChart2, path: "/admin/analytics" },
   { label: "Booking Analytics", icon: FileBarChart, path: "/admin/booking-analytics" },
-  { label: "Schedule", icon: CalendarDays, path: "/admin/schedule" },
   { label: "BTC Payments", icon: Bitcoin, path: "/admin/btc-payments" },
   { label: "Square Invoices", icon: CreditCard, path: "/admin/payments" },
   { label: "Wallet Ledger", icon: Coins, path: "/admin/wallet-ledger" },
@@ -100,9 +100,9 @@ function NavButton({ label, Icon, path, active, onClick }: {
   );
 }
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default function AdminLayout({ children }: { children: ReactNode }) {
   const [location, setLocation] = useLocation();
-  const [closetOpen, setClosetOpen] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const handleLogout = async () => {
@@ -122,13 +122,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const go = (p: string) => { setLocation(p); setMobileOpen(false); };
 
-  const closetContainsActive = CLOSET.some(c => isActive(c.path));
+  const optionsContainsActive = OPTIONS.some(c => isActive(c.path));
 
   const renderNav = (onSelect: (p: string) => void) => (
     <>
       <div className="px-2 space-y-0.5">
-        <p className="text-[10px] uppercase tracking-widest text-slate-500 px-3 mb-1">Daily</p>
-        {DAILY.map(({ label, icon: Icon, path }) => (
+        <p className="text-[10px] uppercase tracking-widest text-slate-500 px-3 mb-1">Tasks</p>
+        {TASKS.map(({ label, icon: Icon, path }) => (
           <NavButton key={path} label={label} Icon={Icon} path={path}
             active={isActive(path)} onClick={() => onSelect(path)} />
         ))}
@@ -136,19 +136,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       <div className="mt-4 px-2">
         <button
-          onClick={() => setClosetOpen(o => !o)}
+          onClick={() => setOptionsOpen(o => !o)}
           className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold uppercase tracking-widest text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
-          data-testid="button-toggle-closet"
+          data-testid="button-toggle-admin-options"
         >
-          <span className="flex-1 text-left">Closet</span>
-          {closetContainsActive && !closetOpen && (
+          <span className="flex-1 text-left">Options</span>
+          {optionsContainsActive && !optionsOpen && (
             <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
           )}
-          <ChevronRight className={`h-3 w-3 transition-transform ${closetOpen ? "rotate-90" : ""}`} />
+          <ChevronRight className={`h-3 w-3 transition-transform ${optionsOpen ? "rotate-90" : ""}`} />
         </button>
-        {(closetOpen || closetContainsActive) && (
+        {(optionsOpen || optionsContainsActive) && (
           <div className="mt-1 space-y-0.5">
-            {CLOSET.map(({ label, icon: Icon, path }) => (
+            {OPTIONS.map(({ label, icon: Icon, path }) => (
               <NavButton key={path} label={label} Icon={Icon} path={path}
                 active={isActive(path)} onClick={() => onSelect(path)} />
             ))}
