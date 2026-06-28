@@ -231,6 +231,14 @@ const STEP_LABELS: Record<Step, string> = {
   safety: "Safety check",
   review: "Review & confirm",
 };
+const STEP_PHASES: Record<Step, { number: 1 | 2 | 3; label: string; detail: string }> = {
+  services: { number: 1, label: "Service", detail: "Choose the work" },
+  address: { number: 2, label: "Details", detail: "Location and timing" },
+  configure: { number: 2, label: "Details", detail: "Crew, truck, scope" },
+  contact: { number: 2, label: "Details", detail: "Contact and notes" },
+  safety: { number: 2, label: "Details", detail: "Heavy items" },
+  review: { number: 3, label: "Confirm", detail: "Lock in request" },
+};
 
 function shortHeavyLabel(label: string) {
   if (/grand piano/i.test(label)) return "Grand piano";
@@ -1615,10 +1623,11 @@ export default function MultiServiceBookPage() {
     );
   }
 
-  const stepIdx = STEPS.indexOf(step);
   const isLast = step === "review";
   const continueReason = canContinueReason();
   const isFirst = step === "services";
+  const currentPhase = STEP_PHASES[step];
+  const phaseProgress = (currentPhase.number / 3) * 100;
 
   // Wizard nav rendered both inside the desktop summary panel and inside
   // the mobile docked summary bar so it's visible across all steps.
@@ -1699,18 +1708,19 @@ export default function MultiServiceBookPage() {
       <div className="max-w-6xl mx-auto px-4 pt-4">
         <div className="flex items-center justify-between mb-2">
           <p className="text-[10px] font-bold uppercase tracking-widest text-orange-500" data-testid="step-indicator">
-            Step {stepIdx + 1} of {STEPS.length} · {STEP_LABELS[step]}
+            Part {currentPhase.number} of 3 · {currentPhase.label}
           </p>
           <span className="text-[10px] text-muted-foreground">
-            {Math.round(((stepIdx + 1) / STEPS.length) * 100)}%
+            {currentPhase.detail}
           </span>
         </div>
         <div className="h-1.5 rounded-full bg-muted overflow-hidden">
           <div
             className="h-full bg-orange-500 transition-all duration-300"
-            style={{ width: `${((stepIdx + 1) / STEPS.length) * 100}%` }}
+            style={{ width: `${phaseProgress}%` }}
           />
         </div>
+        <p className="mt-1 text-[10px] text-muted-foreground">{STEP_LABELS[step]}</p>
       </div>
 
       <div className="max-w-6xl mx-auto px-4 pt-6 flex gap-6">
