@@ -5867,36 +5867,40 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         const hasQuote = leadHasQuoteShape(lead);
         const hasCrew = leadHasCrewAssignment(lead);
         const hasScheduleValue = leadHasSchedule(lead);
-        const quoteCandidate = ["new", "contacted", "quote_requested", "chatbot_pending", "pending_quote_approval", "quoted"].includes(status);
+        const quoteBuildStage = ["new", "contacted", "quote_requested", "chatbot_pending", "pending_quote_approval", "quoted"].includes(status);
+        const quoteApprovalStage = ["quote_requested", "chatbot_pending", "pending_quote_approval", "quoted"].includes(status);
+        const dispatchStage = ["quoted", "available", "assigned", "accepted", "in_progress"].includes(status);
         const operational = ["available", "assigned", "accepted", "in_progress", "completed"].includes(status)
           || ["available", "assigned", "accepted", "in_progress", "completed"].includes(String(lead.dispatchState || "").toLowerCase());
         const completed = status === "completed" || Boolean(lead.completedAt);
         const payoutCount = payoutCountByLead.get(lead.id) || 0;
+        const taskAlreadyCompleted = (taskKey: OpsTaskKey) => completionSet.has(`${taskKey}:${lead.id}`);
+        const showTask = (taskKey: OpsTaskKey, stageActive: boolean) => stageActive || taskAlreadyCompleted(taskKey);
 
-        if (quoteCandidate || hasQuote) {
+        if (showTask("quote_build", quoteBuildStage)) {
           addTask(
             "quote_build",
             lead,
-            hasQuote,
+            quoteBuildStage && hasQuote,
             hasQuote ? "Quote math is ready to claim." : "Needs price, date/window, and crew/hours.",
           );
         }
 
-        if (hasQuote && !["cancelled", "closed"].includes(status)) {
+        if (showTask("quote_approve", quoteApprovalStage && hasQuote)) {
           const approvedCount = approvalCountByLead.get(lead.id) || 0;
           addTask(
             "quote_approve",
             lead,
-            hasQuote,
+            quoteApprovalStage && hasQuote,
             approvedCount > 0 ? `${approvedCount} approval${approvedCount === 1 ? "" : "s"} on file.` : "Ready for Gold approval.",
           );
         }
 
-        if (hasQuote && !["cancelled", "closed"].includes(status)) {
+        if (showTask("dispatch_ready", dispatchStage && hasQuote)) {
           addTask(
             "dispatch_ready",
             lead,
-            hasQuote && hasCrew && hasScheduleValue && operational,
+            dispatchStage && hasQuote && hasCrew && hasScheduleValue && operational,
             hasCrew && hasScheduleValue && operational
               ? "Crew and schedule are ready."
               : "Needs crew assignment, schedule, and operational job status.",

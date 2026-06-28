@@ -80,7 +80,7 @@ export default function AuthorityTasksCard({ className = "" }: { className?: str
   const defaultTab = useMemo(() => {
     if (typeof window === "undefined") return "tasks";
     const tab = new URLSearchParams(window.location.search).get("tab");
-    return tab === "done" || tab === "options" || tab === "tasks" ? tab : "tasks";
+    return tab === "options" || tab === "tasks" ? tab : "tasks";
   }, []);
 
   const tasks = useMemo(() => {
@@ -89,7 +89,6 @@ export default function AuthorityTasksCard({ className = "" }: { className?: str
   }, [data?.tasks]);
   const openCount = tasks.filter((task) => !task.completed).length;
   const openTasks = tasks.filter((task) => !task.completed).slice(0, 6);
-  const doneTasks = tasks.filter((task) => task.completed).slice(0, 6);
   const options = data?.options || [];
 
   const completeMutation = useMutation({
@@ -146,9 +145,8 @@ export default function AuthorityTasksCard({ className = "" }: { className?: str
         </div>
 
         <Tabs defaultValue={defaultTab} className="mt-4">
-          <TabsList className="grid w-full grid-cols-3 border border-slate-800 bg-slate-950/60">
+          <TabsList className="grid w-full grid-cols-2 border border-slate-800 bg-slate-950/60">
             <TabsTrigger value="tasks" className="text-xs">Tasks</TabsTrigger>
-            <TabsTrigger value="done" className="text-xs">Done</TabsTrigger>
             <TabsTrigger value="options" className="text-xs">Options</TabsTrigger>
           </TabsList>
 
@@ -157,16 +155,6 @@ export default function AuthorityTasksCard({ className = "" }: { className?: str
               <SimpleEmpty label="No authority tasks ready." />
             ) : (
               openTasks.map((task) => (
-                <TaskRow key={task.id} task={task} completeMutation={completeMutation} />
-              ))
-            )}
-          </TabsContent>
-
-          <TabsContent value="done" className="mt-3 space-y-2">
-            {doneTasks.length === 0 ? (
-              <SimpleEmpty label="No task bonuses claimed yet." />
-            ) : (
-              doneTasks.map((task) => (
                 <TaskRow key={task.id} task={task} completeMutation={completeMutation} />
               ))
             )}
