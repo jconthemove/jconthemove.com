@@ -739,6 +739,34 @@ function toHealthError(error: unknown) {
   return { message: String(error) };
 }
 
+function getDeployVersion() {
+  const commit =
+    process.env.RAILWAY_GIT_COMMIT_SHA
+    || process.env.RENDER_GIT_COMMIT
+    || process.env.VERCEL_GIT_COMMIT_SHA
+    || process.env.GITHUB_SHA
+    || null;
+  const branch =
+    process.env.RAILWAY_GIT_BRANCH
+    || process.env.RENDER_GIT_BRANCH
+    || process.env.VERCEL_GIT_COMMIT_REF
+    || process.env.GITHUB_REF_NAME
+    || null;
+  const deployId =
+    process.env.RAILWAY_DEPLOYMENT_ID
+    || process.env.RENDER_SERVICE_ID
+    || process.env.VERCEL_DEPLOYMENT_ID
+    || process.env.GITHUB_RUN_ID
+    || null;
+
+  return {
+    commit,
+    shortCommit: commit ? commit.slice(0, 8) : null,
+    branch,
+    deployId,
+  };
+}
+
 async function checkDatabaseReady() {
   const timeout = new Promise<never>((_resolve, reject) => {
     setTimeout(() => reject(new Error("Database readiness probe timed out")), 1500);
@@ -780,6 +808,7 @@ async function sendHealthResponse(_req: Request, res: Response, options: { stric
     service: "jc-on-the-move",
     timestamp: new Date().toISOString(),
     uptimeSeconds: Math.round(process.uptime()),
+    version: getDeployVersion(),
     checks: {
       app: {
         status: "ready",
