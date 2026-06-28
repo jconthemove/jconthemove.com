@@ -20,6 +20,7 @@ import type { User } from "@shared/schema";
 import LawnJobBrief from "@/components/LawnJobBrief";
 import { PaymentStatusPill } from "@/components/PaymentStatusPill";
 import AuthorityTasksCard from "@/components/AuthorityTasksCard";
+import JobLifecycleRail from "@/components/JobLifecycleRail";
 
 const SERVICE_ICONS: Record<string, string> = {
   residential: "🚛", commercial: "🏢", junk: "🗑️", snow: "❄️",
@@ -721,6 +722,8 @@ function JobDetailSheet({
         </SheetHeader>
 
         <div className="pt-4 space-y-5">
+          <JobLifecycleRail lead={lead} />
+
           {/* Date & Time */}
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-slate-800/60 rounded-xl p-3">

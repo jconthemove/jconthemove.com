@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import type { User } from "@shared/schema";
 import { PaymentStatusPill } from "@/components/PaymentStatusPill";
+import JobLifecycleRail from "@/components/JobLifecycleRail";
 import { extractCustomerMediaLink } from "@/lib/lead-details";
 
 const SERVICE_ICONS: Record<string, string> = {
@@ -582,6 +583,8 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
         </SheetHeader>
 
         <div className="pt-4 space-y-5 pb-8">
+          <JobLifecycleRail lead={lead} />
+
           {/* Customer Info — POS Receipt Style */}
           <div className="bg-slate-800/60 rounded-xl p-4">
             <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mb-3 flex items-center gap-1.5">
