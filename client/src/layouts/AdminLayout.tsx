@@ -1,9 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import {
-  LayoutDashboard, Radio, Briefcase, Users, Wallet, Sliders, ChevronRight, LogOut,
-  Menu, X, ShoppingBag, Settings, Handshake, BarChart2, CalendarDays,
-  Bitcoin, FileBarChart, CreditCard, Coins, Banknote, Rocket, AlertTriangle,
+  Radio, Briefcase, Users, Wallet, Sliders, ChevronRight, LogOut,
+  Menu, X, CalendarDays, FileBarChart, Rocket, AlertTriangle,
   ClipboardList, Megaphone, Lightbulb,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -61,23 +60,13 @@ const TASKS = [
 ];
 
 const OPTIONS = [
-  { label: "Overview", icon: LayoutDashboard, path: "/admin/overview" },
   { label: "Pricing", icon: Sliders, path: "/admin/pricing" },
   { label: "People", icon: Users, path: "/admin/people" },
   { label: "Finance", icon: Wallet, path: "/admin/finance" },
-  { label: "Marketplace", icon: ShoppingBag, path: "/admin/marketplace" },
+  { label: "Funnel", icon: FileBarChart, path: "/admin/booking-analytics" },
+  { label: "Marketing", icon: Megaphone, path: "/admin/marketing-webhooks" },
   { label: "Playbook", icon: Lightbulb, path: "/admin/marketplace-playbook" },
-  { label: "System", icon: Settings, path: "/admin/system" },
-  { label: "Sponsors", icon: Handshake, path: "/admin/sponsors" },
-  { label: "Marketing Network", icon: Megaphone, path: "/admin/marketing-network" },
-  { label: "Marketing Ads", icon: Megaphone, path: "/admin/marketing-webhooks" },
-  { label: "Analytics", icon: BarChart2, path: "/admin/analytics" },
-  { label: "Booking Analytics", icon: FileBarChart, path: "/admin/booking-analytics" },
-  { label: "BTC Payments", icon: Bitcoin, path: "/admin/btc-payments" },
-  { label: "Square Invoices", icon: CreditCard, path: "/admin/payments" },
-  { label: "Wallet Ledger", icon: Coins, path: "/admin/wallet-ledger" },
-  { label: "Cashouts", icon: Banknote, path: "/admin/cashouts" },
-  { label: "Launch Checklist", icon: Rocket, path: "/admin/launch-checklist" },
+  { label: "Launch", icon: Rocket, path: "/admin/launch-checklist" },
 ];
 
 function NavButton({ label, Icon, path, active, onClick }: {

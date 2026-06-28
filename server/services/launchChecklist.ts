@@ -323,14 +323,18 @@ const SCENARIOS: Scenario[] = [
         process.env.TWILIO_AUTH_TOKEN &&
         (process.env.TWILIO_PHONE_NUMBER || process.env.TWILIO_MESSAGING_SERVICE_SID)
       );
+      const hasJobWebhook = !!(process.env.JC_JOB_EVENT_WEBHOOK_URLS || process.env.JOB_EVENT_WEBHOOK_URLS);
+      const hasMarketingWebhook = !!(process.env.JC_MARKETING_WEBHOOK_URLS || process.env.MARKETING_WEBHOOK_URLS);
       const channels = [
         hasGmail ? "gmail" : "",
         hasSendgrid ? "sendgrid" : "",
         hasAdminSms ? "admin_sms" : "",
+        hasJobWebhook ? "job_webhook" : "",
+        hasMarketingWebhook ? "marketing_webhook" : "",
       ].filter(Boolean);
       return channels.length > 0
         ? { ok: true, detail: `available: ${channels.join(", ")}; media-link context is included when customers provide it` }
-        : { ok: false, detail: "no email or admin SMS channel is fully configured" };
+        : { ok: false, detail: "no email, admin SMS, or webhook notification channel is fully configured" };
     },
   },
   {
