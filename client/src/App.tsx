@@ -113,6 +113,7 @@ const AdminJobsPage = lazy(() => import("@/pages/admin/jobs"));
 const AdminPeoplePage = lazy(() => import("@/pages/admin/people"));
 const AdminFinancePage = lazy(() => import("@/pages/admin/finance"));
 const AdminMarketplacePage = lazy(() => import("@/pages/admin/marketplace"));
+const AdminMarketplacePlaybookPage = lazy(() => import("@/pages/admin/marketplace-playbook"));
 const AdminSystemPage = lazy(() => import("@/pages/admin/system"));
 const AdminPricingPage = lazy(() => import("@/pages/admin/pricing"));
 const AdminDispatchPage = lazy(() => import("@/pages/admin/dispatch"));
@@ -520,6 +521,7 @@ function AuthenticatedApp() {
               <Route path="/admin/finance"><AdminFinancePage /></Route>
               <Route path="/admin/pricing"><AdminPricingPage /></Route>
               <Route path="/admin/marketplace"><AdminMarketplacePage /></Route>
+              <Route path="/admin/marketplace-playbook"><AdminMarketplacePlaybookPage /></Route>
               <Route path="/admin/system"><AdminSystemPage /></Route>
               <Route path="/admin/sponsors"><AdminSponsorsPage /></Route>
               <Route path="/admin/analytics"><AdminAnalyticsPage /></Route>

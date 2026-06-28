@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Radio, Briefcase, Users, Wallet, Sliders, ChevronRight, LogOut,
   Menu, X, ShoppingBag, Settings, Handshake, BarChart2, CalendarDays,
   Bitcoin, FileBarChart, CreditCard, Coins, Banknote, Rocket, AlertTriangle,
-  ClipboardList, Megaphone,
+  ClipboardList, Megaphone, Lightbulb,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, clearTokens, queryClient } from "@/lib/queryClient";
@@ -65,6 +65,7 @@ const DAILY = [
 const CLOSET = [
   { label: "Overview", icon: LayoutDashboard, path: "/admin/overview" },
   { label: "Marketplace", icon: ShoppingBag, path: "/admin/marketplace" },
+  { label: "Playbook", icon: Lightbulb, path: "/admin/marketplace-playbook" },
   { label: "System", icon: Settings, path: "/admin/system" },
   { label: "Sponsors", icon: Handshake, path: "/admin/sponsors" },
   { label: "Marketing Network", icon: Megaphone, path: "/admin/marketing-network" },
