@@ -55,8 +55,24 @@ function displayService(lead: Pick<Lead, "serviceType">) {
   return String(lead.serviceType || "job").replace(/_/g, " ");
 }
 
-function leadUrl(leadId: string) {
-  return `/admin/leads/${leadId}`;
+function adminLeadUrl(leadId: string) {
+  return `/admin/jobs?lead=${encodeURIComponent(leadId)}`;
+}
+
+function crewLeadUrl(leadId: string) {
+  return `/crew/jobs?lead=${encodeURIComponent(leadId)}`;
+}
+
+function appBaseUrl() {
+  return process.env.PUBLIC_APP_URL || process.env.APP_URL || process.env.CLIENT_URL || "https://www.jconthemove.com";
+}
+
+function absoluteAppUrl(path: string) {
+  try {
+    return new URL(path, appBaseUrl()).toString();
+  } catch {
+    return path;
+  }
 }
 
 function messageFor(type: JobEventType, lead: Lead, options: EmitJobEventOptions): JobEventMessage {
@@ -209,11 +225,13 @@ function formatWebhookBody(url: string, payload: Record<string, unknown>) {
   const date = lead.moveDate ? String(lead.moveDate) : "date TBD";
 
   if (url.includes("discord.com/api/webhooks") || url.includes("discordapp.com/api/webhooks")) {
+    const adminUrl = typeof payload.adminUrl === "string" ? payload.adminUrl : "";
     return JSON.stringify({
       username: "JC Job Events",
-      content: `**${title}**\n${message}`,
+      content: `**${title}**\n${message}${adminUrl ? `\n${adminUrl}` : ""}`,
       embeds: [{
         title,
+        ...(adminUrl ? { url: adminUrl } : {}),
         description: message,
         color: payload.type === "job_completed" ? 0x10b981 : payload.type === "job_available" ? 0x3b82f6 : 0xf97316,
         fields: [
@@ -298,7 +316,9 @@ export async function emitJobEvent(
       type,
       leadId: lead.id,
       orderNumber: lead.orderNumber,
-      url: leadUrl(lead.id),
+      url: adminLeadUrl(lead.id),
+      adminUrl: adminLeadUrl(lead.id),
+      crewUrl: crewLeadUrl(lead.id),
       source: options.source || "job_event_bus",
       previousStatus: options.previousStatus || null,
       status: options.status || lead.status || null,
@@ -323,6 +343,8 @@ export async function emitJobEvent(
       createdAt: new Date().toISOString(),
       actorId: options.actorId || null,
       source: options.source || "job_event_bus",
+      adminUrl: absoluteAppUrl(adminLeadUrl(lead.id)),
+      crewUrl: absoluteAppUrl(crewLeadUrl(lead.id)),
       lead: summarizeLead(lead),
       recipientCount: recipients.length,
       extra: options.extra || {},

@@ -19,6 +19,7 @@ import { useLocation } from "wouter";
 import type { User } from "@shared/schema";
 import LawnJobBrief from "@/components/LawnJobBrief";
 import { PaymentStatusPill } from "@/components/PaymentStatusPill";
+import AuthorityTasksCard from "@/components/AuthorityTasksCard";
 
 const SERVICE_ICONS: Record<string, string> = {
   residential: "🚛", commercial: "🏢", junk: "🗑️", snow: "❄️",
@@ -1133,6 +1134,8 @@ export default function CrewJobsPage() {
           <Plus className="h-4 w-4 mr-1" /> Add Lead
         </Button>
       </div>
+
+      <AuthorityTasksCard className="mb-5" />
 
       <Tabs defaultValue="board">
         <TabsList className="bg-slate-800/50 border border-slate-700/50 mb-5 w-full">

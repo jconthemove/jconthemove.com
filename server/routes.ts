@@ -1180,6 +1180,23 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       );
       CREATE INDEX IF NOT EXISTS idx_marketing_calls_rep ON marketing_call_events(rep_slug, created_at);
       CREATE INDEX IF NOT EXISTS idx_marketing_calls_promo ON marketing_call_events(promo_code);
+      CREATE TABLE IF NOT EXISTS ops_task_completions (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        task_key TEXT NOT NULL,
+        lead_id VARCHAR NOT NULL REFERENCES leads(id),
+        completed_by_user_id VARCHAR NOT NULL REFERENCES users(id),
+        authority_tier TEXT NOT NULL,
+        bonus_tokens NUMERIC(18,8) NOT NULL DEFAULT 0,
+        notes TEXT,
+        metadata JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_ops_task_completion_user_lead_task
+        ON ops_task_completions(task_key, lead_id, completed_by_user_id);
+      CREATE INDEX IF NOT EXISTS idx_ops_task_completions_user
+        ON ops_task_completions(completed_by_user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_ops_task_completions_lead
+        ON ops_task_completions(lead_id, task_key);
     `);
     console.log('worker authority and quote approval tables ready');
   } catch (migErr) {
@@ -5400,6 +5417,239 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     return authority.rank >= tierRank.gold;
   };
 
+  const OPS_TASK_DEFS = {
+    quote_build: {
+      title: "Build quote card",
+      minTier: "silver",
+      bonusTokens: 250,
+      instructions: "Add price, date/window, crew size, hours, and quote notes.",
+    },
+    quote_approve: {
+      title: "Approve quote",
+      minTier: "gold",
+      bonusTokens: 500,
+      instructions: "Review customer details, price, crew math, and approve the quote card.",
+    },
+    dispatch_ready: {
+      title: "Ready for dispatch",
+      minTier: "platinum",
+      bonusTokens: 750,
+      instructions: "Confirm schedule, assigned crew, and job card readiness.",
+    },
+    payout_review: {
+      title: "Review payout paperwork",
+      minTier: "platinum",
+      bonusTokens: 1000,
+      instructions: "Confirm completion and payout calculation before cash payout.",
+    },
+  } as const;
+
+  type OpsTaskKey = keyof typeof OPS_TASK_DEFS;
+
+  const isOpsTaskKey = (value: string): value is OpsTaskKey => (
+    Object.prototype.hasOwnProperty.call(OPS_TASK_DEFS, value)
+  );
+
+  const moneyNumber = (value: unknown): number => {
+    const parsed = Number(value ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const leadCustomerName = (lead: any): string => (
+    `${lead.firstName || lead.first_name || ""} ${lead.lastName || lead.last_name || ""}`.trim() || "Customer"
+  );
+
+  const leadHasQuoteShape = (lead: any): boolean => {
+    const price = Math.max(moneyNumber(lead.totalPrice ?? lead.total_price), moneyNumber(lead.basePrice ?? lead.base_price));
+    const hasSchedule = Boolean(lead.confirmedDate || lead.confirmed_date || lead.moveDate || lead.move_date);
+    const hasCrewMath = Boolean(lead.crewSize || lead.crew_size || lead.confirmedHours || lead.confirmed_hours);
+    return price > 0 && hasSchedule && hasCrewMath;
+  };
+
+  const leadHasCrewAssignment = (lead: any): boolean => {
+    const crew = lead.crewMembers ?? lead.crew_members;
+    return Array.isArray(crew) && crew.length > 0;
+  };
+
+  const leadHasSchedule = (lead: any): boolean => Boolean(lead.confirmedDate || lead.confirmed_date || lead.moveDate || lead.move_date);
+
+  async function evaluateOpsTaskCompletion(taskKey: OpsTaskKey, lead: any) {
+    if (!lead) return { ok: false, reason: "Lead not found", metadata: {} };
+    const status = String(lead.status || "").toLowerCase();
+    const hasQuote = leadHasQuoteShape(lead);
+
+    if (taskKey === "quote_build") {
+      return hasQuote
+        ? { ok: true, reason: "Quote card has pricing, schedule, and crew math.", metadata: { hasQuote } }
+        : { ok: false, reason: "Add price, date/window, and crew/hours before claiming.", metadata: { hasQuote } };
+    }
+
+    if (taskKey === "quote_approve") {
+      if (!hasQuote) {
+        return { ok: false, reason: "Quote needs pricing, schedule, and crew math before approval.", metadata: { hasQuote } };
+      }
+      return { ok: true, reason: "Quote is ready for Gold approval.", metadata: { hasQuote, status } };
+    }
+
+    if (taskKey === "dispatch_ready") {
+      const hasCrew = leadHasCrewAssignment(lead);
+      const hasScheduleValue = leadHasSchedule(lead);
+      const dispatchStates = new Set(["available", "assigned", "accepted", "in_progress", "completed"]);
+      const dispatchState = String(lead.dispatchState || lead.dispatch_state || "").toLowerCase();
+      const isOperational = dispatchStates.has(status) || dispatchStates.has(dispatchState);
+      if (hasQuote && hasCrew && hasScheduleValue && isOperational) {
+        return { ok: true, reason: "Crew, schedule, and job state are dispatch-ready.", metadata: { hasQuote, hasCrew, hasSchedule: hasScheduleValue, status, dispatchState } };
+      }
+      return { ok: false, reason: "Assign crew, confirm schedule, and move the job into an operational state first.", metadata: { hasQuote, hasCrew, hasSchedule: hasScheduleValue, status, dispatchState } };
+    }
+
+    const payoutRows = await pool.query(
+      `SELECT COUNT(*)::int AS count
+       FROM job_payout_calculations
+       WHERE lead_id = $1`,
+      [lead.id],
+    );
+    const payoutCount = Number(payoutRows.rows[0]?.count || 0);
+    const completed = status === "completed" || Boolean(lead.completedAt || lead.completed_at);
+    if (completed && payoutCount > 0) {
+      return { ok: true, reason: "Completed job has payout calculation paperwork.", metadata: { completed, payoutCount } };
+    }
+    return { ok: false, reason: "Complete the job and create payout calculation paperwork first.", metadata: { completed, payoutCount } };
+  }
+
+  async function awardOpsTaskBonus(params: {
+    user: any;
+    authorityTier: WorkerTier;
+    taskKey: OpsTaskKey;
+    lead: any;
+    notes?: string | null;
+    metadata?: Record<string, unknown>;
+  }) {
+    const def = OPS_TASK_DEFS[params.taskKey];
+    const client = await pool.connect();
+    const tokenAmount = Number(def.bonusTokens);
+    const cashValue = tokensToDollars(tokenAmount).toFixed(2);
+    const rewardType = `ops_task_${params.taskKey}`;
+    const metadata = {
+      source: "authority_task_board",
+      taskKey: params.taskKey,
+      authorityTier: params.authorityTier,
+      leadId: params.lead.id,
+      bonusTokens: tokenAmount,
+      ...(params.metadata || {}),
+    };
+
+    try {
+      await client.query("BEGIN");
+      const inserted = await client.query(
+        `INSERT INTO ops_task_completions
+          (task_key, lead_id, completed_by_user_id, authority_tier, bonus_tokens, notes, metadata)
+         VALUES ($1, $2, $3, $4, $5::numeric, $6, $7::jsonb)
+         ON CONFLICT (task_key, lead_id, completed_by_user_id) DO NOTHING
+         RETURNING id`,
+        [
+          params.taskKey,
+          params.lead.id,
+          params.user.id,
+          params.authorityTier,
+          tokenAmount.toFixed(8),
+          params.notes || null,
+          JSON.stringify(metadata),
+        ],
+      );
+
+      if (inserted.rowCount === 0) {
+        await client.query("ROLLBACK");
+        return { awarded: false, reason: "Task already completed for this lead by this worker.", bonusTokens: 0 };
+      }
+
+      await client.query(
+        `INSERT INTO wallet_accounts (user_id)
+         VALUES ($1)
+         ON CONFLICT (user_id) DO NOTHING`,
+        [params.user.id],
+      );
+      await client.query(
+        `UPDATE wallet_accounts
+         SET token_balance = COALESCE(token_balance, 0)::numeric + $2::numeric,
+             total_earned = COALESCE(total_earned, 0)::numeric + $2::numeric,
+             last_activity = NOW()
+         WHERE user_id = $1`,
+        [params.user.id, tokenAmount.toFixed(8)],
+      );
+      await client.query(
+        `INSERT INTO rewards
+          (user_id, reward_type, token_amount, cash_value, status, earned_date, reference_id, metadata)
+         VALUES ($1, $2, $3::numeric, $4::numeric, 'confirmed', NOW(), $5, $6::jsonb)`,
+        [
+          params.user.id,
+          rewardType,
+          tokenAmount.toFixed(8),
+          cashValue,
+          params.lead.id,
+          JSON.stringify(metadata),
+        ],
+      );
+      await client.query("COMMIT");
+
+      try {
+        const { notificationService } = await import("./services/notification");
+        await notificationService.notifyRewardAvailable(params.user.id, def.title, tokenAmount);
+      } catch (notifyError) {
+        console.error("ops task reward notification failed:", notifyError);
+      }
+
+      return { awarded: true, bonusTokens: tokenAmount, completionId: inserted.rows[0]?.id };
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch {}
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async function completeOpsTaskForLead(user: any, taskKey: OpsTaskKey, leadId: string, notes?: string | null) {
+    const authority = await getWorkerAuthority(user);
+    const def = OPS_TASK_DEFS[taskKey];
+    if (authority.rank < tierRank[def.minTier]) {
+      return { status: 403 as const, body: { error: `${def.title} requires ${def.minTier.toUpperCase()} authority or higher.` } };
+    }
+
+    const [lead] = await db.select().from(leads).where(eq(leads.id, leadId)).limit(1);
+    if (!lead || lead.archivedAt) {
+      return { status: 404 as const, body: { error: "Lead not found" } };
+    }
+
+    const evidence = await evaluateOpsTaskCompletion(taskKey, lead);
+    if (!evidence.ok) {
+      return { status: 409 as const, body: { error: evidence.reason, evidence: evidence.metadata } };
+    }
+
+    if (taskKey === "quote_approve") {
+      const approvalRole = user.role === "admin" || user.role === "business_owner" || user.email === "upmichiganstatemovers@gmail.com"
+        ? "owner_approval"
+        : "gold_vote";
+      await db.insert(quoteApprovals).values({
+        leadId: lead.id,
+        submittedByUserId: lead.createdByUserId || null,
+        approvedByUserId: user.id,
+        approvalRole,
+        status: "approved",
+        notes: notes || "Approved from authority task board",
+      }).onConflictDoNothing();
+    }
+
+    const award = await awardOpsTaskBonus({
+      user,
+      authorityTier: authority.authorityTier,
+      taskKey,
+      lead,
+      notes,
+      metadata: evidence.metadata,
+    });
+    return { status: 200 as const, body: { success: true, taskKey, leadId, ...award } };
+  }
+
   app.get("/api/workers/me/authority", isAuthenticated, requireEmployee, async (req: any, res) => {
     try {
       const user = req.currentUser;
@@ -5441,6 +5691,205 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     } catch (error) {
       console.error("worker authority error:", error);
       res.status(500).json({ message: "Failed to load worker authority" });
+    }
+  });
+
+  app.get("/api/ops-tasks", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const user = req.currentUser;
+      const authority = await getWorkerAuthority(user);
+      const leadRows = await db
+        .select({
+          id: leads.id,
+          orderNumber: leads.orderNumber,
+          firstName: leads.firstName,
+          lastName: leads.lastName,
+          serviceType: leads.serviceType,
+          status: leads.status,
+          moveDate: leads.moveDate,
+          confirmedDate: leads.confirmedDate,
+          arrivalWindow: leads.arrivalWindow,
+          basePrice: leads.basePrice,
+          totalPrice: leads.totalPrice,
+          confirmedHours: leads.confirmedHours,
+          crewSize: leads.crewSize,
+          crewMembers: leads.crewMembers,
+          dispatchState: leads.dispatchState,
+          completedAt: leads.completedAt,
+          createdAt: leads.createdAt,
+        })
+        .from(leads)
+        .where(sql`${leads.archivedAt} IS NULL AND ${leads.status} NOT IN ('cancelled', 'closed')`)
+        .orderBy(desc(leads.createdAt))
+        .limit(120);
+
+      const leadIds = leadRows.map((lead) => lead.id);
+      const completionSet = new Set<string>();
+      const approvalCountByLead = new Map<string, number>();
+      const payoutCountByLead = new Map<string, number>();
+
+      if (leadIds.length > 0) {
+        const completedRows = await pool.query(
+          `SELECT task_key, lead_id
+           FROM ops_task_completions
+           WHERE completed_by_user_id = $1
+             AND lead_id = ANY($2::varchar[])`,
+          [user.id, leadIds],
+        );
+        for (const row of completedRows.rows) {
+          completionSet.add(`${row.task_key}:${row.lead_id}`);
+        }
+
+        const approvalRows = await db
+          .select({
+            leadId: quoteApprovals.leadId,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(quoteApprovals)
+          .where(and(inArray(quoteApprovals.leadId, leadIds), eq(quoteApprovals.status, "approved")))
+          .groupBy(quoteApprovals.leadId);
+        for (const row of approvalRows) {
+          if (row.leadId) approvalCountByLead.set(row.leadId, Number(row.count || 0));
+        }
+
+        const payoutRows = await db
+          .select({
+            leadId: jobPayoutCalculations.leadId,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(jobPayoutCalculations)
+          .where(inArray(jobPayoutCalculations.leadId, leadIds))
+          .groupBy(jobPayoutCalculations.leadId);
+        for (const row of payoutRows) {
+          payoutCountByLead.set(row.leadId, Number(row.count || 0));
+        }
+      }
+
+      const canSeeTask = (taskKey: OpsTaskKey) => authority.rank >= tierRank[OPS_TASK_DEFS[taskKey].minTier];
+      const tasks: Array<Record<string, unknown>> = [];
+      const addTask = (taskKey: OpsTaskKey, lead: any, canComplete: boolean, completionReason: string) => {
+        if (!canSeeTask(taskKey)) return;
+        const def = OPS_TASK_DEFS[taskKey];
+        const completed = completionSet.has(`${taskKey}:${lead.id}`);
+        tasks.push({
+          id: `${taskKey}:${lead.id}`,
+          taskKey,
+          title: def.title,
+          instructions: def.instructions,
+          minTier: def.minTier,
+          bonusTokens: def.bonusTokens,
+          leadId: lead.id,
+          orderNumber: lead.orderNumber,
+          customerName: leadCustomerName(lead),
+          serviceType: lead.serviceType,
+          status: lead.status,
+          date: lead.confirmedDate || lead.moveDate,
+          price: lead.totalPrice || lead.basePrice || null,
+          completed,
+          canComplete: canComplete && !completed,
+          completionReason: completed ? "Bonus already awarded for this card." : completionReason,
+          actionUrl: `/admin/jobs?lead=${encodeURIComponent(lead.id)}`,
+        });
+      };
+
+      for (const lead of leadRows) {
+        const status = String(lead.status || "").toLowerCase();
+        const hasQuote = leadHasQuoteShape(lead);
+        const hasCrew = leadHasCrewAssignment(lead);
+        const hasScheduleValue = leadHasSchedule(lead);
+        const quoteCandidate = ["new", "contacted", "quote_requested", "chatbot_pending", "pending_quote_approval", "quoted"].includes(status);
+        const operational = ["available", "assigned", "accepted", "in_progress", "completed"].includes(status)
+          || ["available", "assigned", "accepted", "in_progress", "completed"].includes(String(lead.dispatchState || "").toLowerCase());
+        const completed = status === "completed" || Boolean(lead.completedAt);
+        const payoutCount = payoutCountByLead.get(lead.id) || 0;
+
+        if (quoteCandidate || hasQuote) {
+          addTask(
+            "quote_build",
+            lead,
+            hasQuote,
+            hasQuote ? "Quote math is ready to claim." : "Needs price, date/window, and crew/hours.",
+          );
+        }
+
+        if (hasQuote && !["cancelled", "closed"].includes(status)) {
+          const approvedCount = approvalCountByLead.get(lead.id) || 0;
+          addTask(
+            "quote_approve",
+            lead,
+            hasQuote,
+            approvedCount > 0 ? `${approvedCount} approval${approvedCount === 1 ? "" : "s"} on file.` : "Ready for Gold approval.",
+          );
+        }
+
+        if (hasQuote && !["cancelled", "closed"].includes(status)) {
+          addTask(
+            "dispatch_ready",
+            lead,
+            hasQuote && hasCrew && hasScheduleValue && operational,
+            hasCrew && hasScheduleValue && operational
+              ? "Crew and schedule are ready."
+              : "Needs crew assignment, schedule, and operational job status.",
+          );
+        }
+
+        if (completed) {
+          addTask(
+            "payout_review",
+            lead,
+            payoutCount > 0,
+            payoutCount > 0 ? "Payout paperwork exists." : "Needs payout calculation paperwork.",
+          );
+        }
+      }
+
+      const taskOrder: Record<OpsTaskKey, number> = {
+        quote_build: 1,
+        quote_approve: 2,
+        dispatch_ready: 3,
+        payout_review: 4,
+      };
+      tasks.sort((a, b) => {
+        const ao = taskOrder[a.taskKey as OpsTaskKey] || 99;
+        const bo = taskOrder[b.taskKey as OpsTaskKey] || 99;
+        if (ao !== bo) return ao - bo;
+        return String(b.date || "").localeCompare(String(a.date || ""));
+      });
+
+      res.json({
+        authority: {
+          tier: authority.authorityTier,
+          rank: authority.rank,
+          canBuildQuote: authority.rank >= tierRank.silver,
+          canApproveQuote: authority.rank >= tierRank.gold,
+          canManageOps: authority.rank >= tierRank.platinum,
+        },
+        stages: Object.entries(OPS_TASK_DEFS).map(([key, def]) => ({
+          taskKey: key,
+          ...def,
+        })),
+        tasks: tasks.slice(0, 60),
+      });
+    } catch (error) {
+      console.error("ops task load error:", error);
+      res.status(500).json({ message: "Failed to load authority tasks" });
+    }
+  });
+
+  app.post("/api/ops-tasks/:taskKey/complete", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const taskKeyRaw = String(req.params.taskKey || "");
+      if (!isOpsTaskKey(taskKeyRaw)) {
+        return res.status(404).json({ error: "Unknown task" });
+      }
+      const leadId = typeof req.body?.leadId === "string" ? req.body.leadId : "";
+      if (!leadId) return res.status(400).json({ error: "leadId is required" });
+      const notes = typeof req.body?.notes === "string" ? req.body.notes.slice(0, 1000) : null;
+      const result = await completeOpsTaskForLead(req.currentUser, taskKeyRaw, leadId, notes);
+      res.status(result.status).json(result.body);
+    } catch (error) {
+      console.error("ops task completion error:", error);
+      res.status(500).json({ error: "Failed to complete task" });
     }
   });
 
@@ -5504,6 +5953,25 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         attributionType: approved ? "quote_approver" : "gold_vote",
         metadata: { approved, notes },
       });
+
+      try {
+        const authority = await getWorkerAuthority(user);
+        if (authority.rank >= tierRank.gold) {
+          const evidence = await evaluateOpsTaskCompletion("quote_approve", lead);
+          if (evidence.ok) {
+            await awardOpsTaskBonus({
+              user,
+              authorityTier: authority.authorityTier,
+              taskKey: "quote_approve",
+              lead,
+              notes: notes || "Quote approved from worker approval flow.",
+              metadata: { approved, goldVotes, approvalRole, ...evidence.metadata },
+            });
+          }
+        }
+      } catch (bonusError) {
+        console.error("quote approval authority task bonus failed:", bonusError);
+      }
 
       res.json({ success: true, approved, goldVotes });
     } catch (error) {
@@ -7249,6 +7717,24 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         note: "Converted to available job from employee dashboard.",
       });
 
+      try {
+        if (authority.rank >= tierRank.silver) {
+          const evidence = await evaluateOpsTaskCompletion("quote_build", updatedLead);
+          if (evidence.ok) {
+            await awardOpsTaskBonus({
+              user,
+              authorityTier: authority.authorityTier,
+              taskKey: "quote_build",
+              lead: updatedLead,
+              notes: "Converted request into an available priced job.",
+              metadata: { sourceAction: "convert_to_job", ...evidence.metadata },
+            });
+          }
+        }
+      } catch (bonusError) {
+        console.error("quote build authority task bonus failed:", bonusError);
+      }
+
       res.json(updatedLead);
     } catch (error) {
       console.error("Error converting lead to job:", error);
@@ -8374,6 +8860,45 @@ Thank you for your business!
         note: changedKeys.length ? `Updated ${changedKeys.join(", ")}` : "Quote updated",
         extra: { changedKeys },
       });
+
+      try {
+        const quoteFieldsChanged = changedKeys.some((key) => ["basePrice", "totalPrice", "confirmedDate", "arrivalWindow", "crewSize", "confirmedHours", "quoteNotes"].includes(key));
+        const dispatchFieldsChanged = changedKeys.some((key) => ["crewMembers", "assignedToUserId", "confirmedDate", "arrivalWindow"].includes(key));
+        if (actorId && (quoteFieldsChanged || dispatchFieldsChanged)) {
+          const actor = (req as any).currentUser || (req as any).user || await storage.getUser(actorId);
+          if (actor) {
+            const authority = await getWorkerAuthority(actor);
+            if (quoteFieldsChanged && authority.rank >= tierRank.silver) {
+              const evidence = await evaluateOpsTaskCompletion("quote_build", updatedLead);
+              if (evidence.ok) {
+                await awardOpsTaskBonus({
+                  user: actor,
+                  authorityTier: authority.authorityTier,
+                  taskKey: "quote_build",
+                  lead: updatedLead,
+                  notes: "Updated quote fields on the lead card.",
+                  metadata: { sourceAction: "lead_quote_update", changedKeys, ...evidence.metadata },
+                });
+              }
+            }
+            if (dispatchFieldsChanged && authority.rank >= tierRank.platinum) {
+              const evidence = await evaluateOpsTaskCompletion("dispatch_ready", updatedLead);
+              if (evidence.ok) {
+                await awardOpsTaskBonus({
+                  user: actor,
+                  authorityTier: authority.authorityTier,
+                  taskKey: "dispatch_ready",
+                  lead: updatedLead,
+                  notes: "Prepared job for dispatch from the lead card.",
+                  metadata: { sourceAction: "lead_quote_update", changedKeys, ...evidence.metadata },
+                });
+              }
+            }
+          }
+        }
+      } catch (bonusError) {
+        console.error("quote update authority task bonus failed:", bonusError);
+      }
       
       // Send email notifications if status changed
       if (newStatus && newStatus !== previousStatus) {

@@ -11,6 +11,7 @@ import {
   Truck,
   Users,
 } from "lucide-react";
+import AuthorityTasksCard from "@/components/AuthorityTasksCard";
 
 const steps = [
   {
@@ -98,6 +99,8 @@ export default function AdminMarketplacePlaybookPage() {
             </div>
           ))}
         </section>
+
+        <AuthorityTasksCard className="mt-5" />
 
         <section className="mt-5 grid gap-4 lg:grid-cols-[1fr_0.75fr]">
           <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-5">
