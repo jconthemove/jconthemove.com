@@ -139,8 +139,40 @@ const ALL_CAPABILITIES: { key: string; label: string; icon: LucideIcon }[] = [
   { key: "uhaul", label: "U-Haul Access", icon: KeyRound },
 ];
 
-const AD_FOCUS_OPTIONS = ["Moving help", "Junk removal", "Delivery help", "Last-minute labor"];
+const AD_AREA_OPTIONS = ["Ironwood / Hurley", "Ashland / Washburn", "Iron River", "Wausau", "Northwoods"];
+const AD_FOCUS_OPTIONS = ["Moving help", "U-Haul load/unload", "Junk removal", "Delivery help", "PODS / U-Box help", "Last-minute labor"];
+const AD_NOTE_PRESETS = [
+  { label: "Openings", text: "A few local openings this week. Send ZIP, date, and photos for a quick quote review." },
+  { label: "Last-minute", text: "Last-minute load/unload and delivery help may be available depending on crew timing." },
+  { label: "Heavy item", text: "Good fit for couches, appliances, garage items, storage units, and truck unloads." },
+  { label: "Community", text: "Local crew, simple scheduling, and a clear quote before the job is confirmed." },
+];
 const AD_PHOTO_MAX_BYTES = 8 * 1024 * 1024;
+
+function appendAdNote(current: string, next: string) {
+  if (!current.trim()) return next;
+  if (current.includes(next)) return current;
+  return `${current.trim()}\n${next}`;
+}
+
+function buildAdPostText(draft: MarketingAdDraft) {
+  const linkLine = draft.trackedLink && !draft.facebookPost.includes(draft.trackedLink) ? `\n\n${draft.trackedLink}` : "";
+  const hashtags = draft.hashtags?.length ? `\n\n${draft.hashtags.join(" ")}` : "";
+  return `${draft.facebookPost}${linkLine}${hashtags}`.trim();
+}
+
+function buildAdKitText(draft: MarketingAdDraft) {
+  return [
+    "FACEBOOK POST",
+    buildAdPostText(draft),
+    draft.followUpText ? "\nFAST REPLY" : "",
+    draft.followUpText || "",
+    draft.communityTargets?.length ? "\nWHERE TO POST" : "",
+    draft.communityTargets?.map((target, index) => `${index + 1}. ${target}`).join("\n") || "",
+    draft.postingChecklist?.length ? "\nPOSTING CHECK" : "",
+    draft.postingChecklist?.map((item, index) => `${index + 1}. ${item}`).join("\n") || "",
+  ].filter(Boolean).join("\n");
+}
 
 function compressMarketingPhoto(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -422,6 +454,22 @@ export default function CrewEarningsPage() {
                 onChange={(event) => setAdArea(event.target.value)}
                 className="border-slate-700 bg-slate-950/50 text-white"
               />
+              <div className="flex flex-wrap gap-1.5">
+                {AD_AREA_OPTIONS.map((area) => (
+                  <button
+                    key={area}
+                    type="button"
+                    onClick={() => setAdArea(area)}
+                    className={`rounded-full border px-2.5 py-1 text-[11px] font-bold transition ${
+                      adArea === area
+                        ? "border-blue-400 bg-blue-500 text-white"
+                        : "border-slate-700 bg-slate-950/40 text-slate-300 hover:border-blue-500/60"
+                    }`}
+                  >
+                    {area}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-slate-300">Focus</Label>
@@ -468,6 +516,13 @@ export default function CrewEarningsPage() {
                 />
               </label>
               {adPhotoFileName && <span className="max-w-full truncate text-xs text-slate-400">{adPhotoFileName}</span>}
+              {adPhotoPreview && (
+                <img
+                  src={adPhotoPreview}
+                  alt=""
+                  className="h-10 w-10 rounded-md border border-slate-700 object-cover"
+                />
+              )}
             </div>
           </div>
 
@@ -480,6 +535,18 @@ export default function CrewEarningsPage() {
               placeholder="Example: crew openings Friday, U-Haul unloads, garage cleanouts, senior move help..."
               className="min-h-[86px] border-slate-700 bg-slate-950/50 text-white"
             />
+            <div className="flex flex-wrap gap-1.5">
+              {AD_NOTE_PRESETS.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => setAdNotes((current) => appendAdNote(current, preset.text))}
+                  className="rounded-full border border-slate-700 bg-slate-950/40 px-2.5 py-1 text-[11px] font-bold text-slate-300 hover:border-blue-500/60 hover:text-blue-100"
+                >
+                  + {preset.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <Button
@@ -574,8 +641,7 @@ export default function CrewEarningsPage() {
                 type="button"
                 className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black text-slate-950 hover:bg-emerald-400"
                 onClick={() => {
-                  const linkLine = adDraft.trackedLink && !adDraft.facebookPost.includes(adDraft.trackedLink) ? `\n\n${adDraft.trackedLink}` : "";
-                  const post = `${adDraft.facebookPost}${linkLine}\n\n${adDraft.hashtags?.join(" ") || ""}`.trim();
+                  const post = buildAdPostText(adDraft);
                   window.open(facebookShareHref, "_blank", "noopener,noreferrer");
                   if (!navigator.clipboard) {
                     return;
@@ -591,14 +657,24 @@ export default function CrewEarningsPage() {
                 type="button"
                 className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-3 py-2 text-xs font-black text-white hover:bg-blue-400"
                 onClick={() => {
-                  const linkLine = adDraft.trackedLink && !adDraft.facebookPost.includes(adDraft.trackedLink) ? `\n\n${adDraft.trackedLink}` : "";
-                  const post = `${adDraft.facebookPost}${linkLine}\n\n${adDraft.hashtags?.join(" ") || ""}`.trim();
+                  const post = buildAdPostText(adDraft);
                   navigator.clipboard?.writeText(post)
                     .then(() => toast({ title: "Ad copied", description: "Paste it into Facebook, Messenger, or a local group." }))
                     .catch(() => toast({ title: "Copy failed", description: "Long-press the post text to copy it.", variant: "destructive" }));
                 }}
               >
                 <Copy className="h-3.5 w-3.5" /> Copy ad
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-lg border border-orange-500/40 bg-orange-500/10 px-3 py-2 text-xs font-black text-orange-200 hover:bg-orange-500/20"
+                onClick={() => {
+                  navigator.clipboard?.writeText(buildAdKitText(adDraft))
+                    .then(() => toast({ title: "Ad kit copied", description: "Post, follow-up, and target list copied together." }))
+                    .catch(() => toast({ title: "Copy failed", description: "Long-press the ad text to copy it.", variant: "destructive" }));
+                }}
+              >
+                <Copy className="h-3.5 w-3.5" /> Copy kit
               </button>
               <a
                 href={facebookShareHref}
