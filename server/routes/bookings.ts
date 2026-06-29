@@ -161,6 +161,11 @@ function buildLeadDetails(args: {
   inputs: PersistedBookingInput[];
   quote: BookingPricingResult;
   notes?: string;
+  source?: string;
+  promoCode?: string | null;
+  referralSlug?: string | null;
+  marketingCampaignId?: string | null;
+  marketingTracking?: Record<string, unknown>;
 }) {
   const serviceLines = args.inputs.map((item, idx) => {
     const details = (item.details || {}) as Record<string, unknown>;
@@ -175,8 +180,18 @@ function buildLeadDetails(args: {
     ].filter(Boolean);
     return `- ${bits.join(" · ")}`;
   });
+  const tracking = args.marketingTracking || {};
+  const attributionBits = [
+    args.source ? `source: ${args.source}` : null,
+    args.promoCode ? `promo: ${args.promoCode}` : null,
+    args.referralSlug ? `rep: ${args.referralSlug}` : null,
+    args.marketingCampaignId ? `campaign: ${args.marketingCampaignId}` : null,
+    typeof tracking.utmSource === "string" && tracking.utmSource ? `utm source: ${tracking.utmSource}` : null,
+    typeof tracking.utmCampaign === "string" && tracking.utmCampaign ? `utm campaign: ${tracking.utmCampaign}` : null,
+  ].filter(Boolean);
   return [
     `[BOOKING ${args.bookingReference}] Linked booking ${args.bookingId}`,
+    attributionBits.length ? `Attribution: ${attributionBits.join(", ")}.` : null,
     args.marketplaceShape ? `Marketplace shape: ${args.marketplaceShape}.` : null,
     `Quote snapshot: subtotal $${args.quote.subtotal.toFixed(2)}, estimate range/final $${args.quote.finalTotal.toFixed(2)}.`,
     "Requested services:",
@@ -1179,6 +1194,8 @@ router.post("/bookings", async (req: Request, res: Response) => {
     // The helper already swallows its own errors so this call cannot turn a
     // successful booking create into a 500 even if provisioning fails.
     let linkedLead: typeof leads.$inferSelect | null = null;
+    const leadSource = body.source || "api";
+    const leadPromoCode = marketingPromoCode || requestUser?.referralCode || null;
     try {
       const [existingLinked] = await db
         .select()
@@ -1209,7 +1226,9 @@ router.post("/bookings", async (req: Request, res: Response) => {
         const quoteSnapshot = {
           bookingId: booking.id,
           bookingReference,
-          source: body.source || "api",
+          source: leadSource,
+          promoCode: leadPromoCode,
+          referralSlug: marketingReferralSlug || null,
           marketplaceShapeId: marketplaceShape.id,
           marketplaceShape: {
             id: marketplaceShape.id,
@@ -1225,6 +1244,13 @@ router.post("/bookings", async (req: Request, res: Response) => {
           tokenEstimate: quote.tokenEstimate,
           marketingCampaignId: marketingCampaignId || null,
           marketingTracking,
+          attribution: {
+            source: leadSource,
+            promoCode: leadPromoCode,
+            referralSlug: marketingReferralSlug || null,
+            marketingCampaignId: marketingCampaignId || null,
+            marketingTracking,
+          },
           bundleApplied: quote.bundleApplied ?? null,
           marketplaceQuotePreview,
           items: quote.items,
@@ -1253,8 +1279,15 @@ router.post("/bookings", async (req: Request, res: Response) => {
             inputs: persistInputs,
             quote,
             notes: body.notes || undefined,
+            source: leadSource,
+            promoCode: leadPromoCode,
+            referralSlug: marketingReferralSlug || null,
+            marketingCampaignId: marketingCampaignId || null,
+            marketingTracking,
           }),
           status: "quote_requested",
+          source: leadSource,
+          promoCode: leadPromoCode,
           createdByUserId: requestUser?.id || null,
           truckConfig: firstDetailValue(persistInputs, ["truckSituation"]) || null,
           crewSize,
@@ -1273,6 +1306,11 @@ router.post("/bookings", async (req: Request, res: Response) => {
           source: "booking_bridge",
           extra: { bookingId: booking.id, bookingReference, marketingCampaignId: marketingCampaignId || null, marketingTracking },
         });
+      }
+      if (linkedLead) {
+        await db.update(quoteAttributions)
+          .set({ leadId: linkedLead.id })
+          .where(eq(quoteAttributions.bookingId, booking.id));
       }
     } catch (leadErr) {
       console.error("[bookings] marketplace lead bridge failed:", leadErr instanceof Error ? leadErr.message : leadErr);
