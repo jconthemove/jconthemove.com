@@ -61,8 +61,9 @@ router.get("/admin/marketing/campaign-performance", requireOwner, async (req, re
         acc.attributedCards += attributedCards;
         acc.attributedLeads += Number(campaign.attributed_leads || 0);
         acc.attributedBookings += Number(campaign.attributed_bookings || 0);
-        if (campaign.source === "crew_facebook_ad") acc.crewAdCampaigns += 1;
-        if (campaign.source === "webhook_reminder") acc.webhookCampaigns += 1;
+        const source = String(campaign.source || "");
+        if (source === "crew_facebook_ad") acc.crewAdCampaigns += 1;
+        if (source.includes("webhook") && source !== "crew_facebook_ad") acc.webhookCampaigns += 1;
         if (!acc.topCampaign || attributedCards > acc.topCampaign.attributedCards) {
           acc.topCampaign = {
             id: campaign.id,

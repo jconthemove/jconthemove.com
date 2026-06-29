@@ -53,7 +53,7 @@ const coreServiceLinks = [
   },
 ];
 
-const TRACKING_PARAM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "jc_campaign", "fbclid"] as const;
+const TRACKING_PARAM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "jc_campaign", "jc_area", "jc_focus", "fbclid"] as const;
 
 function formatPhone(raw: string) {
   const digits = raw.replace(/\D/g, "");

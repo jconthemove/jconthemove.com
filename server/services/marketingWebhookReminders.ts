@@ -42,10 +42,38 @@ const webhookSecret = () => (
   || ""
 );
 
+const campaignSlug = (area?: string | null, focus?: string | null) => (
+  `${area || "anywhere"}-${focus || "local-help"}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 90) || "local-service"
+);
+
+function addCampaignTrackingToUrl(rawUrl: string | undefined, campaignId: string, input: MarketingWebhookReminderInput) {
+  if (!rawUrl) return null;
+  try {
+    const url = new URL(rawUrl);
+    if (!url.searchParams.get("utm_source")) url.searchParams.set("utm_source", "marketing_webhook");
+    if (!url.searchParams.get("utm_medium")) url.searchParams.set("utm_medium", "webhook");
+    if (!url.searchParams.get("utm_campaign")) url.searchParams.set("utm_campaign", campaignSlug(input.area, input.focus));
+    if (input.area && !url.searchParams.get("jc_area")) url.searchParams.set("jc_area", input.area);
+    if (input.focus && !url.searchParams.get("jc_focus")) url.searchParams.set("jc_focus", input.focus);
+    url.searchParams.set("utm_content", campaignId);
+    url.searchParams.set("jc_campaign", campaignId);
+    if (input.promoCode && !url.searchParams.get("promo")) url.searchParams.set("promo", input.promoCode);
+    if (input.repSlug && !url.searchParams.get("rep")) url.searchParams.set("rep", input.repSlug);
+    return url.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
 function normalizePayload(input: MarketingWebhookReminderInput, actorId?: string | null) {
   const now = new Date().toISOString();
+  const id = crypto.randomUUID();
   return {
-    id: crypto.randomUUID(),
+    id,
     type: "marketing_reminder",
     campaignName: input.campaignName,
     title: input.title,
@@ -54,7 +82,7 @@ function normalizePayload(input: MarketingWebhookReminderInput, actorId?: string
     focus: input.focus || null,
     audience: input.audience || null,
     imageUrl: input.imageUrl || null,
-    ctaUrl: input.ctaUrl || null,
+    ctaUrl: addCampaignTrackingToUrl(input.ctaUrl, id, input),
     ctaLabel: input.ctaLabel || (input.ctaUrl ? "Open Link" : null),
     promoCode: input.promoCode || null,
     repSlug: input.repSlug || null,
