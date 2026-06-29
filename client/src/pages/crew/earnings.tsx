@@ -85,6 +85,14 @@ interface MarketingAdDraft {
   reason?: string;
 }
 
+interface MarketingAdReward {
+  awarded: boolean;
+  bonusTokens: number;
+  reason?: string;
+  dailyAwardCount?: number;
+  dailyLimit?: number;
+}
+
 const REWARD_LABELS: Record<string, string> = {
   mining: "Mining Reward",
   daily_checkin: "Daily Check-in",
@@ -95,6 +103,7 @@ const REWARD_LABELS: Record<string, string> = {
   loyalty_booking: "Loyalty Reward",
   referral: "Referral Bonus",
   signup_bonus: "Welcome Bonus",
+  ops_task_marketing_ad: "Marketing Ad Bonus",
   review_submitted: "Left a review",
 };
 
@@ -182,6 +191,7 @@ export default function CrewEarningsPage() {
   const [adPhotoPreview, setAdPhotoPreview] = useState("");
   const [adPhotoDataUrl, setAdPhotoDataUrl] = useState("");
   const [adDraft, setAdDraft] = useState<MarketingAdDraft | null>(null);
+  const [adReward, setAdReward] = useState<MarketingAdReward | null>(null);
 
   const { data: wallet } = useQuery<{ balance: string; tokenBalance?: string; totalEarned?: string }>({ queryKey: ["/api/rewards/wallet"] });
   const { data: miningStatus } = useQuery<MiningStatus>({ queryKey: ["/api/mining/status"], refetchInterval: 15000, refetchIntervalInBackground: false, retry: 1 });
@@ -287,9 +297,15 @@ export default function CrewEarningsPage() {
     },
     onSuccess: (data) => {
       setAdDraft(data.draft);
+      setAdReward(data.marketingReward || null);
+      const reward = data.marketingReward as MarketingAdReward | undefined;
       toast({
-        title: "Ad draft ready",
-        description: data.draft?.fallbackUsed ? "Template draft created. OpenAI fallback was used." : "ChatGPT-powered copy created.",
+        title: reward?.awarded ? "Ad draft ready + bonus issued" : "Ad draft ready",
+        description: reward?.awarded
+          ? `+${Number(reward.bonusTokens || 0).toLocaleString()} JCMOVES for creating a tracked campaign.`
+          : data.draft?.fallbackUsed
+            ? "Template draft created. OpenAI fallback was used."
+            : (reward?.reason || "ChatGPT-powered copy created."),
       });
     },
     onError: (e: Error) => toast({ title: "Ad draft failed", description: e.message, variant: "destructive" }),
@@ -536,6 +552,20 @@ export default function CrewEarningsPage() {
                 )}
                 {adDraft.trackedLink && (
                   <p className="mt-1 break-all font-mono text-[11px] text-emerald-100">{adDraft.trackedLink}</p>
+                )}
+                {adReward && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold">
+                    <span className={adReward.awarded ? "text-orange-200" : "text-slate-400"}>
+                      {adReward.awarded
+                        ? `+${Number(adReward.bonusTokens || 0).toLocaleString()} JCMOVES marketing bonus`
+                        : adReward.reason || "Marketing bonus not issued"}
+                    </span>
+                    {adReward.dailyLimit ? (
+                      <span className="rounded-full border border-slate-700 bg-slate-950/40 px-2 py-0.5 text-slate-400">
+                        {adReward.dailyAwardCount || 0}/{adReward.dailyLimit} today
+                      </span>
+                    ) : null}
+                  </div>
                 )}
               </div>
             )}

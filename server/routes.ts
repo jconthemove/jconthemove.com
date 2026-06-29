@@ -5579,9 +5579,116 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     }
   };
 
+  const MARKETING_AD_BONUS_TOKENS = 150;
+  const MARKETING_AD_DAILY_BONUS_LIMIT = 3;
+
+  async function awardMarketingAdBonus(input: {
+    user: any;
+    authorityTier: WorkerTier;
+    campaignId: string;
+    area: string;
+    focus: string;
+    trackedLink: string;
+  }) {
+    if (tierRank[input.authorityTier] < tierRank.bronze) {
+      return {
+        awarded: false,
+        bonusTokens: 0,
+        reason: "Bronze authority is required for marketing task bonuses.",
+        dailyAwardCount: 0,
+        dailyLimit: MARKETING_AD_DAILY_BONUS_LIMIT,
+      };
+    }
+
+    const rewardType = "ops_task_marketing_ad";
+    const countResult = await pool.query(
+      `SELECT COUNT(*)::int AS count
+         FROM rewards
+        WHERE user_id = $1
+          AND reward_type = $2
+          AND earned_date >= CURRENT_DATE`,
+      [input.user.id, rewardType],
+    );
+    const dailyAwardCount = Number(countResult.rows[0]?.count || 0);
+    if (dailyAwardCount >= MARKETING_AD_DAILY_BONUS_LIMIT) {
+      return {
+        awarded: false,
+        bonusTokens: 0,
+        reason: `Daily marketing bonus limit reached (${MARKETING_AD_DAILY_BONUS_LIMIT}).`,
+        dailyAwardCount,
+        dailyLimit: MARKETING_AD_DAILY_BONUS_LIMIT,
+      };
+    }
+
+    const tokenAmount = MARKETING_AD_BONUS_TOKENS;
+    const cashValue = tokensToDollars(tokenAmount).toFixed(2);
+    const metadata = {
+      source: "crew_ad_creator",
+      campaignId: input.campaignId,
+      authorityTier: input.authorityTier,
+      area: input.area,
+      focus: input.focus,
+      trackedLink: input.trackedLink,
+      bonusTokens: tokenAmount,
+    };
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `INSERT INTO wallet_accounts (user_id)
+         VALUES ($1)
+         ON CONFLICT (user_id) DO NOTHING`,
+        [input.user.id],
+      );
+      await client.query(
+        `UPDATE wallet_accounts
+            SET token_balance = COALESCE(token_balance, 0)::numeric + $2::numeric,
+                total_earned = COALESCE(total_earned, 0)::numeric + $2::numeric,
+                last_activity = NOW()
+          WHERE user_id = $1`,
+        [input.user.id, tokenAmount.toFixed(8)],
+      );
+      await client.query(
+        `INSERT INTO rewards
+          (user_id, reward_type, token_amount, cash_value, status, earned_date, reference_id, metadata)
+         VALUES ($1, $2, $3::numeric, $4::numeric, 'confirmed', NOW(), $5, $6::jsonb)`,
+        [
+          input.user.id,
+          rewardType,
+          tokenAmount.toFixed(8),
+          cashValue,
+          input.campaignId,
+          JSON.stringify(metadata),
+        ],
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch {}
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    try {
+      const { notificationService } = await import("./services/notification");
+      await notificationService.notifyRewardAvailable(input.user.id, "Marketing ad created", tokenAmount);
+    } catch (notifyError) {
+      console.error("marketing ad reward notification failed:", notifyError);
+    }
+
+    return {
+      awarded: true,
+      bonusTokens: tokenAmount,
+      reason: "Tracked ad campaign created.",
+      dailyAwardCount: dailyAwardCount + 1,
+      dailyLimit: MARKETING_AD_DAILY_BONUS_LIMIT,
+    };
+  }
+
   app.post("/api/crew/marketing/ad-draft", isAuthenticated, requireEmployee, async (req: any, res) => {
     try {
       const user = req.currentUser || req.user || {};
+      const authority = await getWorkerAuthority(user);
       const workerName = [user.firstName, user.lastName].filter(Boolean).join(" ") || user.email || "JC crew";
       const payload = marketingAdDraftSchema.parse({
         ...(req.body || {}),
@@ -5601,7 +5708,27 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         trackedLink,
         draft,
       });
-      res.json({ success: true, draft: { ...draft, campaignId, trackedLink } });
+      let marketingReward = null;
+      try {
+        marketingReward = await awardMarketingAdBonus({
+          user,
+          authorityTier: authority.authorityTier,
+          campaignId,
+          area: payload.area,
+          focus: payload.focus,
+          trackedLink,
+        });
+      } catch (bonusError) {
+        console.error("[crew/marketing/ad-draft] reward failed:", bonusError instanceof Error ? bonusError.message : bonusError);
+        marketingReward = {
+          awarded: false,
+          bonusTokens: 0,
+          reason: "Marketing reward could not be issued automatically.",
+          dailyAwardCount: 0,
+          dailyLimit: MARKETING_AD_DAILY_BONUS_LIMIT,
+        };
+      }
+      res.json({ success: true, draft: { ...draft, campaignId, trackedLink }, marketingReward });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: "Invalid ad request", issues: error.issues });
@@ -5905,6 +6032,15 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         description: "Open jobs and assignments.",
       },
     ];
+
+    if (!canUseAdminPanel(user) && authority.rank >= tierRank.bronze) {
+      options.push({
+        key: "ad_creator",
+        label: "Ad Creator",
+        href: "/crew/earnings",
+        description: "Create tracked local posts.",
+      });
+    }
 
     if (authority.rank >= tierRank.silver) {
       options.push({
