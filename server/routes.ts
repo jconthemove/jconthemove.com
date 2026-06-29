@@ -4776,10 +4776,12 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
           serviceType: parsed.serviceCode,
           label: parsed.serviceCode.replace(/_/g, " "),
         };
+        const marketingTracking = safeMarketingTracking(parsed.marketingTracking);
         const normalizedPromoCode = parsed.promoCode ? parsed.promoCode.toUpperCase().trim() : "";
         const referralSlug = parsed.referralSlug ? parsed.referralSlug.toLowerCase().trim() : "";
-        const marketingCampaignId = parsed.marketingCampaignId ? parsed.marketingCampaignId.trim() : "";
-        const marketingTracking = safeMarketingTracking(parsed.marketingTracking);
+        const marketingCampaignId = parsed.marketingCampaignId
+          ? parsed.marketingCampaignId.trim()
+          : marketingTracking.jcCampaign || marketingTracking.utmContent || "";
         const photoNames = parsed.photos.map((photo) => photo.name).filter(Boolean);
         const details = [
           "[QUICK REQUEST - CALL REQUIRED]",
@@ -5521,7 +5523,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       .slice(0, 90) || "local-service"
   );
 
-  const addCampaignTrackingToUrl = (rawUrl: string, campaignId: string, area: string, focus: string) => {
+  const addCampaignTrackingToUrl = (rawUrl: string, campaignId: string, area: string, focus: string, promoCode?: string) => {
     try {
       const url = new URL(rawUrl);
       if (!url.searchParams.get("utm_source")) url.searchParams.set("utm_source", "crew_ad");
@@ -5529,6 +5531,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       if (!url.searchParams.get("utm_campaign")) url.searchParams.set("utm_campaign", campaignSlug(area, focus));
       if (!url.searchParams.get("jc_area")) url.searchParams.set("jc_area", area);
       if (!url.searchParams.get("jc_focus")) url.searchParams.set("jc_focus", focus);
+      if (promoCode && !url.searchParams.get("promo")) url.searchParams.set("promo", promoCode);
       url.searchParams.set("utm_content", campaignId);
       url.searchParams.set("jc_campaign", campaignId);
       return url.toString();
@@ -5700,7 +5703,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         workerName: req.body?.workerName || workerName,
       });
       const campaignId = crypto.randomUUID();
-      const trackedLink = addCampaignTrackingToUrl(payload.referralLink, campaignId, payload.area, payload.focus);
+      const trackedLink = addCampaignTrackingToUrl(payload.referralLink, campaignId, payload.area, payload.focus, payload.promoCode);
       const draft = await generateMarketingAdDraft({ ...payload, referralLink: trackedLink });
       await logCrewMarketingCampaign({
         campaignId,

@@ -9,6 +9,7 @@
 import { pool } from "../db";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { validatePaymentEnv } from "./envValidation";
 import { classifyPayment } from "./paymentClassifier";
 import { computeBookingQuote } from "./bookingPricing";
@@ -34,6 +35,7 @@ export type ScenarioId =
   | "public_booking_catalog"
   | "quick_request_notifications"
   | "quick_request_storage"
+  | "tracked_marketing_funnel"
   | "marketing_rep_pages"
   | "profit_share_settings"
   | "payout_safety_gate";
@@ -51,6 +53,337 @@ interface Scenario {
   id: ScenarioId;
   label: string;
   run: () => Promise<{ ok: boolean; detail: string }>;
+}
+
+type MarketingProbeIds = {
+  campaignId: string;
+  bookingId?: string | null;
+  leadId?: string | null;
+};
+
+function probeTrackingUrl(args: {
+  campaignId: string;
+  area: string;
+  focus: string;
+  promoCode: string;
+  repSlug: string;
+}) {
+  const url = new URL("https://www.jconthemove.com/book");
+  url.searchParams.set("mode", "quick");
+  url.searchParams.set("utm_source", "launch_checklist");
+  url.searchParams.set("utm_medium", "probe");
+  url.searchParams.set("utm_campaign", "launch-checklist-funnel");
+  url.searchParams.set("utm_content", args.campaignId);
+  url.searchParams.set("jc_campaign", args.campaignId);
+  url.searchParams.set("jc_area", args.area);
+  url.searchParams.set("jc_focus", args.focus);
+  url.searchParams.set("promo", args.promoCode);
+  url.searchParams.set("rep", args.repSlug);
+  return url;
+}
+
+async function cleanupMarketingProbe(ids: MarketingProbeIds): Promise<string[]> {
+  const errors: string[] = [];
+  const run = async (sql: string, params: unknown[]) => {
+    try {
+      await pool.query(sql, params);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  await run(
+    `DELETE FROM booking_funnel_events
+      WHERE booking_id = $2
+         OR lead_id = $3
+         OR field_snapshot #>> '{attribution,marketingCampaignId}' = $1
+         OR field_snapshot #>> '{attribution,marketingTracking,jcCampaign}' = $1`,
+    [ids.campaignId, ids.bookingId || "__none__", ids.leadId || "__none__"],
+  );
+  await run(
+    `DELETE FROM quote_attributions
+      WHERE booking_id = $2
+         OR lead_id = $3
+         OR metadata->>'launchProbe' = $1
+         OR metadata->>'marketingCampaignId' = $1
+         OR metadata #>> '{marketingTracking,jcCampaign}' = $1`,
+    [ids.campaignId, ids.bookingId || "__none__", ids.leadId || "__none__"],
+  );
+  await run(
+    `DELETE FROM leads
+      WHERE id = $2
+         OR booking_id = $3
+         OR quote_snapshot->>'launchProbe' = $1
+         OR email = $4`,
+    [
+      ids.campaignId,
+      ids.leadId || "__none__",
+      ids.bookingId || "__none__",
+      `launch-checklist+${ids.campaignId}@jconthemove.local`,
+    ],
+  );
+  await run(`DELETE FROM booking_service_items WHERE booking_id = $1`, [ids.bookingId || "__none__"]);
+  await run(`DELETE FROM bookings WHERE id = $1`, [ids.bookingId || "__none__"]);
+  await run(`DELETE FROM marketing_webhook_deliveries WHERE campaign_id = $1`, [ids.campaignId]);
+  await run(`DELETE FROM marketing_webhook_campaigns WHERE id = $1`, [ids.campaignId]);
+  return errors;
+}
+
+async function runTrackedMarketingFunnelProbe(): Promise<{ ok: boolean; detail: string }> {
+  const campaignId = `launch-probe-${crypto.randomUUID()}`;
+  const area = "Launch Checklist Area";
+  const focus = "Moving launch probe";
+  const promoCode = "LAUNCHPROBE";
+  const repSlug = "launch-probe";
+  const source = "launch_checklist_probe";
+  const ids: MarketingProbeIds = { campaignId };
+  let outcome: { ok: boolean; detail: string } | null = null;
+
+  try {
+    const trackedUrl = probeTrackingUrl({ campaignId, area, focus, promoCode, repSlug });
+    const urlChecks = {
+      area: trackedUrl.searchParams.get("jc_area"),
+      focus: trackedUrl.searchParams.get("jc_focus"),
+      promo: trackedUrl.searchParams.get("promo"),
+      campaign: trackedUrl.searchParams.get("jc_campaign"),
+    };
+    const badUrlKeys = Object.entries({
+      area,
+      focus,
+      promo: promoCode,
+      campaign: campaignId,
+    }).filter(([key, expected]) => urlChecks[key as keyof typeof urlChecks] !== expected);
+    if (badUrlKeys.length > 0) {
+      throw new Error(`tracked URL missing ${badUrlKeys.map(([key]) => key).join(", ")}`);
+    }
+
+    const marketingTracking = {
+      utmSource: "launch_checklist",
+      utmMedium: "probe",
+      utmCampaign: "launch-checklist-funnel",
+      utmContent: campaignId,
+      jcCampaign: campaignId,
+      jcArea: area,
+      jcFocus: focus,
+      referrer: trackedUrl.toString(),
+    };
+
+    await pool.query(
+      `INSERT INTO marketing_webhook_campaigns
+        (id, campaign_name, title, message, area, focus, audience, image_url, cta_url, cta_label,
+         promo_code, rep_slug, source, actor_id, payload)
+       VALUES
+        ($1, 'Launch Checklist Funnel Probe', 'Tracked marketing funnel probe',
+         'Synthetic checklist probe for campaign attribution.',
+         $2, $3, 'Launch checklist', NULL, $4, 'Book / Quote',
+         $5, $6, $7, NULL, $8::jsonb)`,
+      [
+        campaignId,
+        area,
+        focus,
+        trackedUrl.toString(),
+        promoCode,
+        repSlug,
+        source,
+        JSON.stringify({ launchProbe: campaignId, trackedUrl: trackedUrl.toString(), marketingTracking }),
+      ],
+    );
+
+    const bookingResult = await pool.query<{ id: string }>(
+      `INSERT INTO bookings
+        (customer_name, customer_email, customer_phone, service_address, notes,
+         subtotal, discount_total, final_total, status, source)
+       VALUES
+        ('Launch Checklist Probe', $1, '555-0199', '1 Launch Probe Way',
+         'Synthetic tracked marketing funnel probe.',
+         300.00, 0.00, 300.00, 'quote', $2)
+       RETURNING id`,
+      [`launch-checklist+${campaignId}@jconthemove.local`, source],
+    );
+    ids.bookingId = bookingResult.rows[0]?.id || null;
+    if (!ids.bookingId) throw new Error("booking insert did not return an id");
+
+    await pool.query(
+      `INSERT INTO booking_service_items
+        (booking_id, service_code, service_label, quantity, unit_price, line_subtotal, price_mode, details)
+       VALUES
+        ($1, 'moving', 'Moving', 1.00, 300.00, 300.00, 'fixed', $2::jsonb)`,
+      [ids.bookingId, JSON.stringify({ launchProbe: campaignId, area, focus })],
+    );
+
+    const leadResult = await pool.query<{ id: string }>(
+      `INSERT INTO leads
+        (first_name, last_name, email, phone, service_type, from_address, details,
+         source, status, promo_code, booking_id, quote_snapshot, base_price, total_price)
+       VALUES
+        ('Launch', 'Probe', $1, '555-0199', 'Residential Move', '1 Launch Probe Way',
+         $2, $3, 'quote_requested', $4, $5, $6::jsonb, 300.00, 300.00)
+       RETURNING id`,
+      [
+        `launch-checklist+${campaignId}@jconthemove.local`,
+        [
+          "[LAUNCH CHECKLIST MARKETING FUNNEL PROBE]",
+          `Campaign: ${campaignId}`,
+          `Area: ${area}`,
+          `Focus: ${focus}`,
+          `Promo: ${promoCode}`,
+        ].join("\n"),
+        source,
+        promoCode,
+        ids.bookingId,
+        JSON.stringify({
+          launchProbe: campaignId,
+          attribution: {
+            source,
+            promoCode,
+            referralSlug: repSlug,
+            marketingCampaignId: campaignId,
+            marketingTracking,
+          },
+        }),
+      ],
+    );
+    ids.leadId = leadResult.rows[0]?.id || null;
+    if (!ids.leadId) throw new Error("lead insert did not return an id");
+
+    await pool.query(
+      `INSERT INTO quote_attributions
+        (lead_id, booking_id, user_id, attribution_type, promo_code, metadata)
+       VALUES
+        ($1, $2, NULL, 'marketing_campaign_booking', $3, $4::jsonb)`,
+      [
+        ids.leadId,
+        ids.bookingId,
+        promoCode,
+        JSON.stringify({
+          launchProbe: campaignId,
+          source,
+          referralSlug: repSlug,
+          marketingCampaignId: campaignId,
+          marketingTracking,
+          quoteTotal: 300,
+        }),
+      ],
+    );
+
+    await pool.query(
+      `INSERT INTO booking_funnel_events
+        (visitor_id, session_id, page, event_type, step, booking_id, lead_id, field_snapshot)
+       VALUES
+        ($1, $2, '/book', 'submit_success', 'confirm', $3, $4, $5::jsonb)`,
+      [
+        `launch-probe-visitor-${campaignId}`,
+        `launch-probe-session-${campaignId}`,
+        ids.bookingId,
+        ids.leadId,
+        JSON.stringify({
+          launchProbe: campaignId,
+          attribution: {
+            promoCode,
+            referralSlug: repSlug,
+            marketingCampaignId: campaignId,
+            marketingTracking,
+          },
+        }),
+      ],
+    );
+
+    const attributionResult = await pool.query<{
+      promo_code: string | null;
+      metadata: Record<string, unknown> | null;
+    }>(
+      `SELECT promo_code, metadata
+         FROM quote_attributions
+        WHERE booking_id = $1
+          AND metadata->>'launchProbe' = $2
+        LIMIT 1`,
+      [ids.bookingId, campaignId],
+    );
+    const attribution = attributionResult.rows[0];
+    const meta = attribution?.metadata || {};
+    const tracked = meta.marketingTracking && typeof meta.marketingTracking === "object" && !Array.isArray(meta.marketingTracking)
+      ? meta.marketingTracking as Record<string, unknown>
+      : {};
+    const attributionOk =
+      attribution?.promo_code === promoCode &&
+      meta.marketingCampaignId === campaignId &&
+      tracked.jcArea === area &&
+      tracked.jcFocus === focus &&
+      tracked.jcCampaign === campaignId;
+    if (!attributionOk) {
+      throw new Error(`booking attribution mismatch: ${JSON.stringify({ promo: attribution?.promo_code, meta })}`);
+    }
+
+    const { listMarketingCampaignPerformance } = await import("./marketingWebhookReminders");
+    const performanceRows = await listMarketingCampaignPerformance(20);
+    const performance = (performanceRows as any[]).find((row) => row.id === campaignId);
+    if (!performance) throw new Error("campaign performance row was not returned");
+    const performanceOk =
+      performance.area === area &&
+      performance.focus === focus &&
+      performance.promo_code === promoCode &&
+      Number(performance.funnel_events || 0) >= 1 &&
+      Number(performance.submit_successes || 0) >= 1 &&
+      Number(performance.attributed_bookings || 0) >= 1;
+    if (!performanceOk) {
+      throw new Error(`campaign performance mismatch: ${JSON.stringify(performance)}`);
+    }
+
+    const bookingAnalyticsResult = await pool.query<{
+      campaign_id: string | null;
+      bookings: number;
+      promo_codes: string[] | null;
+      areas: string[] | null;
+      focuses: string[] | null;
+    }>(
+      `SELECT
+          COALESCE(
+            NULLIF(qa.metadata->>'marketingCampaignId', ''),
+            NULLIF(qa.metadata #>> '{marketingTracking,jcCampaign}', ''),
+            NULLIF(qa.metadata #>> '{marketingTracking,utmContent}', ''),
+            NULLIF(qa.metadata #>> '{marketingTracking,utmCampaign}', '')
+          ) AS campaign_id,
+          COUNT(DISTINCT b.id)::int AS bookings,
+          ARRAY_REMOVE(ARRAY_AGG(DISTINCT qa.promo_code), NULL) AS promo_codes,
+          ARRAY_REMOVE(ARRAY_AGG(DISTINCT qa.metadata #>> '{marketingTracking,jcArea}'), NULL) AS areas,
+          ARRAY_REMOVE(ARRAY_AGG(DISTINCT qa.metadata #>> '{marketingTracking,jcFocus}'), NULL) AS focuses
+        FROM bookings b
+        JOIN quote_attributions qa ON qa.booking_id = b.id
+       WHERE b.id = $1
+       GROUP BY 1`,
+      [ids.bookingId],
+    );
+    const analytics = bookingAnalyticsResult.rows[0];
+    const bookingAnalyticsOk =
+      analytics?.campaign_id === campaignId &&
+      Number(analytics.bookings || 0) === 1 &&
+      (analytics.promo_codes || []).includes(promoCode) &&
+      (analytics.areas || []).includes(area) &&
+      (analytics.focuses || []).includes(focus);
+    if (!bookingAnalyticsOk) {
+      throw new Error(`booking analytics attribution mismatch: ${JSON.stringify(analytics)}`);
+    }
+
+    outcome = {
+      ok: true,
+      detail: `tracked link, booking attribution, and campaign analytics confirmed (${campaignId}; ${area}; ${focus}; ${promoCode})`,
+    };
+  } catch (error) {
+    outcome = {
+      ok: false,
+      detail: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    const cleanupErrors = await cleanupMarketingProbe(ids);
+    if (cleanupErrors.length > 0 && outcome?.ok) {
+      outcome = {
+        ok: false,
+        detail: `probe passed but cleanup failed: ${cleanupErrors.slice(0, 2).join("; ")}`,
+      };
+    }
+  }
+
+  return outcome || { ok: false, detail: "marketing funnel probe did not finish" };
 }
 
 const SCENARIOS: Scenario[] = [
@@ -355,6 +688,11 @@ const SCENARIOS: Scenario[] = [
         ? { ok: true, detail: "leads table can store source, promo code, photos, media links/details, and order number" }
         : { ok: false, detail: `missing lead columns: ${missing.join(", ")}` };
     },
+  },
+  {
+    id: "tracked_marketing_funnel",
+    label: "Tracked crew/webhook campaign link reaches booking + campaign analytics",
+    run: runTrackedMarketingFunnelProbe,
   },
   {
     id: "marketing_rep_pages",

@@ -50,7 +50,7 @@ export default function AdminLaunchChecklistPage() {
       `Generated: ${new Date().toLocaleString()}`,
       `Status: ${summary.allOk ? "READY" : "NOT READY"}`,
       `Results: ${summary.green} green, ${summary.red} failed, ${summary.notRun} not run, ${summary.total} total`,
-      "Coverage: health/readiness, payments, public routes, booking funnel, quick requests with photos/media links, worker rep pages, profit share, payout safety",
+      "Coverage: health/readiness, payments, public routes, booking funnel, quick requests with photos/media links, tracked marketing attribution, worker rep pages, profit share, payout safety",
       "",
       ...scenarios.map((s) => {
         const r = results[s.id];
@@ -94,7 +94,7 @@ export default function AdminLaunchChecklistPage() {
             <h1 className="text-2xl font-bold text-white">Launch Checklist</h1>
           </div>
           <p className="text-slate-400 text-sm max-w-3xl">
-            Run every launch probe and confirm all rows are green before publishing a deploy or driving marketing traffic. This covers health/readiness, payments, public conversion routes, the booking funnel, quick-request photos, media links and attribution, worker rep pages, profit-share defaults, and payout safety.
+            Run every launch probe and confirm all rows are green before publishing a deploy or driving marketing traffic. This covers health/readiness, payments, public conversion routes, the booking funnel, quick-request photos, media links, tracked marketing attribution, worker rep pages, profit-share defaults, and payout safety.
           </p>
         </div>
         <button
@@ -149,6 +149,7 @@ export default function AdminLaunchChecklistPage() {
           <span>Public customer and worker routes</span>
           <span>Public booking catalog</span>
           <span>Quick-request storage</span>
+          <span>Tracked campaign attribution</span>
           <span>Notifications</span>
           <span>Worker rep pages</span>
           <span>Profit share and payout gate</span>

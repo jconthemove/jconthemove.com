@@ -28,6 +28,8 @@ interface BookingAnalyticsResponse {
     bundleRate: number;
     promoCodes: string[];
     campaigns: string[];
+    areas: string[];
+    focuses: string[];
   }[];
   campaignBreakdown: {
     campaign: string;
@@ -36,6 +38,8 @@ interface BookingAnalyticsResponse {
     revenue: number;
     aov: number;
     promoCodes: string[];
+    areas: string[];
+    focuses: string[];
   }[];
 }
 
@@ -280,6 +284,12 @@ export default function AdminBookingAnalyticsPage() {
                     {row.promoCodes.length > 0 && (
                       <Badge variant="outline" className="font-mono">{row.promoCodes[0]}</Badge>
                     )}
+                    {row.areas.slice(0, 1).map((area) => (
+                      <Badge key={`area-${area}`} variant="secondary">{area}</Badge>
+                    ))}
+                    {row.focuses.slice(0, 1).map((focus) => (
+                      <Badge key={`focus-${focus}`} variant="secondary">{focus}</Badge>
+                    ))}
                   </div>
                 ))}
               </div>

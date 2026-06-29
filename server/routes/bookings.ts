@@ -1046,10 +1046,12 @@ router.post("/bookings", async (req: Request, res: Response) => {
     const requestUser = await getRequestUser(req);
     const requestAuthority = await getAuthorityForUser(requestUser);
     const isWorkerCreated = body.source === "crew_add_job";
+    const marketingTracking = safeMarketingTracking(body.marketingTracking);
     const marketingPromoCode = body.promoCode ? body.promoCode.toUpperCase().trim() : "";
     const marketingReferralSlug = body.referralSlug ? body.referralSlug.toLowerCase().trim() : "";
-    const marketingCampaignId = body.marketingCampaignId ? body.marketingCampaignId.trim() : "";
-    const marketingTracking = safeMarketingTracking(body.marketingTracking);
+    const marketingCampaignId = body.marketingCampaignId
+      ? body.marketingCampaignId.trim()
+      : marketingTracking.jcCampaign || marketingTracking.utmContent || "";
     if (isWorkerCreated && !requestUser) {
       return res.status(401).json({
         error: "Authentication required",
@@ -2142,6 +2144,8 @@ router.get("/admin/booking-analytics", isAuthenticated, async (req: any, res: Re
       bundleCount: number;
       promoCodes: Set<string>;
       campaigns: Set<string>;
+      areas: Set<string>;
+      focuses: Set<string>;
     }>();
     const campaignStats = new Map<string, {
       campaign: string;
@@ -2149,6 +2153,8 @@ router.get("/admin/booking-analytics", isAuthenticated, async (req: any, res: Re
       count: number;
       revenue: number;
       promoCodes: Set<string>;
+      areas: Set<string>;
+      focuses: Set<string>;
     }>();
 
     const getAttrMeta = (attr: typeof quoteAttributions.$inferSelect): Record<string, unknown> => (
@@ -2184,7 +2190,19 @@ router.get("/admin/booking-analytics", isAuthenticated, async (req: any, res: Re
         const tracking = meta.marketingTracking && typeof meta.marketingTracking === "object" && !Array.isArray(meta.marketingTracking)
           ? meta.marketingTracking as Record<string, unknown>
           : {};
-        return meta.marketingCampaignId || tracking.utmCampaign || tracking.utmContent;
+        return meta.marketingCampaignId || tracking.jcCampaign || tracking.utmContent || tracking.utmCampaign;
+      });
+      const area = firstAttrValue(attrs, (_attr, meta) => {
+        const tracking = meta.marketingTracking && typeof meta.marketingTracking === "object" && !Array.isArray(meta.marketingTracking)
+          ? meta.marketingTracking as Record<string, unknown>
+          : {};
+        return tracking.jcArea;
+      });
+      const focus = firstAttrValue(attrs, (_attr, meta) => {
+        const tracking = meta.marketingTracking && typeof meta.marketingTracking === "object" && !Array.isArray(meta.marketingTracking)
+          ? meta.marketingTracking as Record<string, unknown>
+          : {};
+        return tracking.jcFocus;
       });
 
       if (isBundle) {
@@ -2217,12 +2235,16 @@ router.get("/admin/booking-analytics", isAuthenticated, async (req: any, res: Re
         bundleCount: 0,
         promoCodes: new Set<string>(),
         campaigns: new Set<string>(),
+        areas: new Set<string>(),
+        focuses: new Set<string>(),
       };
       sourceSlot.count += 1;
       sourceSlot.revenue += final;
       if (isBundle) sourceSlot.bundleCount += 1;
       if (promoCode) sourceSlot.promoCodes.add(promoCode);
       if (campaign) sourceSlot.campaigns.add(campaign);
+      if (area) sourceSlot.areas.add(area);
+      if (focus) sourceSlot.focuses.add(focus);
       sourceStats.set(source, sourceSlot);
 
       if (campaign) {
@@ -2232,10 +2254,14 @@ router.get("/admin/booking-analytics", isAuthenticated, async (req: any, res: Re
           count: 0,
           revenue: 0,
           promoCodes: new Set<string>(),
+          areas: new Set<string>(),
+          focuses: new Set<string>(),
         };
         campaignSlot.count += 1;
         campaignSlot.revenue += final;
         if (promoCode) campaignSlot.promoCodes.add(promoCode);
+        if (area) campaignSlot.areas.add(area);
+        if (focus) campaignSlot.focuses.add(focus);
         campaignStats.set(campaign, campaignSlot);
       }
     }
@@ -2264,6 +2290,8 @@ router.get("/admin/booking-analytics", isAuthenticated, async (req: any, res: Re
         bundleRate: row.count > 0 ? +(row.bundleCount / row.count).toFixed(4) : 0,
         promoCodes: Array.from(row.promoCodes).sort(),
         campaigns: Array.from(row.campaigns).sort(),
+        areas: Array.from(row.areas).sort(),
+        focuses: Array.from(row.focuses).sort(),
       }));
     const campaignBreakdown = Array.from(campaignStats.values())
       .sort((a, b) => b.count - a.count || b.revenue - a.revenue)
@@ -2275,6 +2303,8 @@ router.get("/admin/booking-analytics", isAuthenticated, async (req: any, res: Re
         revenue: +row.revenue.toFixed(2),
         aov: row.count > 0 ? +(row.revenue / row.count).toFixed(2) : 0,
         promoCodes: Array.from(row.promoCodes).sort(),
+        areas: Array.from(row.areas).sort(),
+        focuses: Array.from(row.focuses).sort(),
       }));
 
     return res.json({

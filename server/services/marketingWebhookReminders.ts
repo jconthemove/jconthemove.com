@@ -284,7 +284,11 @@ export async function listMarketingCampaignPerformance(limit = 50, actorId?: str
      ),
      attributions AS (
        SELECT
-         NULLIF(metadata->>'marketingCampaignId', '') AS campaign_id,
+         COALESCE(
+           NULLIF(metadata->>'marketingCampaignId', ''),
+           NULLIF(metadata #>> '{marketingTracking,jcCampaign}', ''),
+           NULLIF(metadata #>> '{marketingTracking,utmContent}', '')
+         ) AS campaign_id,
          COUNT(*)::int AS attributed_cards,
          COUNT(*) FILTER (WHERE lead_id IS NOT NULL)::int AS attributed_leads,
          COUNT(*) FILTER (WHERE booking_id IS NOT NULL)::int AS attributed_bookings,
