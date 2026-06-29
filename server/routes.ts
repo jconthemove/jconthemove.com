@@ -6589,6 +6589,32 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         return String(b.date || "").localeCompare(String(a.date || ""));
       });
 
+      const todayBonusRows = await pool.query(
+        `SELECT
+           COUNT(*)::int AS bonus_count,
+           COALESCE(SUM(token_amount::numeric), 0)::numeric AS bonus_tokens,
+           COUNT(*) FILTER (WHERE reward_type = 'ops_task_marketing_ad')::int AS marketing_posts,
+           COUNT(*) FILTER (WHERE reward_type = 'ops_task_quote_sample')::int AS quote_samples,
+           COUNT(*) FILTER (WHERE reward_type IN ('ops_task_quote_build', 'ops_task_quote_approve'))::int AS quote_actions,
+           COUNT(*) FILTER (WHERE reward_type IN ('ops_task_dispatch_ready', 'ops_task_payout_review'))::int AS ops_actions
+         FROM rewards
+         WHERE user_id = $1
+           AND reward_type LIKE 'ops_task_%'
+           AND earned_date >= CURRENT_DATE`,
+        [user.id],
+      );
+      const todayBonus = todayBonusRows.rows[0] || {};
+      const openTaskCount = tasks.filter((task) => !task.completed).length;
+      const readyTaskCount = tasks.filter((task) => !task.completed && task.canComplete).length;
+      const waitingTaskCount = Math.max(0, openTaskCount - readyTaskCount);
+      const nextAction = readyTaskCount > 0
+        ? "Close ready task"
+        : openTaskCount > 0
+          ? "Open next card"
+          : authority.rank >= tierRank.bronze
+            ? "Create or advertise"
+            : "Wait for assignment";
+
       res.json({
         authority: {
           tier: authority.authorityTier,
@@ -6601,6 +6627,18 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
           taskKey: key,
           ...def,
         })),
+        progress: {
+          openTasks: openTaskCount,
+          readyTasks: readyTaskCount,
+          waitingTasks: waitingTaskCount,
+          todayBonusCount: Number(todayBonus.bonus_count || 0),
+          todayBonusTokens: Number(todayBonus.bonus_tokens || 0),
+          marketingPostsToday: Number(todayBonus.marketing_posts || 0),
+          quoteSamplesToday: Number(todayBonus.quote_samples || 0),
+          quoteActionsToday: Number(todayBonus.quote_actions || 0),
+          opsActionsToday: Number(todayBonus.ops_actions || 0),
+          nextAction,
+        },
         options: buildAuthorityOptions(user, authority),
         tasks: tasks.slice(0, 60),
       });

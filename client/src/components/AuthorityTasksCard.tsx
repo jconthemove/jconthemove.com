@@ -76,6 +76,18 @@ type AuthorityTasksResponse = {
     canManageOps: boolean;
   };
   stages?: AuthorityStage[];
+  progress?: {
+    openTasks: number;
+    readyTasks: number;
+    waitingTasks: number;
+    todayBonusCount: number;
+    todayBonusTokens: number;
+    marketingPostsToday: number;
+    quoteSamplesToday: number;
+    quoteActionsToday: number;
+    opsActionsToday: number;
+    nextAction: string;
+  };
   options: AuthorityOption[];
   tasks: AuthorityTask[];
 };
@@ -109,6 +121,12 @@ function formatPrice(price: string | null | undefined) {
   const amount = Number(price || 0);
   if (!Number.isFinite(amount) || amount <= 0) return "No price";
   return `$${amount.toFixed(0)}`;
+}
+
+function formatTokens(value: number | string | null | undefined) {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount)) return "0";
+  return amount.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
 export default function AuthorityTasksCard({ className = "" }: { className?: string }) {
@@ -214,6 +232,7 @@ export default function AuthorityTasksCard({ className = "" }: { className?: str
         </div>
 
         <RailSplitSummary authority={authority} stageByKey={stageByKey} />
+        {data?.progress && <AuthorityProgressStrip progress={data.progress} />}
 
         <Tabs defaultValue={defaultTab} className="mt-4">
           <TabsList className="grid w-full grid-cols-2 border border-slate-800 bg-slate-950/60">
@@ -245,6 +264,38 @@ export default function AuthorityTasksCard({ className = "" }: { className?: str
         </Tabs>
       </CardContent>
     </Card>
+  );
+}
+
+function AuthorityProgressStrip({ progress }: { progress: NonNullable<AuthorityTasksResponse["progress"]> }) {
+  const cells = [
+    {
+      label: "Today",
+      value: `${formatTokens(progress.todayBonusTokens)} JCMOVES`,
+      detail: `${progress.todayBonusCount} bonus${progress.todayBonusCount === 1 ? "" : "es"}`,
+    },
+    {
+      label: "Ready",
+      value: String(progress.readyTasks),
+      detail: `${progress.waitingTasks} waiting`,
+    },
+    {
+      label: "Next",
+      value: progress.nextAction,
+      detail: `${progress.openTasks} open`,
+    },
+  ];
+
+  return (
+    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+      {cells.map((cell) => (
+        <div key={cell.label} className="rounded-md border border-slate-800 bg-slate-950/55 px-3 py-2">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{cell.label}</p>
+          <p className="mt-1 truncate text-sm font-black text-white">{cell.value}</p>
+          <p className="mt-0.5 truncate text-xs text-slate-400">{cell.detail}</p>
+        </div>
+      ))}
+    </div>
   );
 }
 
