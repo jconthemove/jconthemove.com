@@ -75,6 +75,9 @@ interface MarketingAdDraft {
   hashtags: string[];
   ctaLabel: string;
   photoSuggestion: string;
+  communityTargets?: string[];
+  followUpText?: string;
+  postingChecklist?: string[];
   campaignId?: string;
   trackedLink?: string;
   provider: string;
@@ -128,6 +131,44 @@ const ALL_CAPABILITIES: { key: string; label: string; icon: LucideIcon }[] = [
 ];
 
 const AD_FOCUS_OPTIONS = ["Moving help", "Junk removal", "Delivery help", "Last-minute labor"];
+const AD_PHOTO_MAX_BYTES = 8 * 1024 * 1024;
+
+function compressMarketingPhoto(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith("image/")) {
+      reject(new Error("Choose an image file."));
+      return;
+    }
+    if (file.size > AD_PHOTO_MAX_BYTES) {
+      reject(new Error("Choose a photo under 8 MB."));
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      const maxSide = 1280;
+      const ratio = Math.min(1, maxSide / Math.max(image.width, image.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(image.width * ratio));
+      canvas.height = Math.max(1, Math.round(image.height * ratio));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Could not prepare that photo."));
+        return;
+      }
+      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(objectUrl);
+      resolve(canvas.toDataURL("image/jpeg", 0.82));
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Could not read that photo."));
+    };
+    image.src = objectUrl;
+  });
+}
 
 export default function CrewEarningsPage() {
   const { user } = useAuth();
@@ -139,6 +180,7 @@ export default function CrewEarningsPage() {
   const [adPhotoUrl, setAdPhotoUrl] = useState("");
   const [adPhotoFileName, setAdPhotoFileName] = useState("");
   const [adPhotoPreview, setAdPhotoPreview] = useState("");
+  const [adPhotoDataUrl, setAdPhotoDataUrl] = useState("");
   const [adDraft, setAdDraft] = useState<MarketingAdDraft | null>(null);
 
   const { data: wallet } = useQuery<{ balance: string; tokenBalance?: string; totalEarned?: string }>({ queryKey: ["/api/rewards/wallet"] });
@@ -237,6 +279,7 @@ export default function CrewEarningsPage() {
         focus: adFocus,
         rawText: [adNotes, adPhotoFileName ? `Photo selected by crew: ${adPhotoFileName}` : ""].filter(Boolean).join("\n"),
         photoUrl: adPhotoUrl,
+        photoDataUrl: adPhotoDataUrl || undefined,
         referralLink: trackedAdLink,
         promoCode: referralCode,
       });
@@ -251,6 +294,26 @@ export default function CrewEarningsPage() {
     },
     onError: (e: Error) => toast({ title: "Ad draft failed", description: e.message, variant: "destructive" }),
   });
+
+  const handleAdPhotoFile = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const dataUrl = await compressMarketingPhoto(file);
+      setAdPhotoFileName(file.name);
+      setAdPhotoPreview(dataUrl);
+      setAdPhotoDataUrl(dataUrl);
+      toast({ title: "Photo added", description: "The ad writer can use this photo context." });
+    } catch (error) {
+      setAdPhotoFileName("");
+      setAdPhotoPreview("");
+      setAdPhotoDataUrl("");
+      toast({
+        title: "Photo not added",
+        description: error instanceof Error ? error.message : "Try a different image.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const tokenBalance = parseFloat(wallet?.tokenBalance || wallet?.balance || "0");
   const totalEarned = parseFloat(wallet?.totalEarned || "0");
@@ -327,7 +390,7 @@ export default function CrewEarningsPage() {
             <p className="text-xs font-black uppercase tracking-widest text-blue-300">1-2-3 ad builder</p>
             <h2 className="mt-1 text-lg font-black text-white">Create a local Facebook post</h2>
             <p className="mt-1 text-xs leading-relaxed text-slate-300">
-              Pick the area, pick the job focus, add a photo link or note, then copy the post with your tracked booking link.
+              Pick the area, pick the job focus, add a photo or note, then copy the post with your tracked booking link.
             </p>
           </div>
           <Sparkles className="h-5 w-5 shrink-0 text-blue-300" />
@@ -385,14 +448,7 @@ export default function CrewEarningsPage() {
                   type="file"
                   accept="image/*"
                   className="sr-only"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (!file) return;
-                    setAdPhotoFileName(file.name);
-                    const reader = new FileReader();
-                    reader.onload = () => setAdPhotoPreview(String(reader.result || ""));
-                    reader.readAsDataURL(file);
-                  }}
+                  onChange={(event) => handleAdPhotoFile(event.target.files?.[0])}
                 />
               </label>
               {adPhotoFileName && <span className="max-w-full truncate text-xs text-slate-400">{adPhotoFileName}</span>}
@@ -442,6 +498,37 @@ export default function CrewEarningsPage() {
             {adDraft.hashtags?.length > 0 && (
               <p className="mt-2 text-xs font-semibold text-blue-200">{adDraft.hashtags.join(" ")}</p>
             )}
+            {adDraft.communityTargets?.length ? (
+              <div className="mt-3 rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-blue-300">Where to post</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {adDraft.communityTargets.map((target) => (
+                    <span key={target} className="rounded-full border border-blue-400/30 bg-blue-500/10 px-2.5 py-1 text-[11px] font-semibold text-blue-100">
+                      {target}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {adDraft.followUpText && (
+              <div className="mt-3 rounded-lg border border-slate-700 bg-slate-900/70 p-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Fast follow-up</p>
+                <p className="mt-2 text-xs leading-relaxed text-slate-200">{adDraft.followUpText}</p>
+              </div>
+            )}
+            {adDraft.postingChecklist?.length ? (
+              <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/70 p-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">1-2-3 posting check</p>
+                <div className="mt-2 grid gap-1.5">
+                  {adDraft.postingChecklist.map((item, index) => (
+                    <div key={`${item}-${index}`} className="flex gap-2 text-xs text-slate-300">
+                      <span className="font-black text-emerald-300">{index + 1}</span>
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             {(adDraft.campaignId || adDraft.trackedLink) && (
               <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3">
                 {adDraft.campaignId && (
@@ -485,6 +572,19 @@ export default function CrewEarningsPage() {
               >
                 <MessageCircle className="h-3.5 w-3.5" /> Copy short
               </button>
+              {adDraft.followUpText && (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-black text-emerald-200 hover:bg-emerald-500/20"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(adDraft.followUpText || "")
+                      .then(() => toast({ title: "Follow-up copied", description: "Send this to anyone who comments or messages." }))
+                      .catch(() => toast({ title: "Copy failed", description: "Long-press the follow-up text to copy it.", variant: "destructive" }));
+                  }}
+                >
+                  <MessageCircle className="h-3.5 w-3.5" /> Copy follow-up
+                </button>
+              )}
             </div>
             {adDraft.fallbackUsed && (
               <p className="mt-2 text-[11px] text-amber-300">Template fallback used: {adDraft.reason || "AI unavailable"}</p>

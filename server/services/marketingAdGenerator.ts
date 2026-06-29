@@ -8,11 +8,20 @@ const optionalUrlSchema = z.preprocess(
   z.string().url().max(2000).optional(),
 );
 
+const optionalPhotoDataUrlSchema = z.preprocess(
+  (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
+  z.string()
+    .regex(/^data:image\/(png|jpe?g|webp);base64,/i, "photoDataUrl must be a png, jpg, jpeg, or webp data URL")
+    .max(7_000_000)
+    .optional(),
+);
+
 export const marketingAdDraftSchema = z.object({
   area: z.string().trim().max(120).optional().default("Northwoods"),
   focus: z.string().trim().max(120).optional().default("moving help"),
   rawText: z.string().trim().max(900).optional().default(""),
   photoUrl: optionalUrlSchema,
+  photoDataUrl: optionalPhotoDataUrlSchema,
   referralLink: z.string().url().max(2000),
   promoCode: z.string().trim().max(64).optional().default(""),
   workerName: z.string().trim().max(120).optional().default("JC crew"),
@@ -27,6 +36,9 @@ export type MarketingAdDraftResult = {
   hashtags: string[];
   ctaLabel: string;
   photoSuggestion: string;
+  communityTargets: string[];
+  followUpText: string;
+  postingChecklist: string[];
   provider: "openai" | "deterministic";
   model: string;
   fallbackUsed: boolean;
@@ -36,7 +48,17 @@ export type MarketingAdDraftResult = {
 const adDraftJsonSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["headline", "facebookPost", "shortText", "hashtags", "ctaLabel", "photoSuggestion"],
+  required: [
+    "headline",
+    "facebookPost",
+    "shortText",
+    "hashtags",
+    "ctaLabel",
+    "photoSuggestion",
+    "communityTargets",
+    "followUpText",
+    "postingChecklist",
+  ],
   properties: {
     headline: { type: "string" },
     facebookPost: { type: "string" },
@@ -44,6 +66,9 @@ const adDraftJsonSchema = {
     hashtags: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 6 },
     ctaLabel: { type: "string" },
     photoSuggestion: { type: "string" },
+    communityTargets: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 5 },
+    followUpText: { type: "string" },
+    postingChecklist: { type: "array", items: { type: "string" }, minItems: 3, maxItems: 5 },
   },
 } as const;
 
@@ -57,7 +82,7 @@ function fallbackDraft(input: MarketingAdDraftInput, reason?: string): Marketing
   const focus = cleanWords(input.focus, "moving help");
   const promoLine = input.promoCode ? `\nUse code ${input.promoCode}.` : "";
   const extra = input.rawText ? `\n\n${input.rawText}` : "";
-  const photoLine = input.photoUrl ? "\n\nPhoto: use the attached job/crew image." : "";
+  const photoLine = input.photoUrl || input.photoDataUrl ? "\n\nPhoto: use the attached job/crew image." : "";
   const facebookPost = [
     `Need ${focus} around ${area}?`,
     "JC ON THE MOVE can help with moving, delivery, junk removal, cleanup, and local labor.",
@@ -71,7 +96,18 @@ function fallbackDraft(input: MarketingAdDraftInput, reason?: string): Marketing
     shortText: `Need ${focus}? Book JC ON THE MOVE: ${input.referralLink}${input.promoCode ? ` Code ${input.promoCode}.` : ""}`,
     hashtags: ["#JCONTHEMOVE", "#Northwoods", "#MovingHelp"],
     ctaLabel: "Book / Quote",
-    photoSuggestion: input.photoUrl ? "Use the supplied photo and keep the booking link in the post." : "Use a clean crew, truck, before/after, or completed-job photo.",
+    photoSuggestion: input.photoUrl || input.photoDataUrl ? "Use the supplied photo and keep the booking link in the post." : "Use a clean crew, truck, before/after, or completed-job photo.",
+    communityTargets: [
+      `${area} community groups`,
+      "Local buy/sell/trade groups",
+      "Apartment, landlord, and student housing groups",
+    ],
+    followUpText: `Thanks for reaching out. Send your ZIP/address, date, and a few photos here: ${input.referralLink}`,
+    postingChecklist: [
+      "Post with one clear photo.",
+      "Keep the tracked booking link in the post.",
+      "Reply to comments or messages quickly.",
+    ],
     provider: "deterministic",
     model: "fallback-marketing-template",
     fallbackUsed: true,
@@ -99,6 +135,17 @@ export async function generateMarketingAdDraft(rawInput: MarketingAdDraftInput):
     return fallbackDraft(input, "OPENAI_API_KEY is not configured");
   }
 
+  const modelInput = {
+    ...input,
+    photoDataUrl: input.photoDataUrl ? "[device photo attached]" : undefined,
+  };
+  const userContent = input.photoDataUrl
+    ? [
+        { type: "input_text", text: JSON.stringify(modelInput) },
+        { type: "input_image", image_url: input.photoDataUrl },
+      ]
+    : JSON.stringify(modelInput);
+
   const response = await fetch(OPENAI_RESPONSES_URL, {
     method: "POST",
     headers: {
@@ -117,11 +164,13 @@ export async function generateMarketingAdDraft(rawInput: MarketingAdDraftInput):
             "Never promise guaranteed availability, exact prices, financing, or same-day service.",
             "Always include the provided booking/referral link in the Facebook post and short text.",
             "Do not invent testimonials, licenses, reviews, discounts, or photos.",
+            "If a photo is attached, only describe what is visibly useful for the ad; if unclear, keep the copy general.",
+            "Return practical communityTargets and a short followUpText a worker can send in Messenger or SMS.",
           ].join(" "),
         },
         {
           role: "user",
-          content: JSON.stringify(input),
+          content: userContent,
         },
       ],
       text: {
@@ -143,13 +192,21 @@ export async function generateMarketingAdDraft(rawInput: MarketingAdDraftInput):
   try {
     const data = await response.json();
     const parsed = JSON.parse(extractOutputText(data));
+    const fallback = fallbackDraft(input);
     return {
-      headline: String(parsed.headline || "").slice(0, 160) || fallbackDraft(input).headline,
-      facebookPost: String(parsed.facebookPost || "").slice(0, 2200) || fallbackDraft(input).facebookPost,
-      shortText: String(parsed.shortText || "").slice(0, 320) || fallbackDraft(input).shortText,
-      hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags.map(String).slice(0, 6) : fallbackDraft(input).hashtags,
+      headline: String(parsed.headline || "").slice(0, 160) || fallback.headline,
+      facebookPost: String(parsed.facebookPost || "").slice(0, 2200) || fallback.facebookPost,
+      shortText: String(parsed.shortText || "").slice(0, 320) || fallback.shortText,
+      hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags.map(String).slice(0, 6) : fallback.hashtags,
       ctaLabel: String(parsed.ctaLabel || "Book / Quote").slice(0, 80),
-      photoSuggestion: String(parsed.photoSuggestion || fallbackDraft(input).photoSuggestion).slice(0, 240),
+      photoSuggestion: String(parsed.photoSuggestion || fallback.photoSuggestion).slice(0, 240),
+      communityTargets: Array.isArray(parsed.communityTargets)
+        ? parsed.communityTargets.map(String).filter(Boolean).slice(0, 5)
+        : fallback.communityTargets,
+      followUpText: String(parsed.followUpText || fallback.followUpText).slice(0, 420),
+      postingChecklist: Array.isArray(parsed.postingChecklist)
+        ? parsed.postingChecklist.map(String).filter(Boolean).slice(0, 5)
+        : fallback.postingChecklist,
       provider: "openai",
       model,
       fallbackUsed: false,
