@@ -4,6 +4,7 @@ services:
     runtime: node
     plan: starter
     region: ohio
+    branch: main
     autoDeployTrigger: commit
     buildCommand: npm ci && npm run build
     startCommand: npm run start

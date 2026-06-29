@@ -9,6 +9,7 @@ It creates one Node web service with:
 - `buildCommand`: `npm ci && npm run build`
 - `startCommand`: `npm run start`
 - `healthCheckPath`: `/health`
+- `branch`: `main`
 - `plan`: `starter`
 - `region`: `ohio`
 
@@ -57,6 +58,16 @@ Optional feature variables:
 5. Deploy the Blueprint.
 6. After the first deploy finishes, open `https://<your-service>.onrender.com/health`.
 7. Confirm `https://<your-service>.onrender.com/api/health` returns the same readiness JSON.
+
+## Auto-deploy fallback
+
+The repo also includes `.github/workflows/render-deploy.yml`. This workflow fires on every push to `main` and calls a Render deploy hook when the GitHub Actions secret below is present:
+
+- `RENDER_DEPLOY_HOOK_URL`
+
+Add it in GitHub under `Settings` -> `Secrets and variables` -> `Actions` -> `New repository secret`.
+
+Use this even if Render's Git auto-deploy is enabled. It gives us a second, explicit deploy trigger and makes it easier to tell whether GitHub saw the push.
 
 ## Health check response
 
@@ -111,6 +122,13 @@ After the Render service is healthy:
 1. Add your custom domain in the Render dashboard.
 2. Update `APP_URL` in Render to the final public URL, such as `https://jconthemove.com`.
 3. If you use Square webhooks, also update any webhook callback URL to the new Render/custom-domain URL.
+
+If `https://www.jconthemove.com/api/health` includes Railway headers, the public domain is still routed to the old Railway service. In Cloudflare/DNS, remove or disable the Railway target and point:
+
+- `www` to the Render custom-domain target Render gives you.
+- The apex/root domain to Render if your DNS supports CNAME flattening/ALIAS, or redirect `jconthemove.com` to `www.jconthemove.com`.
+
+Run `npm run verify:production` after DNS changes. It should pass and show a deployed commit from `/api/health`; then run `/admin/launch-checklist` for the rest of the launch checks.
 
 ## Notes
 
