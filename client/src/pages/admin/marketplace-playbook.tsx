@@ -17,6 +17,7 @@ import {
 import {
   MARKETPLACE_FUNCTIONAL_IDEAS,
   MARKETPLACE_OPERATING_FLYWHEEL,
+  MARKETPLACE_REFERENCE_BLUEPRINTS,
   MARKETPLACE_REQUEST_SHAPES,
   MARKETPLACE_SIMPLE_SIDES,
   type MarketplaceFlywheelStageId,
@@ -276,6 +277,71 @@ export default function AdminMarketplacePlaybookPage() {
                 </div>
               );
             })}
+          </div>
+        </section>
+
+        <section className="mt-5 rounded-lg border border-blue-400/20 bg-blue-500/10 p-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-blue-300" />
+                <h2 className="font-black text-white">Reference Operating Matrix</h2>
+              </div>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+                Every outside idea gets translated into a JC surface, a next build, and a metric. Borrow the useful
+                pattern, avoid the trap, then tie it back to one lead card.
+              </p>
+            </div>
+            <span className="rounded-full border border-blue-400/30 bg-slate-950/60 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-blue-200">
+              {MARKETPLACE_REFERENCE_BLUEPRINTS.length} references
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3">
+            {MARKETPLACE_REFERENCE_BLUEPRINTS.map((item) => (
+              <div key={item.reference} className="rounded-md border border-slate-800 bg-slate-950/70 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-black text-white">{item.reference}</p>
+                    <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.16em] text-blue-200">
+                      {item.jcSurface}
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-300">
+                    {item.metric}
+                  </span>
+                </div>
+
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  <div className="rounded-md border border-emerald-400/20 bg-emerald-500/10 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-200">Borrow</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-300">{item.borrow}</p>
+                  </div>
+                  <div className="rounded-md border border-red-400/20 bg-red-500/10 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-red-200">Avoid</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-300">{item.avoid}</p>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                  {[
+                    ["Customer", item.customerWin],
+                    ["Worker", item.workerWin],
+                    ["Company", item.companyWin],
+                  ].map(([label, detail]) => (
+                    <div key={label} className="rounded-md border border-slate-800 bg-slate-900/60 p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{label}</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-300">{detail}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-3 rounded-md border border-orange-400/20 bg-orange-500/10 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-orange-200">Next Build</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-300">{item.nextBuild}</p>
+                </div>
+              </div>
+            ))}
           </div>
         </section>
 

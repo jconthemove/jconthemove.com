@@ -49,6 +49,18 @@ export type MarketplaceFunctionalIdea = {
   shapeIds: MarketplaceRequestShapeId[];
 };
 
+export type MarketplaceReferenceBlueprint = {
+  reference: string;
+  borrow: string;
+  avoid: string;
+  jcSurface: string;
+  customerWin: string;
+  workerWin: string;
+  companyWin: string;
+  nextBuild: string;
+  metric: string;
+};
+
 export type MarketplaceFlywheelStageId =
   | "attract"
   | "capture"
@@ -245,6 +257,185 @@ export const MARKETPLACE_FUNCTIONAL_IDEAS: MarketplaceFunctionalIdea[] = [
     surface: "Rewards, Authority Tasks, Payout Engine",
     status: "live",
     shapeIds: ["repeat_loop"],
+  },
+];
+
+export const MARKETPLACE_REFERENCE_BLUEPRINTS: MarketplaceReferenceBlueprint[] = [
+  {
+    reference: "Target",
+    borrow: "Clean category cards, add-ons, pickup windows, and a calm checkout feel.",
+    avoid: "Too many retail-style choices before the customer has told us the job shape.",
+    jcSurface: "Services, Book, Customer Portal",
+    customerWin: "Feels organized and familiar when choosing help.",
+    workerWin: "Gets service category, add-ons, and timing without guessing.",
+    companyWin: "Can bundle local delivery, reuse, and labor into repeatable offers.",
+    nextBuild: "Service cards with photo-backed add-ons and one recommended package.",
+    metric: "Package selection rate",
+  },
+  {
+    reference: "Walmart",
+    borrow: "Everyday practical pricing, delivery/pickup logic, and broad local coverage.",
+    avoid: "Race-to-bottom pricing that breaks travel, labor, and payout math.",
+    jcSurface: "Zone Pricing, Quote Preview, Dispatch",
+    customerWin: "Gets a practical range fast, even outside the core town.",
+    workerWin: "Knows travel and truck expectations before accepting.",
+    companyWin: "Can cover more areas when the zone price reflects distance.",
+    nextBuild: "Map-based zone editor with radius/polygon preview and travel variables.",
+    metric: "Out-of-zone quote conversion",
+  },
+  {
+    reference: "Goodwill",
+    borrow: "Reuse, donation, item disposition, and proof that stuff went somewhere useful.",
+    avoid: "Treating every removal as trash when it could become donation, resale, or delivery.",
+    jcSurface: "Quick Request, Job Detail, Completion Proof",
+    customerWin: "Can say donate, dispose, store, or deliver with photos.",
+    workerWin: "Knows item destiny before loading.",
+    companyWin: "Creates reuse partnerships and cleaner job categories.",
+    nextBuild: "Per-item tags: donate, dispose, deliver, store, reuse.",
+    metric: "Reuse-tagged jobs",
+  },
+  {
+    reference: "McDonald's",
+    borrow: "Simple menu, predictable packages, fast repeat choices.",
+    avoid: "Hiding all pricing behind custom work when common jobs are predictable.",
+    jcSurface: "Smart Booking, Pricing, Quote Consensus",
+    customerWin: "Picks 2 movers / 3 hours or 3 movers / 2 hours quickly.",
+    workerWin: "Sees a standard crew/hour expectation.",
+    companyWin: "Quotes faster and compares margin across repeated packages.",
+    nextBuild: "Default package buttons tied to zone rates and minimums.",
+    metric: "Under-60-second quote starts",
+  },
+  {
+    reference: "Two Men and a Truck",
+    borrow: "Professional crew assignment, arrival windows, and completed-job confirmation.",
+    avoid: "Letting the calendar fill with unconfirmed quote clutter.",
+    jcSurface: "Ops Board, Dispatch, Crew Jobs, Schedule",
+    customerWin: "Sees when the job is actually confirmed.",
+    workerWin: "Gets assigned job details, route, start, and completion flow.",
+    companyWin: "Tracks status from quote to paid without losing the card.",
+    nextBuild: "White-to-green calendar status and dismissible ops notifications.",
+    metric: "Confirmed jobs completed on schedule",
+  },
+  {
+    reference: "U-Haul",
+    borrow: "Truck size, load/unload, customer truck vs provider truck, and time windows.",
+    avoid: "Forcing truck/container jobs through a generic moving form.",
+    jcSurface: "Book, Lead Quote Dialog, Zone Pricing",
+    customerWin: "Explains the move in the same language they already know.",
+    workerWin: "Knows truck size and access details.",
+    companyWin: "Can price truck, travel, and labor separately.",
+    nextBuild: "Truck-size prompts that auto-suggest crew and hours.",
+    metric: "Truck-size completion rate",
+  },
+  {
+    reference: "MovingHelp / MovingHelper",
+    borrow: "Hourly helper rates by crew size, minimums, and discounts after longer bookings.",
+    avoid: "Final hard pricing before staff confirms risk, access, and travel.",
+    jcSurface: "Zone Rates, Quote Preview, Lead Quote Dialog",
+    customerWin: "Gets a credible estimate range before commitment.",
+    workerWin: "Sees helper count and expected hours.",
+    companyWin: "Keeps rates adjustable by zone while freezing old quote snapshots.",
+    nextBuild: "Rate rows per service, crew size, minimum hours, and discount threshold.",
+    metric: "Quote approval time",
+  },
+  {
+    reference: "Porch Moving Group",
+    borrow: "Marketplace routing, service fit, and fast lead handling.",
+    avoid: "Selling the lead to nowhere or making ownership unclear.",
+    jcSurface: "Ops Board, Authority Tasks, Notifications",
+    customerWin: "Request reaches people who can act.",
+    workerWin: "Can help classify or quote without owning final risk.",
+    companyWin: "Uses Bronze/Silver/Gold/Platinum rails to speed response safely.",
+    nextBuild: "Consensus quote queue where matching samples raise confidence.",
+    metric: "Time to first useful quote action",
+  },
+  {
+    reference: "HireAHelper",
+    borrow: "Price comparison, availability confidence, and service-area matching.",
+    avoid: "Letting customer comparison turn into unmanaged low-bid chaos.",
+    jcSurface: "Quote Consensus, Zone Pricing, Crew Availability",
+    customerWin: "Gets a range and availability signal quickly.",
+    workerWin: "Can choose from clear available cards.",
+    companyWin: "Balances speed with Gold/Platinum approval gates.",
+    nextBuild: "Availability-aware quote confidence badges.",
+    metric: "Available-to-assigned conversion",
+  },
+  {
+    reference: "Yelp",
+    borrow: "Reviews, local trust, photos, and quick contact intent.",
+    avoid: "Untracked messages that never become lead cards.",
+    jcSurface: "Reviews, Funnel, Marketing Webhooks",
+    customerWin: "Trusts the crew before entering contact info.",
+    workerWin: "Can use real review/photo assets in local posts.",
+    companyWin: "Sees review-driven traffic and request recovery.",
+    nextBuild: "Review/photo picker for ad creation.",
+    metric: "Review-attributed requests",
+  },
+  {
+    reference: "Google",
+    borrow: "Address autocomplete, local search intent, maps, and fast answers.",
+    avoid: "Manual address typing that slows booking and creates bad travel math.",
+    jcSurface: "Book, Zone Map, Booking Funnel",
+    customerWin: "Finds address in seconds.",
+    workerWin: "Gets cleaner route and access info.",
+    companyWin: "Uses better address data for zone, travel, and dispatch.",
+    nextBuild: "Address autocomplete everywhere a job can be created.",
+    metric: "Address resolved rate",
+  },
+  {
+    reference: "Facebook",
+    borrow: "Local groups, comments, Messenger follow-up, photos, and last-minute demand.",
+    avoid: "Posting without a tracked link or follow-up path.",
+    jcSurface: "Crew Earn / Ads, Marketing Webhooks, Funnel",
+    customerWin: "Clicks a post and lands in a simple request path.",
+    workerWin: "Creates ad kit and earns JCMOVES for useful campaigns.",
+    companyWin: "Tracks which posts turn into cards.",
+    nextBuild: "Campaign scoreboard plus saved ad templates by area/focus.",
+    metric: "Campaign-attributed cards",
+  },
+  {
+    reference: "Craigslist",
+    borrow: "Simple classified demand and direct local service offers.",
+    avoid: "Anonymous, unqualified back-and-forth with no quote card.",
+    jcSurface: "Ad Creator, Quick Request, Funnel Recovery",
+    customerWin: "Gets a simple link instead of a vague reply thread.",
+    workerWin: "Can paste a short ad and fast reply.",
+    companyWin: "Turns classified traffic into tracked quote_requested cards.",
+    nextBuild: "Craigslist-safe short-copy mode in the ad builder.",
+    metric: "Classified link starts",
+  },
+  {
+    reference: "PODS / U-Box",
+    borrow: "Container count, delivery vs load/unload, mileage, and site access.",
+    avoid: "Pricing container jobs like regular house moves.",
+    jcSurface: "Book, Zone Pricing, Job Detail",
+    customerWin: "Describes box/container work clearly.",
+    workerWin: "Sees box count and site constraints.",
+    companyWin: "Prices mileage, box fees, and labor with a snapshot.",
+    nextBuild: "U-Box-style service rows and container-specific intake.",
+    metric: "Container quote accuracy",
+  },
+  {
+    reference: "Square",
+    borrow: "Payment links, invoices, deposits, receipts, and collect-anywhere trust.",
+    avoid: "Letting workers handle private card data or payout before payment safety checks.",
+    jcSurface: "Finance, Job Detail, Payment Status",
+    customerWin: "Pays through a trusted link.",
+    workerWin: "Can collect with a link, not a card number.",
+    companyWin: "Keeps invoice, deposit, payout, and profit states aligned.",
+    nextBuild: "One-click Square invoice/link from approved quote.",
+    metric: "Approved quote to paid time",
+  },
+  {
+    reference: "JCMOVES Crypto",
+    borrow: "Rewards, streaks, referrals, task bonuses, and repeat engagement.",
+    avoid: "Issuing rewards without verified value or completed work.",
+    jcSurface: "Rewards, Authority Tasks, Payout Engine",
+    customerWin: "Gets useful credits without booking becoming complicated.",
+    workerWin: "Earns for marketing, quote help, completion, and reviews.",
+    companyWin: "Rewards behavior that creates or completes real work.",
+    nextBuild: "Task completion ledger with bonus JCMOVES by tier.",
+    metric: "Verified reward actions",
   },
 ];
 
