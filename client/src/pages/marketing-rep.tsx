@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "wouter";
 import { ArrowLeft, CalendarCheck, CheckCircle2, Copy, Download, Phone, Printer, QrCode, Share2, Tag, Truck, Users } from "lucide-react";
@@ -53,6 +53,8 @@ const coreServiceLinks = [
   },
 ];
 
+const TRACKING_PARAM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "jc_campaign", "fbclid"] as const;
+
 function formatPhone(raw: string) {
   const digits = raw.replace(/\D/g, "");
   if (digits.length === 11 && digits.startsWith("1")) {
@@ -69,20 +71,39 @@ export default function MarketingRepPage() {
   const slug = params.slug || "";
   const [copied, setCopied] = useState(false);
   const [postCopied, setPostCopied] = useState(false);
+  const trackingParams = useMemo(() => {
+    const params = new URLSearchParams();
+    if (typeof window === "undefined") return params;
+    const current = new URLSearchParams(window.location.search);
+    for (const key of TRACKING_PARAM_KEYS) {
+      const value = (current.get(key) || "").trim();
+      if (value) params.set(key, value.slice(0, 500));
+    }
+    return params;
+  }, []);
 
   const { data: rep, isLoading } = useQuery<MarketingRep>({
     queryKey: [`/api/marketing-network/reps/${slug}`],
     enabled: !!slug,
   });
 
+  function withTracking(path: string, base: Record<string, string>) {
+    const params = new URLSearchParams(trackingParams);
+    for (const [key, value] of Object.entries(base)) {
+      if (value) params.set(key, value);
+    }
+    const query = params.toString();
+    return query ? `${path}?${query}` : path;
+  }
+
   const callHref = rep ? `tel:+${rep.phoneNumber.replace(/\D/g, "")}` : "#";
-  const quoteHref = rep ? `/book?mode=quick&promo=${encodeURIComponent(rep.promoCode)}&rep=${encodeURIComponent(rep.slug)}` : "/book";
-  const builderHref = rep ? `/book?mode=builder&promo=${encodeURIComponent(rep.promoCode)}&rep=${encodeURIComponent(rep.slug)}` : "/book";
+  const quoteHref = rep ? withTracking("/book", { mode: "quick", promo: rep.promoCode, rep: rep.slug }) : "/book";
+  const builderHref = rep ? withTracking("/book", { mode: "builder", promo: rep.promoCode, rep: rep.slug }) : "/book";
   const serviceHref = (service: string) =>
     rep
-      ? `/book?mode=quick&service=${encodeURIComponent(service)}&promo=${encodeURIComponent(rep.promoCode)}&rep=${encodeURIComponent(rep.slug)}`
+      ? withTracking("/book", { mode: "quick", service, promo: rep.promoCode, rep: rep.slug })
       : `/book?mode=quick&service=${encodeURIComponent(service)}`;
-  const shareUrl = rep ? `${window.location.origin}/network/${rep.slug}` : "";
+  const shareUrl = rep ? `${window.location.origin}${withTracking(`/network/${rep.slug}`, {})}` : "";
   const qrImageUrl = rep ? `/api/marketing-network/reps/${encodeURIComponent(rep.slug)}/qr.svg` : "";
   const shareText = rep ? `${rep.displayName} with JC ON THE MOVE can help book moving, junk removal, delivery, cleanup, and labor work. Add photos, videos, or an album link so the crew can quote faster. Use code ${rep.promoCode}: ${shareUrl}` : "";
   const smsShareHref = rep ? `sms:?&body=${encodeURIComponent(shareText)}` : "#";

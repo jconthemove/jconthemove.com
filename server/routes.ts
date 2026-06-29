@@ -7930,6 +7930,9 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         referralSlug: string | null;
         repName: string | null;
         source: string | null;
+        marketingCampaignId: string | null;
+        utmCampaign: string | null;
+        utmSource: string | null;
         createdAt: Date;
       }>();
 
@@ -7953,6 +7956,9 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         for (const row of attributionRows) {
           if (!row.leadId || attributionByLead.has(row.leadId)) continue;
           const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata as Record<string, unknown> : {};
+          const marketingTracking = metadata.marketingTracking && typeof metadata.marketingTracking === "object"
+            ? metadata.marketingTracking as Record<string, unknown>
+            : {};
           const rep = row.promoCode ? repByPromo.get(row.promoCode) : undefined;
           attributionByLead.set(row.leadId, {
             attributionType: row.attributionType,
@@ -7960,6 +7966,9 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
             referralSlug: typeof metadata.referralSlug === "string" ? metadata.referralSlug : rep?.slug || null,
             repName: rep?.displayName || null,
             source: typeof metadata.source === "string" ? metadata.source : null,
+            marketingCampaignId: typeof metadata.marketingCampaignId === "string" ? metadata.marketingCampaignId : null,
+            utmCampaign: typeof marketingTracking.utmCampaign === "string" ? marketingTracking.utmCampaign : null,
+            utmSource: typeof marketingTracking.utmSource === "string" ? marketingTracking.utmSource : null,
             createdAt: row.createdAt,
           });
         }

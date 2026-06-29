@@ -105,6 +105,9 @@ type Lead = {
     referralSlug: string | null;
     repName: string | null;
     source: string | null;
+    marketingCampaignId?: string | null;
+    utmCampaign?: string | null;
+    utmSource?: string | null;
     createdAt: string;
   } | null;
   photos?: Array<{ url?: string; mimeType?: string; name?: string; source?: string; timestamp?: string }>;
@@ -670,6 +673,8 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
                   <span className="text-right text-xs">
                     <span className="block text-emerald-300">{attribution.repName || attribution.referralSlug || "Marketing rep"}</span>
                     <span className="block font-mono text-amber-300">{attribution.promoCode || lead.promoCode || "No code"}</span>
+                    {attribution.marketingCampaignId && <span className="block font-mono text-blue-300">Campaign {attribution.marketingCampaignId}</span>}
+                    {attribution.utmCampaign && <span className="block text-blue-200">UTM {attribution.utmCampaign}</span>}
                     {attribution.source && <span className="block text-slate-500">{attribution.source.replace(/_/g, " ")}</span>}
                   </span>
                 }
