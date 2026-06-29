@@ -23,7 +23,7 @@ import {
   MapPin, Calendar, Loader2, Phone, Mail, Users, DollarSign, Bitcoin,
   CheckCircle2, Clock, Send, Star, ArrowLeftRight, ChevronRight,
   Coins, Search, Truck, Minus, Plus, RefreshCw, Receipt, UserCheck,
-  UserX, XCircle, Check, X, Image, Tag, ExternalLink
+  UserX, XCircle, Check, X, Image, Tag, ExternalLink, Megaphone
 } from "lucide-react";
 import type { User } from "@shared/schema";
 import {
@@ -116,6 +116,20 @@ type Lead = {
 };
 
 type LeadQuoteSnapshot = {
+  source?: string;
+  promoCode?: string | null;
+  referralSlug?: string | null;
+  marketingCampaignId?: string | null;
+  attribution?: {
+    source?: string | null;
+    promoCode?: string | null;
+    referralSlug?: string | null;
+    marketingCampaignId?: string | null;
+    marketingTracking?: {
+      utmSource?: string | null;
+      utmCampaign?: string | null;
+    };
+  };
   marketplaceShapeId?: string;
   marketplaceShape?: {
     id?: string;
@@ -168,8 +182,46 @@ function leadPhotoCount(lead: Lead): number {
 
 function leadAttributionLabel(lead: Lead): string | null {
   const attribution = lead.attribution;
-  if (!attribution) return null;
-  return attribution.repName || attribution.referralSlug || attribution.promoCode || null;
+  const snapshot = lead.quoteSnapshot && typeof lead.quoteSnapshot === "object" && !Array.isArray(lead.quoteSnapshot)
+    ? lead.quoteSnapshot
+    : null;
+  return attribution?.repName
+    || attribution?.referralSlug
+    || attribution?.promoCode
+    || snapshot?.attribution?.referralSlug
+    || snapshot?.referralSlug
+    || lead.promoCode
+    || null;
+}
+
+function formatSourceLabel(source: string | null | undefined): string | null {
+  if (!source) return null;
+  const cleaned = source.replace(/_/g, " ").trim();
+  if (!cleaned) return null;
+  return cleaned.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function leadSourceLabel(lead: Lead): string | null {
+  const snapshot = lead.quoteSnapshot && typeof lead.quoteSnapshot === "object" && !Array.isArray(lead.quoteSnapshot)
+    ? lead.quoteSnapshot
+    : null;
+  return formatSourceLabel(
+    lead.attribution?.source
+    || snapshot?.attribution?.source
+    || lead.source
+    || snapshot?.source
+    || null,
+  );
+}
+
+function leadCampaignLabel(lead: Lead): string | null {
+  const snapshot = lead.quoteSnapshot && typeof lead.quoteSnapshot === "object" && !Array.isArray(lead.quoteSnapshot)
+    ? lead.quoteSnapshot
+    : null;
+  return lead.attribution?.marketingCampaignId
+    || snapshot?.attribution?.marketingCampaignId
+    || snapshot?.marketingCampaignId
+    || null;
 }
 
 function leadMarketplaceShape(lead: Lead) {
@@ -215,6 +267,8 @@ function AdminJobCard({ lead, onClick, employees }: {
   const quickRequest = isQuickRequestLead(lead);
   const photoCount = leadPhotoCount(lead);
   const attributionLabel = leadAttributionLabel(lead);
+  const sourceLabel = leadSourceLabel(lead);
+  const campaignLabel = leadCampaignLabel(lead);
   const customerMediaLink = extractCustomerMediaLink(lead.details);
   const marketplaceShape = leadMarketplaceShape(lead);
 
@@ -310,6 +364,18 @@ function AdminJobCard({ lead, onClick, employees }: {
                 <span className="text-xs text-emerald-300 flex items-center gap-1">
                   <UserCheck className="h-3 w-3" />
                   Rep: {attributionLabel}
+                </span>
+              )}
+              {sourceLabel && (
+                <span className="text-xs text-cyan-300 flex items-center gap-1">
+                  <Megaphone className="h-3 w-3" />
+                  {sourceLabel}
+                </span>
+              )}
+              {campaignLabel && (
+                <span className="text-xs text-blue-300 flex items-center gap-1">
+                  <Tag className="h-3 w-3" />
+                  Campaign {campaignLabel}
                 </span>
               )}
             </div>
@@ -594,6 +660,8 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
   const quickRequest = isQuickRequestLead(lead);
   const photos = Array.isArray(lead.photos) ? lead.photos : [];
   const attribution = lead.attribution;
+  const sourceLabel = leadSourceLabel(lead);
+  const campaignLabel = leadCampaignLabel(lead);
   const customerMediaLink = extractCustomerMediaLink(lead.details);
   const marketplaceShape = leadMarketplaceShape(lead);
   const marketplaceShapeId = leadMarketplaceShapeId(lead);
@@ -665,6 +733,8 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
             <POSRow label="Date" value={formatDateShort(effectiveDate)} />
             {lead.arrivalWindow && <POSRow label="Arrival" value={lead.arrivalWindow} />}
             {marketplaceShape && <POSRow label="Shape" value={marketplaceShape.shape} />}
+            {sourceLabel && <POSRow label="Source" value={<span className="text-cyan-300">{sourceLabel}</span>} />}
+            {campaignLabel && <POSRow label="Campaign" value={<span className="font-mono text-blue-300">{campaignLabel}</span>} />}
             {lead.promoCode && <POSRow label="Referral Code" value={<span className="font-mono text-amber-300">{lead.promoCode}</span>} />}
             {attribution && (
               <POSRow
