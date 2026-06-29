@@ -49,6 +49,7 @@ import { calculateProfitSharingPayout, defaultBonusWeightsForCrew, defaultHourly
 import { canFinalizeProfitSharePayout, shouldIssueJcmovesRewardForPayoutStatus, type ProfitShareRole, type ProfitShareWorkerInput } from "@shared/jobPayout";
 import { QUOTE_HELPER_MESSAGE_LIMIT, summarizeQuoteRequest } from "./services/geminiQuoteHelper";
 import { generateMarketingAdDraft, marketingAdDraftSchema } from "./services/marketingAdGenerator";
+import { listMarketingCampaignPerformance } from "./services/marketingWebhookReminders";
 import lawnCareRouter from "./routes/lawnCare";
 import serviceRebookRouter from "./routes/serviceRebookReminders";
 import serviceRebookPublicRouter from "./routes/serviceRebookPublic";
@@ -5739,6 +5740,41 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       }
       console.error("[crew/marketing/ad-draft] failed:", error instanceof Error ? error.message : error);
       res.status(500).json({ error: "Could not create marketing draft" });
+    }
+  });
+
+  app.get("/api/crew/marketing/campaign-performance", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const user = req.currentUser || req.user || {};
+      const limitRaw = Number(req.query.limit || 10);
+      const campaigns = await listMarketingCampaignPerformance(
+        Number.isFinite(limitRaw) ? limitRaw : 10,
+        user.id || null,
+      );
+      const summary = campaigns.reduce(
+        (acc: {
+          totalCampaigns: number;
+          funnelEvents: number;
+          submitSuccesses: number;
+          attributedCards: number;
+          errors: number;
+        }, campaign: any) => {
+          acc.totalCampaigns += 1;
+          acc.funnelEvents += Number(campaign.funnel_events || 0);
+          acc.submitSuccesses += Number(campaign.submit_successes || 0);
+          acc.attributedCards += Math.max(
+            Number(campaign.attributed_cards || 0),
+            Number(campaign.recovered_or_linked || 0),
+          );
+          acc.errors += Number(campaign.errors || 0);
+          return acc;
+        },
+        { totalCampaigns: 0, funnelEvents: 0, submitSuccesses: 0, attributedCards: 0, errors: 0 },
+      );
+      res.json({ campaigns, summary });
+    } catch (error) {
+      console.error("[crew/marketing/campaign-performance] failed:", error instanceof Error ? error.message : error);
+      res.status(500).json({ error: "Could not load marketing performance" });
     }
   });
 

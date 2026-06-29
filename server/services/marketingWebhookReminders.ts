@@ -260,7 +260,11 @@ export async function listRecentMarketingWebhookCampaigns(limit = 25) {
   return result.rows;
 }
 
-export async function listMarketingCampaignPerformance(limit = 50) {
+export async function listMarketingCampaignPerformance(limit = 50, actorId?: string | null) {
+  const boundedLimit = Math.max(1, Math.min(100, limit));
+  const params: Array<string | number> = [boundedLimit];
+  const actorFilter = actorId ? "WHERE c.actor_id = $2" : "";
+  if (actorId) params.push(actorId);
   const result = await pool.query(
     `WITH funnel AS (
        SELECT
@@ -318,9 +322,10 @@ export async function listMarketingCampaignPerformance(limit = 50) {
      FROM marketing_webhook_campaigns c
      LEFT JOIN funnel f ON f.campaign_id = c.id
      LEFT JOIN attributions a ON a.campaign_id = c.id
+     ${actorFilter}
      ORDER BY last_activity_at DESC
      LIMIT $1`,
-    [Math.max(1, Math.min(100, limit))],
+    params,
   );
   return result.rows;
 }

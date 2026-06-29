@@ -93,6 +93,34 @@ interface MarketingAdReward {
   dailyLimit?: number;
 }
 
+interface MarketingCampaignPerformanceRow {
+  id: string;
+  title: string;
+  area: string | null;
+  focus: string | null;
+  source: string | null;
+  created_at: string;
+  last_activity_at: string;
+  funnel_events: number;
+  submit_successes: number;
+  errors: number;
+  recovered_or_linked: number;
+  attributed_cards: number;
+  attributed_leads: number;
+  attributed_bookings: number;
+}
+
+interface MarketingCampaignPerformanceResponse {
+  campaigns: MarketingCampaignPerformanceRow[];
+  summary: {
+    totalCampaigns: number;
+    funnelEvents: number;
+    submitSuccesses: number;
+    attributedCards: number;
+    errors: number;
+  };
+}
+
 const REWARD_LABELS: Record<string, string> = {
   mining: "Mining Reward",
   daily_checkin: "Daily Check-in",
@@ -231,6 +259,10 @@ export default function CrewEarningsPage() {
   const { data: stakes = [] } = useQuery<Stake[]>({ queryKey: ["/api/staking/my-stakes"], retry: 1 });
   const { data: marketingReps = [] } = useQuery<MarketingRep[]>({ queryKey: ["/api/marketing-network/reps"], retry: 1 });
   const { data: crewPayouts = [] } = useQuery<CrewPayout[]>({ queryKey: ["/api/crew/payouts"], retry: 1 });
+  const { data: myCampaignPerformance } = useQuery<MarketingCampaignPerformanceResponse>({
+    queryKey: ["/api/crew/marketing/campaign-performance"],
+    retry: 1,
+  });
 
   const userCapabilities: string[] = user?.capabilities ?? [];
   const referralCode = (user as any)?.referralCode || "";
@@ -332,6 +364,8 @@ export default function CrewEarningsPage() {
     onSuccess: (data) => {
       setAdDraft(data.draft);
       setAdReward(data.marketingReward || null);
+      queryClient.invalidateQueries({ queryKey: ["/api/crew/marketing/campaign-performance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/marketing/campaign-performance"] });
       const reward = data.marketingReward as MarketingAdReward | undefined;
       toast({
         title: reward?.awarded ? "Ad draft ready + bonus issued" : "Ad draft ready",
@@ -378,6 +412,14 @@ export default function CrewEarningsPage() {
   const paidCashPay = cashPayouts
     .filter((payout) => payout.payoutStatus === "manual_paid" || payout.payoutStatus === "stripe_paid")
     .reduce((sum, payout) => sum + parseFloat(payout.totalPay || "0"), 0);
+  const myAdCampaigns = myCampaignPerformance?.campaigns || [];
+  const myAdSummary = myCampaignPerformance?.summary || {
+    totalCampaigns: 0,
+    funnelEvents: 0,
+    submitSuccesses: 0,
+    attributedCards: 0,
+    errors: 0,
+  };
 
   return (
     <div className="max-w-2xl mx-auto px-4 pt-6 space-y-5">
@@ -714,6 +756,71 @@ export default function CrewEarningsPage() {
             {adDraft.fallbackUsed && (
               <p className="mt-2 text-[11px] text-amber-300">Template fallback used: {adDraft.reason || "AI unavailable"}</p>
             )}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-slate-700/40 bg-slate-900/50 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-widest text-slate-400">My ad results</p>
+            <h2 className="mt-1 text-lg font-black text-white">Traffic to job cards</h2>
+          </div>
+          <TrendingUp className="h-5 w-5 shrink-0 text-emerald-300" />
+        </div>
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-3 text-center">
+            <p className="text-xl font-black text-white">{myAdSummary.funnelEvents}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-blue-200">Traffic</p>
+          </div>
+          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-center">
+            <p className="text-xl font-black text-white">{myAdSummary.submitSuccesses}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-200">Requests</p>
+          </div>
+          <div className="rounded-xl border border-orange-500/20 bg-orange-500/10 p-3 text-center">
+            <p className="text-xl font-black text-white">{myAdSummary.attributedCards}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-orange-200">Cards</p>
+          </div>
+        </div>
+
+        {myAdCampaigns.length === 0 ? (
+          <p className="mt-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-sm text-slate-400">
+            No tracked ad results yet.
+          </p>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {myAdCampaigns.slice(0, 4).map((campaign) => {
+              const cards = Math.max(Number(campaign.attributed_cards || 0), Number(campaign.recovered_or_linked || 0));
+              return (
+                <div key={campaign.id} className="rounded-xl border border-slate-800 bg-slate-950/45 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black text-white">{campaign.title || "Local ad"}</p>
+                      <p className="mt-0.5 truncate text-xs text-slate-400">
+                        {campaign.area || "Any area"} - {campaign.focus || "Any focus"}
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-[10px] font-bold text-slate-300">
+                      {new Date(campaign.last_activity_at || campaign.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <p className="text-sm font-black text-blue-300">{Number(campaign.funnel_events || 0)}</p>
+                      <p className="text-[10px] text-slate-500">Traffic</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-black text-emerald-300">{Number(campaign.submit_successes || 0)}</p>
+                      <p className="text-[10px] text-slate-500">Requests</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-black text-orange-300">{cards}</p>
+                      <p className="text-[10px] text-slate-500">Cards</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
