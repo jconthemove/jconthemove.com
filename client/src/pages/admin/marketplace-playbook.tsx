@@ -16,8 +16,10 @@ import {
 } from "lucide-react";
 import {
   MARKETPLACE_FUNCTIONAL_IDEAS,
+  MARKETPLACE_OPERATING_FLYWHEEL,
   MARKETPLACE_REQUEST_SHAPES,
   MARKETPLACE_SIMPLE_SIDES,
+  type MarketplaceFlywheelStageId,
   type MarketplaceFunctionalIdeaStatus,
 } from "@shared/marketplaceShapes";
 import AuthorityTasksCard from "@/components/AuthorityTasksCard";
@@ -117,6 +119,17 @@ const statusClasses: Record<MarketplaceFunctionalIdeaStatus, string> = {
   next: "border-orange-400/30 bg-orange-500/10 text-orange-200",
 };
 
+const flywheelIcons: Record<MarketplaceFlywheelStageId, typeof ClipboardList> = {
+  attract: Megaphone,
+  capture: ClipboardList,
+  size: Store,
+  quote: BadgeDollarSign,
+  dispatch: Truck,
+  complete: CheckCircle2,
+  collect: WalletCards,
+  retain: Sparkles,
+};
+
 function statusLabel(status: MarketplaceFunctionalIdeaStatus) {
   return status.replace(/_/g, " ");
 }
@@ -182,6 +195,87 @@ export default function AdminMarketplacePlaybookPage() {
                 </div>
               </div>
             ))}
+          </div>
+        </section>
+
+        <section className="mt-5 rounded-lg border border-emerald-400/20 bg-emerald-500/10 p-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Route className="h-5 w-5 text-emerald-300" />
+                <h2 className="font-black text-white">JC Operating Flywheel</h2>
+              </div>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+                Every idea gets judged by whether it moves the same card forward: attract, capture, size, quote,
+                dispatch, complete, collect, retain.
+              </p>
+            </div>
+            <span className="rounded-full border border-emerald-400/30 bg-slate-950/60 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-200">
+              one card loop
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3">
+            {MARKETPLACE_OPERATING_FLYWHEEL.map((stage, index) => {
+              const Icon = flywheelIcons[stage.id] || ClipboardList;
+              return (
+                <div key={stage.id} className="rounded-md border border-slate-800 bg-slate-950/70 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-emerald-400/30 bg-emerald-500/10 text-sm font-black text-emerald-200">
+                        {index + 1}
+                      </div>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Icon className="h-4 w-4 text-emerald-300" />
+                          <p className="text-sm font-black text-white">{stage.label}</p>
+                        </div>
+                        <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                          {stage.primarySurface}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-300">
+                      {stage.sourceOfTruth}
+                    </span>
+                  </div>
+
+                  <p className="mt-3 text-sm leading-6 text-slate-200">{stage.objective}</p>
+
+                  <div className="mt-3 grid gap-2 md:grid-cols-3">
+                    {[
+                      ["Customer", stage.customerAction],
+                      ["Worker", stage.workerAction],
+                      ["Company", stage.companyAction],
+                    ].map(([label, detail]) => (
+                      <div key={label} className="rounded-md border border-slate-800 bg-slate-900/60 p-3">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{label}</p>
+                        <p className="mt-1 text-xs leading-5 text-slate-300">{detail}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-3 grid gap-2 md:grid-cols-3">
+                    <div className="rounded-md border border-blue-400/20 bg-blue-500/10 p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-200">Automation</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-300">{stage.automation}</p>
+                    </div>
+                    <div className="rounded-md border border-emerald-400/20 bg-emerald-500/10 p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-200">Proof</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-300">{stage.proof}</p>
+                    </div>
+                    <div className="rounded-md border border-orange-400/20 bg-orange-500/10 p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-orange-200">Close</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-300">{stage.rewardClose}</p>
+                    </div>
+                  </div>
+
+                  <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    References: {stage.references}
+                  </p>
+                </div>
+              );
+            })}
           </div>
         </section>
 

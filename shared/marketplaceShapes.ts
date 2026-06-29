@@ -49,6 +49,31 @@ export type MarketplaceFunctionalIdea = {
   shapeIds: MarketplaceRequestShapeId[];
 };
 
+export type MarketplaceFlywheelStageId =
+  | "attract"
+  | "capture"
+  | "size"
+  | "quote"
+  | "dispatch"
+  | "complete"
+  | "collect"
+  | "retain";
+
+export type MarketplaceFlywheelStage = {
+  id: MarketplaceFlywheelStageId;
+  label: string;
+  references: string;
+  objective: string;
+  customerAction: string;
+  workerAction: string;
+  companyAction: string;
+  automation: string;
+  proof: string;
+  rewardClose: string;
+  primarySurface: string;
+  sourceOfTruth: string;
+};
+
 export const MARKETPLACE_REQUEST_SHAPES: MarketplaceRequestShape[] = [
   {
     id: "fast_quote",
@@ -244,6 +269,121 @@ export const MARKETPLACE_SIMPLE_SIDES: MarketplaceSimpleSide[] = [
     tabs: "Tasks, Options",
     tasks: "Ops Board, Dispatch, Jobs, Schedule.",
     options: "Pricing, People, Finance, Funnel, Marketing, Launch.",
+  },
+];
+
+export const MARKETPLACE_OPERATING_FLYWHEEL: MarketplaceFlywheelStage[] = [
+  {
+    id: "attract",
+    label: "Attract",
+    references: "Facebook, Craigslist, Yelp, Google, rep links",
+    objective: "Bring local intent into one tracked JC doorway instead of scattered messages.",
+    customerAction: "Sees a local post, review, search result, or rep page and taps the quote link.",
+    workerAction: "Creates a simple ad with photo/text, posts it, and copies the fast follow-up message.",
+    companyAction: "Tracks source, campaign, promo code, rep slug, and funnel health.",
+    automation: "Crew ad creator generates copy, tracked links, Discord/webhook reminders, and bonus eligibility.",
+    proof: "marketing_webhook_campaigns row, booking_funnel_events row, quote_attributions row.",
+    rewardClose: "Marketing task JCMOVES for useful tracked campaigns.",
+    primarySurface: "Crew Earn / Ads, Marketing Webhooks, Booking Funnel",
+    sourceOfTruth: "marketing_webhook_campaigns + quote_attributions",
+  },
+  {
+    id: "capture",
+    label: "Capture",
+    references: "Google forms, Yelp leads, MovingHelp intake",
+    objective: "Turn every request into a recoverable lead card within seconds.",
+    customerAction: "Enters ZIP/address, estimated date, service choice, contact, notes, and optional photos.",
+    workerAction: "Can enter a request on behalf of a customer from worker mode.",
+    companyAction: "Receives owner/admin notification and can recover abandoned attempts.",
+    automation: "Booking bridge creates or links a quote_requested lead and records partial funnel snapshots.",
+    proof: "Lead card exists with source, quote snapshot, funnel event, photos/media context.",
+    rewardClose: "Lead creation and marketing attribution can feed task credit later.",
+    primarySurface: "Book, Quick Request, Admin Funnel, Admin Jobs",
+    sourceOfTruth: "leads",
+  },
+  {
+    id: "size",
+    label: "Size",
+    references: "McDonald's menu, Walmart catalog, U-Haul truck sizing",
+    objective: "Make job sizing feel like picking the closest package, not filling out a long form.",
+    customerAction: "Chooses load/unload/both, truck provider, truck size, and a common crew/hour package.",
+    workerAction: "Sees clear crew count, hours, truck/access notes, and job shape.",
+    companyAction: "Adjusts package, hours, crew, zone, travel, and special handling before approval.",
+    automation: "Smart defaults suggest 2 movers / 3 hours or 3 movers / 2 hours and preserve item/photos detail.",
+    proof: "Lead quote snapshot includes service selections, crew, hours, truck, zone preview, and notes.",
+    rewardClose: "Quote sampling tasks can reward matching Bronze/Silver/Gold picks.",
+    primarySurface: "Smart Booking, Lead Quote Dialog, Authority Tasks",
+    sourceOfTruth: "lead.quoteSnapshot",
+  },
+  {
+    id: "quote",
+    label: "Quote",
+    references: "MovingHelp rates, HireAHelper comparison, PODS/U-Box pricing",
+    objective: "Convert rough request detail into a price range and confirmed staff quote.",
+    customerAction: "Sees estimate range first and waits for final staff confirmation.",
+    workerAction: "Silver can build quote cards; Gold can approve when guided picks match.",
+    companyAction: "Sets final price, deposit, Square link, crew pay preview, and company profit guardrails.",
+    automation: "Zone rates, hourly minimums, discounts, travel padding, and quote consensus reduce manual work.",
+    proof: "Quoted lead has base/total price, quote notes, zone snapshot, approval record, and payment/deposit status.",
+    rewardClose: "Quote task JCMOVES only after useful quote work, not loose guesses.",
+    primarySurface: "Pricing, Jobs, Quote Review, Finance",
+    sourceOfTruth: "leads + quote_approvals + zone snapshots",
+  },
+  {
+    id: "dispatch",
+    label: "Dispatch",
+    references: "Two Men and a Truck, Porch Moving Group",
+    objective: "Move a confirmed card onto calendar and into the right crew hands.",
+    customerAction: "Gets confirmation that the crew/date/window is set.",
+    workerAction: "Receives only relevant available or assigned job notifications, then accepts/navigates/starts.",
+    companyAction: "Assigns crew, resolves leave/availability, and watches calendar coverage.",
+    automation: "Job events notify admin, eligible crew, assigned crew, and webhooks by lifecycle stage.",
+    proof: "Crew assignment, calendar entry, dispatch timestamp, status transition, notification record.",
+    rewardClose: "Accepted assignment prepares payout but does not issue premature payout.",
+    primarySurface: "Dispatch, Crew Jobs, Schedule, Ops Board",
+    sourceOfTruth: "leads + job_assignments + notifications",
+  },
+  {
+    id: "complete",
+    label: "Complete",
+    references: "Professional mover workflow, review platforms",
+    objective: "Prove the job happened and trigger rewards/payout flow once.",
+    customerAction: "Confirms service, receives review/tip follow-up, and can rebook.",
+    workerAction: "Completes job, uploads proof/photos/notes, and closes status.",
+    companyAction: "Reviews completion, resolves exceptions, and protects payout safety.",
+    automation: "Completion event is idempotent so JCMOVES and payout records do not duplicate.",
+    proof: "Completed status, completion timestamp, proof notes/photos, payout calculation.",
+    rewardClose: "Worker/customer JCMOVES and lottery/review loops attach after verified completion.",
+    primarySurface: "Crew Jobs, Job Detail, Reviews, Payouts",
+    sourceOfTruth: "leads + job_payout_calculations",
+  },
+  {
+    id: "collect",
+    label: "Collect",
+    references: "Square invoice links, cash payout records",
+    objective: "Make payment collection simple while preserving company profit and crew cash payout math.",
+    customerAction: "Pays deposit/final invoice through Square link or approved cash/payment path.",
+    workerAction: "Can collect through trusted link without handling card data.",
+    companyAction: "Marks payment/payout status and verifies reserves, profit, bonus, referral, and growth splits.",
+    automation: "Square link, deposit gate, payout preview, and manual payout status keep money movement controlled.",
+    proof: "Square payment URL/status, deposit flag, payout status, paid timestamp, profit-share record.",
+    rewardClose: "Cash payout now; automatic invoice/payment setup as Square token/config matures.",
+    primarySurface: "Finance, Job Detail, Job Payouts",
+    sourceOfTruth: "leads + payment/payout tables",
+  },
+  {
+    id: "retain",
+    label: "Retain",
+    references: "Target loyalty, McDonald's repeat habit, Goodwill reuse loop, JCMOVES",
+    objective: "Turn a completed job into the next booking, review, referral, or reuse opportunity.",
+    customerAction: "Leaves review, uses JCMOVES, rebooks, refers someone, or asks for related services.",
+    workerAction: "Uses completed photos/reviews for the next local post and follows up with warm leads.",
+    companyAction: "Measures campaign performance, reviews, repeat jobs, and reward liability.",
+    automation: "Review links, rep pages, webhook reminders, wallet rewards, and campaign analytics feed the loop.",
+    proof: "Review, reward ledger, attribution, repeat lead, recovered funnel card, campaign performance row.",
+    rewardClose: "JCMOVES reinforces useful behavior without replacing actual payment discipline.",
+    primarySurface: "Reviews, Rewards, Marketing Network, Analytics",
+    sourceOfTruth: "rewards + reviews + quote_attributions",
   },
 ];
 
