@@ -14,7 +14,7 @@ const optionLinks = [
   { label: "Job Board", description: "Open jobs and assignment details", icon: Briefcase, path: "/crew/jobs" },
   { label: "Schedule", description: "Availability and blocked days", icon: Calendar, path: "/crew/schedule" },
   { label: "Reviews", description: "Customer feedback and rating", icon: Star, path: "/crew/reviews" },
-  { label: "Earnings", description: "Payouts and JCMOVES", icon: Coins, path: "/crew/earnings" },
+  { label: "Earn / Ads", description: "Payouts, ads, JCMOVES", icon: Coins, path: "/crew/earnings#ad-builder" },
   { label: "Add Job", description: "Create a customer request", icon: PlusCircle, path: "/book?worker=1" },
 ];
 

@@ -400,7 +400,7 @@ export default function CrewEarningsPage() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-blue-500/25 bg-blue-500/10 p-4">
+      <div id="ad-builder" className="rounded-2xl border border-blue-500/25 bg-blue-500/10 p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-black uppercase tracking-widest text-blue-300">1-2-3 ad builder</p>
@@ -570,6 +570,23 @@ export default function CrewEarningsPage() {
               </div>
             )}
             <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-black text-slate-950 hover:bg-emerald-400"
+                onClick={() => {
+                  const linkLine = adDraft.trackedLink && !adDraft.facebookPost.includes(adDraft.trackedLink) ? `\n\n${adDraft.trackedLink}` : "";
+                  const post = `${adDraft.facebookPost}${linkLine}\n\n${adDraft.hashtags?.join(" ") || ""}`.trim();
+                  window.open(facebookShareHref, "_blank", "noopener,noreferrer");
+                  if (!navigator.clipboard) {
+                    return;
+                  }
+                  navigator.clipboard.writeText(post)
+                    .then(() => toast({ title: "Ad copied", description: "Paste it into the Facebook tab." }))
+                    .catch(() => toast({ title: "Copy failed", description: "Long-press the post text to copy it.", variant: "destructive" }));
+                }}
+              >
+                <Share2 className="h-3.5 w-3.5" /> Copy + Facebook
+              </button>
               <button
                 type="button"
                 className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-3 py-2 text-xs font-black text-white hover:bg-blue-400"

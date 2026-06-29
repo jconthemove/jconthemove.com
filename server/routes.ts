@@ -6037,7 +6037,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       options.push({
         key: "ad_creator",
         label: "Ad Creator",
-        href: "/crew/earnings",
+        href: "/crew/earnings#ad-builder",
         description: "Create tracked local posts.",
       });
     }
@@ -15457,6 +15457,19 @@ Thank you for your business!
 
       const snapshot = event.field_snapshot && typeof event.field_snapshot === "object" ? event.field_snapshot : {};
       const contact = snapshot.contact && typeof snapshot.contact === "object" ? snapshot.contact : {};
+      const attribution = snapshot.attribution && typeof snapshot.attribution === "object" && !Array.isArray(snapshot.attribution)
+        ? snapshot.attribution as Record<string, unknown>
+        : {};
+      const marketingTracking = safeMarketingTracking(attribution.marketingTracking);
+      const promoCode = typeof attribution.promoCode === "string" ? attribution.promoCode.trim().toUpperCase() : "";
+      const referralSlug = typeof attribution.referralSlug === "string" ? attribution.referralSlug.trim().toLowerCase() : "";
+      const marketingCampaignId =
+        typeof attribution.marketingCampaignId === "string" && attribution.marketingCampaignId.trim()
+          ? attribution.marketingCampaignId.trim()
+          : marketingTracking.jcCampaign || marketingTracking.utmContent || "";
+      const recoveredSource =
+        marketingTracking.utmSource ||
+        (marketingCampaignId ? "marketing_campaign" : "booking_funnel_recovery");
       const items = Array.isArray(snapshot.items) ? snapshot.items : [];
       const firstItem = items[0] || {};
       const nameParts = String(contact.name || "Recovered Visitor").trim().split(/\s+/);
@@ -15488,6 +15501,11 @@ Thank you for your business!
         firstItem.packageLabel ? `Package: ${firstItem.packageLabel}` : null,
         firstItem.crew ? `Crew: ${firstItem.crew}` : null,
         firstItem.hours ? `Hours: ${firstItem.hours}` : null,
+        recoveredSource ? `Source: ${recoveredSource}` : null,
+        promoCode ? `Promo code: ${promoCode}` : null,
+        referralSlug ? `Referral rep: ${referralSlug}` : null,
+        marketingCampaignId ? `Marketing campaign: ${marketingCampaignId}` : null,
+        marketingTracking.utmCampaign ? `UTM campaign: ${marketingTracking.utmCampaign}` : null,
         snapshot.marketplacePreview?.estimateLabel ? `Zone estimate: ${snapshot.marketplacePreview.estimateLabel}` : null,
         snapshot.continueReason ? `Last blocker: ${snapshot.continueReason}` : null,
       ].filter(Boolean).join("\n");
@@ -15502,7 +15520,9 @@ Thank you for your business!
         toAddress: null,
         moveDate: firstItem.requestedDate || null,
         details,
+        source: recoveredSource,
         status: "quote_requested",
+        promoCode: promoCode || null,
         createdByUserId: req.user?.id || null,
         truckConfig: firstItem.truckNeeded != null ? (firstItem.truckNeeded ? "company_truck" : "customer_truck") : null,
         crewSize: Number(firstItem.crew || 2),
@@ -15515,15 +15535,87 @@ Thank you for your business!
           recoveredFromFunnelEventId: event.id,
           visitorId: event.visitor_id,
           sessionId: event.session_id,
+          attribution: {
+            source: recoveredSource,
+            promoCode: promoCode || null,
+            referralSlug: referralSlug || null,
+            marketingCampaignId: marketingCampaignId || null,
+            marketingTracking,
+          },
           snapshot,
         },
         zoneSnapshot: snapshot.marketplacePreview ? { marketplaceQuotePreview: snapshot.marketplacePreview } : {},
       } as any);
 
+      if (promoCode || referralSlug || marketingCampaignId || Object.keys(marketingTracking).length > 0) {
+        try {
+          let repUserId: string | null = null;
+          let attributedPromoCode: string | null = promoCode || null;
+          let attributedReferralSlug: string | null = referralSlug || null;
+          if (promoCode || referralSlug) {
+            const [rep] = await db.select().from(marketingReps)
+              .where(promoCode
+                ? eq(marketingReps.promoCode, promoCode)
+                : eq(marketingReps.slug, referralSlug))
+              .limit(1);
+            if (rep) {
+              attributedPromoCode = rep.promoCode || attributedPromoCode;
+              attributedReferralSlug = rep.slug || attributedReferralSlug;
+              const [ownedPromo] = await db.select({ referralUserId: promoCodes.referralUserId })
+                .from(promoCodes)
+                .where(eq(promoCodes.code, rep.promoCode))
+                .limit(1);
+              if (ownedPromo?.referralUserId) {
+                repUserId = ownedPromo.referralUserId;
+              } else {
+                const [workerProfile] = await db.select({ userId: workerProfiles.userId })
+                  .from(workerProfiles)
+                  .where(eq(workerProfiles.promoCode, rep.promoCode))
+                  .limit(1);
+                repUserId = workerProfile?.userId || null;
+              }
+            }
+          }
+          await db.insert(quoteAttributions).values({
+            leadId: lead.id,
+            userId: repUserId,
+            attributionType: attributedPromoCode || attributedReferralSlug
+              ? "marketing_rep_funnel_recovery"
+              : "marketing_campaign_funnel_recovery",
+            promoCode: attributedPromoCode,
+            metadata: {
+              source: recoveredSource,
+              referralSlug: attributedReferralSlug,
+              marketingCampaignId: marketingCampaignId || null,
+              marketingTracking,
+              recoveredFromFunnelEventId: event.id,
+              visitorId: event.visitor_id || null,
+              sessionId: event.session_id || null,
+              funnelStep: event.step || null,
+            },
+          });
+        } catch (attrErr) {
+          console.error("[admin/booking-funnel/recover] marketing attribution failed:", attrErr instanceof Error ? attrErr.message : attrErr);
+        }
+      }
+
       await pool.query(
         `UPDATE booking_funnel_events SET lead_id = $1 WHERE id = $2`,
         [lead.id, event.id],
       );
+      await emitJobEvent("quote_requested", lead, {
+        actorId: req.user?.id || null,
+        source: "booking_funnel_recovery",
+        extra: {
+          displayOrderNumber: formatOrderNumber(lead.orderNumber),
+          recoveredFromFunnelEventId: event.id,
+          source: recoveredSource,
+          promoCode: promoCode || null,
+          referralSlug: referralSlug || null,
+          marketingCampaignId: marketingCampaignId || null,
+          marketingTracking,
+        },
+      });
       return res.json({ success: true, lead });
     } catch (err) {
       console.error("[admin/booking-funnel/recover] error:", err);
