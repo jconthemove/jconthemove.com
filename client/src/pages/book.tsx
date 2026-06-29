@@ -176,6 +176,14 @@ const SERVICE_CODE_ALIASES: Record<string, string> = {
   move: "moving",
   movers: "moving",
   residential: "moving",
+  uhaul: "moving",
+  "u-haul": "moving",
+  ubox: "moving",
+  "u-box": "moving",
+  pods: "moving",
+  pod: "moving",
+  load: "moving",
+  unload: "moving",
   junk: "junk_removal",
   junk_removal: "junk_removal",
   "junk-removal": "junk_removal",
@@ -214,6 +222,21 @@ const SERVICE_CODE_ALIASES: Record<string, string> = {
 function normalizeServiceCodeParam(value: string): string {
   const normalized = value.trim().toLowerCase();
   return SERVICE_CODE_ALIASES[normalized] ?? normalized.replace(/-/g, "_");
+}
+
+function serviceCodeFromAdFocus(value?: string): string {
+  const focus = String(value || "").toLowerCase();
+  if (!focus.trim()) return "";
+  if (/\b(junk|cleanout|trash|dump)\b/.test(focus)) return "junk_removal";
+  if (/\b(move|moving|mover|movers|load|unload|u-?haul|u-?box|ubox|pods?)\b/.test(focus)) return "moving";
+  if (/\b(delivery|deliver|pickup|pick-up|store pickup)\b/.test(focus)) return "delivery";
+  if (/\b(cleaning|cleanup|clean-up|maid)\b/.test(focus)) return "cleaning";
+  if (/\b(handyman|repair|assembly|assemble)\b/.test(focus)) return "handyman";
+  if (/\b(window|windows)\b/.test(focus)) return "window_cleaning";
+  if (/\b(snow|shovel|plow)\b/.test(focus)) return "snow_removal";
+  if (/\b(demo|demolition)\b/.test(focus)) return "demolition";
+  if (/\b(labor|helper|extra hands|last-minute)\b/.test(focus)) return "labor";
+  return "";
 }
 
 function formatAttributionSummary(attribution: Pick<BookingAttribution, "promoCode" | "referralSlug">) {
@@ -390,7 +413,9 @@ function QuickRequestForm({
   const serviceOptions = services.length > 0
     ? services.filter((svc) => !svc.isAddon).map((svc) => ({ code: svc.code, name: svc.name }))
     : fallbackServices;
-  const normalizedInitialServiceCode = normalizeServiceCodeParam(initialServiceCode || "");
+  const initialFromAdFocus = serviceCodeFromAdFocus(attribution.marketingTracking.jcFocus);
+  const normalizedInitialServiceCode = normalizeServiceCodeParam(initialServiceCode || initialFromAdFocus || "");
+  const serviceSuggestedFromAd = !initialServiceCode && !!initialFromAdFocus && serviceOptions.some((svc) => svc.code === normalizedInitialServiceCode);
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
@@ -585,6 +610,11 @@ function QuickRequestForm({
                 <option key={svc.code} value={svc.code}>{svc.name}</option>
               ))}
             </select>
+            {serviceSuggestedFromAd && (
+              <p className="mt-1 text-[11px] font-semibold text-blue-600 dark:text-blue-300">
+                Suggested from the ad you clicked.
+              </p>
+            )}
           </div>
         </div>
         <div>
@@ -762,6 +792,10 @@ export default function MultiServiceBookPage() {
     const single = sp.get("service");
     if (single) {
       codes.add(normalizeServiceCodeParam(single));
+    }
+    if (codes.size === 0) {
+      const inferredFromAd = serviceCodeFromAdFocus(sp.get("jc_focus") || sp.get("utm_campaign") || "");
+      if (inferredFromAd) codes.add(inferredFromAd);
     }
     const stepParam = sp.get("step");
     const jumpStep = stepParam && (STEPS as readonly string[]).includes(stepParam)
