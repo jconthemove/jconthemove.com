@@ -262,6 +262,8 @@ export default function CrewEarningsPage() {
       url.searchParams.set("utm_source", "crew_ad");
       url.searchParams.set("utm_medium", "facebook");
       url.searchParams.set("utm_campaign", `${adArea}-${adFocus}`.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""));
+      url.searchParams.set("jc_area", adArea);
+      url.searchParams.set("jc_focus", adFocus);
       return url.toString();
     } catch {
       return referralLink;

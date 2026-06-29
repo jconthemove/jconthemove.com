@@ -123,6 +123,8 @@ type MarketingTracking = {
   utmCampaign?: string;
   utmContent?: string;
   jcCampaign?: string;
+  jcArea?: string;
+  jcFocus?: string;
   fbclid?: string;
   referrer?: string;
 };
@@ -224,6 +226,15 @@ function formatAttributionSummary(attribution: Pick<BookingAttribution, "promoCo
     parts.push(`Rep page ${repName}`);
   }
   return parts.length > 0 ? `${parts.join(" - ")} attached` : "";
+}
+
+function formatAdHint(marketingTracking: MarketingTracking) {
+  const focus = marketingTracking.jcFocus?.trim();
+  const area = marketingTracking.jcArea?.trim();
+  if (focus && area) return `${focus} around ${area}`;
+  if (focus) return focus;
+  if (area) return `Help around ${area}`;
+  return "";
 }
 
 function zipFromAddress(value: string) {
@@ -397,6 +408,7 @@ function QuickRequestForm({
     form.phone.replace(/\D/g, "").length >= 7 &&
     form.serviceCode.trim().length > 0;
   const attributionSummary = formatAttributionSummary(attribution);
+  const adHint = formatAdHint(attribution.marketingTracking);
 
   const submitQuick = useMutation({
     mutationFn: async () => {
@@ -524,6 +536,11 @@ function QuickRequestForm({
           {attributionSummary && (
             <p className="mt-3 inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-black text-emerald-600 dark:text-emerald-300">
               {attributionSummary}
+            </p>
+          )}
+          {adHint && (
+            <p className="mt-2 inline-flex rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-xs font-black text-blue-600 dark:text-blue-300">
+              From ad: {adHint}
             </p>
           )}
         </div>
@@ -779,6 +796,8 @@ export default function MultiServiceBookPage() {
       utmCampaign: (sp.get("utm_campaign") || "").trim(),
       utmContent: (sp.get("utm_content") || "").trim(),
       jcCampaign: (sp.get("jc_campaign") || "").trim(),
+      jcArea: (sp.get("jc_area") || "").trim(),
+      jcFocus: (sp.get("jc_focus") || "").trim(),
       fbclid: (sp.get("fbclid") || "").trim(),
       referrer: document.referrer || "",
     };
@@ -790,6 +809,7 @@ export default function MultiServiceBookPage() {
     };
   }, []);
   const attributionSummary = formatAttributionSummary(attribution);
+  const adHint = formatAdHint(attribution.marketingTracking);
 
   const [step, setStep] = useState<Step>("services");
   const [items, setItems] = useState<SelectedItem[]>([]);
@@ -1639,6 +1659,11 @@ export default function MultiServiceBookPage() {
             {attributionSummary && (
               <p className="mt-3 inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-black text-emerald-600 dark:text-emerald-300">
                 {attributionSummary}
+              </p>
+            )}
+            {adHint && (
+              <p className="mt-2 inline-flex rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-xs font-black text-blue-600 dark:text-blue-300">
+                From ad: {adHint}
               </p>
             )}
           </div>

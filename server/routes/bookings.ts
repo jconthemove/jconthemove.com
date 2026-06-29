@@ -81,7 +81,7 @@ type PersistedBookingInput = BookingPricingItemInput & { serviceLabel: string };
 function safeMarketingTracking(raw: unknown) {
   const input = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
   const picked: Record<string, string> = {};
-  for (const key of ["utmSource", "utmMedium", "utmCampaign", "utmContent", "jcCampaign", "fbclid", "referrer"]) {
+  for (const key of ["utmSource", "utmMedium", "utmCampaign", "utmContent", "jcCampaign", "jcArea", "jcFocus", "fbclid", "referrer"]) {
     const value = input[key];
     if (typeof value === "string" && value.trim()) picked[key] = value.trim().slice(0, 500);
   }
@@ -188,6 +188,8 @@ function buildLeadDetails(args: {
     args.marketingCampaignId ? `campaign: ${args.marketingCampaignId}` : null,
     typeof tracking.utmSource === "string" && tracking.utmSource ? `utm source: ${tracking.utmSource}` : null,
     typeof tracking.utmCampaign === "string" && tracking.utmCampaign ? `utm campaign: ${tracking.utmCampaign}` : null,
+    typeof tracking.jcArea === "string" && tracking.jcArea ? `ad area: ${tracking.jcArea}` : null,
+    typeof tracking.jcFocus === "string" && tracking.jcFocus ? `ad focus: ${tracking.jcFocus}` : null,
   ].filter(Boolean);
   return [
     `[BOOKING ${args.bookingReference}] Linked booking ${args.bookingId}`,

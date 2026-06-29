@@ -70,7 +70,7 @@ const CHATBOT_JUNK_TRAVEL_CHARGE_PER_TIER = 50;
 function safeMarketingTracking(raw: unknown) {
   const input = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
   const picked: Record<string, string> = {};
-  for (const key of ["utmSource", "utmMedium", "utmCampaign", "utmContent", "jcCampaign", "fbclid", "referrer"]) {
+  for (const key of ["utmSource", "utmMedium", "utmCampaign", "utmContent", "jcCampaign", "jcArea", "jcFocus", "fbclid", "referrer"]) {
     const value = input[key];
     if (typeof value === "string" && value.trim()) picked[key] = value.trim().slice(0, 500);
   }
@@ -4789,6 +4789,8 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
           referralSlug ? `Rep page: ${referralSlug}` : "",
           marketingCampaignId ? `Marketing campaign: ${marketingCampaignId}` : "",
           marketingTracking.utmCampaign ? `UTM campaign: ${marketingTracking.utmCampaign}` : "",
+          marketingTracking.jcArea ? `Ad area: ${marketingTracking.jcArea}` : "",
+          marketingTracking.jcFocus ? `Ad focus: ${marketingTracking.jcFocus}` : "",
           parsed.mediaLink ? `Photo/video/album link: ${parsed.mediaLink}` : "",
           parsed.notes ? `Notes: ${parsed.notes}` : "",
           photoNames.length ? `Photo files mentioned: ${photoNames.join(", ")}` : "",
@@ -5524,6 +5526,8 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
       if (!url.searchParams.get("utm_source")) url.searchParams.set("utm_source", "crew_ad");
       if (!url.searchParams.get("utm_medium")) url.searchParams.set("utm_medium", "facebook");
       if (!url.searchParams.get("utm_campaign")) url.searchParams.set("utm_campaign", campaignSlug(area, focus));
+      if (!url.searchParams.get("jc_area")) url.searchParams.set("jc_area", area);
+      if (!url.searchParams.get("jc_focus")) url.searchParams.set("jc_focus", focus);
       url.searchParams.set("utm_content", campaignId);
       url.searchParams.set("jc_campaign", campaignId);
       return url.toString();
@@ -15506,6 +15510,8 @@ Thank you for your business!
         referralSlug ? `Referral rep: ${referralSlug}` : null,
         marketingCampaignId ? `Marketing campaign: ${marketingCampaignId}` : null,
         marketingTracking.utmCampaign ? `UTM campaign: ${marketingTracking.utmCampaign}` : null,
+        marketingTracking.jcArea ? `Ad area: ${marketingTracking.jcArea}` : null,
+        marketingTracking.jcFocus ? `Ad focus: ${marketingTracking.jcFocus}` : null,
         snapshot.marketplacePreview?.estimateLabel ? `Zone estimate: ${snapshot.marketplacePreview.estimateLabel}` : null,
         snapshot.continueReason ? `Last blocker: ${snapshot.continueReason}` : null,
       ].filter(Boolean).join("\n");
