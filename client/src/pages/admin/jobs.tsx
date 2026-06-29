@@ -34,6 +34,7 @@ import {
 import { PaymentStatusPill } from "@/components/PaymentStatusPill";
 import JobLifecycleRail from "@/components/JobLifecycleRail";
 import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
+import ProcessFlowCard, { type ProcessFlowStep, type ProcessStepState } from "@/components/ProcessFlowCard";
 import { extractCustomerMediaLink } from "@/lib/lead-details";
 
 const SERVICE_ICONS: Record<string, string> = {
@@ -243,6 +244,58 @@ function leadMarketplaceShapeId(lead: Lead): string | null {
     ? lead.quoteSnapshot
     : null;
   return snapshot?.marketplaceShapeId || snapshot?.marketplaceShape?.id || null;
+}
+
+function numericPrice(value: string | number | null | undefined): number {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function buildAdminProcessSteps({
+  contactReady,
+  priceReady,
+  scheduleReady,
+  crewReady,
+  paymentReady,
+  completeReady,
+}: {
+  contactReady: boolean;
+  priceReady: boolean;
+  scheduleReady: boolean;
+  crewReady: boolean;
+  paymentReady: boolean;
+  completeReady: boolean;
+}): ProcessFlowStep[] {
+  const progressReady = priceReady && scheduleReady && crewReady;
+  const progressState: ProcessStepState = completeReady || progressReady ? "done" : contactReady ? "active" : "waiting";
+  const finishState: ProcessStepState = completeReady ? "done" : progressReady || paymentReady ? "active" : "waiting";
+
+  return [
+    {
+      phase: "start",
+      label: "Capture request",
+      detail: "Confirm contact, address, date clues, photos, source, and notes so the card is real work.",
+      state: contactReady ? "done" : "active",
+      href: "#admin-job-customer",
+      actionLabel: "Review info",
+    },
+    {
+      phase: "progress",
+      label: "Price and crew",
+      detail: "Set the estimate or final price, schedule the date/window, and assign the right crew.",
+      state: progressState,
+      href: "#admin-job-quote",
+      actionLabel: "Set quote",
+    },
+    {
+      phase: "finish",
+      label: "Collect and close",
+      detail: "Send payment, confirm deposit or cash plan, complete the job, then trigger rewards and review.",
+      state: finishState,
+      href: "#admin-job-payments",
+      actionLabel: completeReady ? "Closed" : "Collect",
+    },
+  ];
 }
 
 function AdminJobCard({ lead, onClick, employees }: {
@@ -665,6 +718,27 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
   const customerMediaLink = extractCustomerMediaLink(lead.details);
   const marketplaceShape = leadMarketplaceShape(lead);
   const marketplaceShapeId = leadMarketplaceShapeId(lead);
+  const priceReady = Math.max(numericPrice(displayPrice), numericPrice(displayBasePrice)) > 0;
+  const scheduleReady = Boolean(effectiveDate || lead.arrivalWindow);
+  const contactReady = Boolean((lead.phone || lead.email) && (lead.fromAddress || lead.details || photos.length > 0));
+  const crewNeeded = Math.max(1, Number(lead.crewSize || 2));
+  const crewReady = crewMembersArr.length >= crewNeeded;
+  const statusKey = String(lead.status || "").toLowerCase();
+  const completeReady = ["completed", "customer_approved", "payout_calculated", "payout_sent", "closed", "paid"].includes(statusKey);
+  const invoiceReady = Boolean(
+    lead.squarePaymentUrl
+    || panel?.invoices?.some(inv => inv.public_url || inv.sent_at || inv.paid_at || inv.status === "PAID"),
+  );
+  const btcReady = Boolean(panel?.btcPayments?.some(btc => btc.verified_at || btc.status === "verified" || btc.status === "completed" || btc.status === "pending"));
+  const paymentReady = invoiceReady || btcReady || Boolean(lead.depositPaid);
+  const adminProcessSteps = buildAdminProcessSteps({
+    contactReady,
+    priceReady,
+    scheduleReady,
+    crewReady,
+    paymentReady,
+    completeReady,
+  });
 
   return (
     <Sheet open={open} onOpenChange={v => !v && onClose()}>
@@ -711,6 +785,11 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
 
         <div className="pt-4 space-y-5 pb-8">
           <JobLifecycleRail lead={lead} />
+          <ProcessFlowCard
+            title="Run this card"
+            description="One operating path for every request: capture the customer need, progress price and crew, then finish payment, completion, rewards, and review."
+            steps={adminProcessSteps}
+          />
           <MarketplaceShapeContext
             shapeId={marketplaceShapeId}
             serviceCode={lead.serviceType}
@@ -719,7 +798,7 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
           />
 
           {/* Customer Info — POS Receipt Style */}
-          <div className="bg-slate-800/60 rounded-xl p-4">
+          <div id="admin-job-customer" className="scroll-mt-4 bg-slate-800/60 rounded-xl p-4">
             <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mb-3 flex items-center gap-1.5">
               <Receipt className="h-3 w-3" /> Customer
             </p>
@@ -771,7 +850,7 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
           </div>
 
           {/* Quote Block — POS style */}
-          <div className="bg-slate-800/60 rounded-xl p-4">
+          <div id="admin-job-quote" className="scroll-mt-4 bg-slate-800/60 rounded-xl p-4">
             <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mb-3 flex items-center gap-1.5">
               <DollarSign className="h-3 w-3" /> Quote
             </p>
@@ -879,7 +958,7 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
           </div>
 
           {/* Payments Block — Task #182 */}
-          <div className="bg-slate-800/60 rounded-xl p-4">
+          <div id="admin-job-payments" className="scroll-mt-4 bg-slate-800/60 rounded-xl p-4">
             <div className="flex items-center justify-between mb-3">
               <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold flex items-center gap-1.5">
                 <DollarSign className="h-3 w-3" /> Payments
@@ -1074,7 +1153,7 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
           </div>
 
           {/* Crew Block */}
-          <div className="bg-slate-800/60 rounded-xl p-4">
+          <div id="admin-job-crew" className="scroll-mt-4 bg-slate-800/60 rounded-xl p-4">
             <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold mb-3 flex items-center gap-1.5">
               <Users className="h-3 w-3" /> Crew ({crewMembersArr.length}/{lead.crewSize || 2})
             </p>
