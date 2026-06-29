@@ -14,7 +14,12 @@ import {
   Users,
   WalletCards,
 } from "lucide-react";
-import { MARKETPLACE_REQUEST_SHAPES, MARKETPLACE_SIMPLE_SIDES } from "@shared/marketplaceShapes";
+import {
+  MARKETPLACE_FUNCTIONAL_IDEAS,
+  MARKETPLACE_REQUEST_SHAPES,
+  MARKETPLACE_SIMPLE_SIDES,
+  type MarketplaceFunctionalIdeaStatus,
+} from "@shared/marketplaceShapes";
 import AuthorityTasksCard from "@/components/AuthorityTasksCard";
 
 const steps = [
@@ -106,6 +111,16 @@ const blueprint = [
   },
 ];
 
+const statusClasses: Record<MarketplaceFunctionalIdeaStatus, string> = {
+  live: "border-emerald-400/30 bg-emerald-500/10 text-emerald-200",
+  in_progress: "border-blue-400/30 bg-blue-500/10 text-blue-200",
+  next: "border-orange-400/30 bg-orange-500/10 text-orange-200",
+};
+
+function statusLabel(status: MarketplaceFunctionalIdeaStatus) {
+  return status.replace(/_/g, " ");
+}
+
 export default function AdminMarketplacePlaybookPage() {
   return (
     <div className="min-h-screen">
@@ -164,6 +179,65 @@ export default function AdminMarketplacePlaybookPage() {
                   <p className="text-slate-400"><span className="font-bold text-slate-200">References:</span> {sources}</p>
                   <p className="text-slate-400"><span className="font-bold text-slate-200">Keep:</span> {keep}</p>
                   <p className="text-slate-300"><span className="font-bold text-emerald-300">JC move:</span> {build}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-5 rounded-lg border border-slate-800 bg-slate-900/70 p-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-emerald-300" />
+                <h2 className="font-black text-white">Functional Ideas Matrix</h2>
+              </div>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+                These are the practical pieces JC should borrow and simplify. Each idea names the customer reality,
+                worker reality, company reality, and where it belongs in the product.
+              </p>
+            </div>
+            <span className="rounded-full border border-slate-700 bg-slate-950/60 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-300">
+              {MARKETPLACE_FUNCTIONAL_IDEAS.length} ideas
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3">
+            {MARKETPLACE_FUNCTIONAL_IDEAS.map((idea) => (
+              <div key={idea.reference} className="rounded-md border border-slate-800 bg-slate-950/60 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-black text-white">{idea.reference}</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-400">{idea.pattern}</p>
+                  </div>
+                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${statusClasses[idea.status]}`}>
+                    {statusLabel(idea.status)}
+                  </span>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-slate-300">
+                  <span className="font-bold text-emerald-300">JC move:</span> {idea.jcMove}
+                </p>
+                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                  {[
+                    ["Customer", idea.customerReality],
+                    ["Worker", idea.workerReality],
+                    ["Company", idea.companyReality],
+                  ].map(([label, detail]) => (
+                    <div key={label} className="rounded-md border border-slate-800 bg-slate-900/50 p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{label}</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-300">{detail}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-blue-400/20 bg-blue-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-blue-200">
+                    {idea.surface}
+                  </span>
+                  {idea.shapeIds.map((shapeId) => (
+                    <span key={shapeId} className="rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                      {shapeId.replace(/_/g, " ")}
+                    </span>
+                  ))}
                 </div>
               </div>
             ))}
