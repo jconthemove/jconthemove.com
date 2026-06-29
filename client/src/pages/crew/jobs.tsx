@@ -22,6 +22,7 @@ import { PaymentStatusPill } from "@/components/PaymentStatusPill";
 import AuthorityTasksCard from "@/components/AuthorityTasksCard";
 import JobLifecycleRail from "@/components/JobLifecycleRail";
 import MarketplaceShapeBadge from "@/components/MarketplaceShapeBadge";
+import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
 
 const SERVICE_ICONS: Record<string, string> = {
   residential: "🚛", commercial: "🏢", junk: "🗑️", snow: "❄️",
@@ -727,6 +728,11 @@ function JobDetailSheet({
 
         <div className="pt-4 space-y-5">
           <JobLifecycleRail lead={lead} />
+          <MarketplaceShapeContext
+            serviceCode={lead.serviceType}
+            audience="worker"
+            maxIdeas={2}
+          />
 
           {/* Date & Time */}
           <div className="grid grid-cols-2 gap-3">

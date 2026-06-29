@@ -33,6 +33,7 @@ import {
 } from "@shared/marketplaceShapes";
 import { PaymentStatusPill } from "@/components/PaymentStatusPill";
 import JobLifecycleRail from "@/components/JobLifecycleRail";
+import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
 import { extractCustomerMediaLink } from "@/lib/lead-details";
 
 const SERVICE_ICONS: Record<string, string> = {
@@ -180,6 +181,13 @@ function leadMarketplaceShape(lead: Lead) {
 
   const firstItem = Array.isArray(snapshot?.requestedItems) ? snapshot?.requestedItems[0] : undefined;
   return getMarketplaceShapeForServiceCode(firstItem?.serviceCode || firstItem?.serviceLabel || lead.serviceType);
+}
+
+function leadMarketplaceShapeId(lead: Lead): string | null {
+  const snapshot = lead.quoteSnapshot && typeof lead.quoteSnapshot === "object" && !Array.isArray(lead.quoteSnapshot)
+    ? lead.quoteSnapshot
+    : null;
+  return snapshot?.marketplaceShapeId || snapshot?.marketplaceShape?.id || null;
 }
 
 function AdminJobCard({ lead, onClick, employees }: {
@@ -585,6 +593,7 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
   const attribution = lead.attribution;
   const customerMediaLink = extractCustomerMediaLink(lead.details);
   const marketplaceShape = leadMarketplaceShape(lead);
+  const marketplaceShapeId = leadMarketplaceShapeId(lead);
 
   return (
     <Sheet open={open} onOpenChange={v => !v && onClose()}>
@@ -631,6 +640,12 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
 
         <div className="pt-4 space-y-5 pb-8">
           <JobLifecycleRail lead={lead} />
+          <MarketplaceShapeContext
+            shapeId={marketplaceShapeId}
+            serviceCode={lead.serviceType}
+            audience="company"
+            maxIdeas={3}
+          />
 
           {/* Customer Info — POS Receipt Style */}
           <div className="bg-slate-800/60 rounded-xl p-4">
