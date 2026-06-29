@@ -2102,11 +2102,24 @@ router.get("/admin/booking-analytics", isAuthenticated, async (req: any, res: Re
           .from(bookingServiceItems)
           .where(inArray(bookingServiceItems.bookingId, ids))
       : [];
+    const attributions = ids.length
+      ? await db
+          .select()
+          .from(quoteAttributions)
+          .where(inArray(quoteAttributions.bookingId, ids))
+      : [];
     const itemsByBooking = new Map<string, BookingServiceItem[]>();
     for (const it of items) {
       const arr = itemsByBooking.get(it.bookingId) ?? [];
       arr.push(it);
       itemsByBooking.set(it.bookingId, arr);
+    }
+    const attributionsByBooking = new Map<string, typeof quoteAttributions.$inferSelect[]>();
+    for (const attr of attributions) {
+      if (!attr.bookingId) continue;
+      const arr = attributionsByBooking.get(attr.bookingId) ?? [];
+      arr.push(attr);
+      attributionsByBooking.set(attr.bookingId, arr);
     }
 
     let singleCount = 0;
@@ -2120,12 +2133,57 @@ router.get("/admin/booking-analytics", isAuthenticated, async (req: any, res: Re
 
     // top combinations: keyed by sorted-tuple of child serviceCodes.
     const combos = new Map<string, { combo: string[]; count: number; revenue: number }>();
+    const sourceStats = new Map<string, {
+      source: string;
+      count: number;
+      revenue: number;
+      bundleCount: number;
+      promoCodes: Set<string>;
+      campaigns: Set<string>;
+    }>();
+    const campaignStats = new Map<string, {
+      campaign: string;
+      source: string;
+      count: number;
+      revenue: number;
+      promoCodes: Set<string>;
+    }>();
+
+    const getAttrMeta = (attr: typeof quoteAttributions.$inferSelect): Record<string, unknown> => (
+      attr.metadata && typeof attr.metadata === "object" && !Array.isArray(attr.metadata)
+        ? attr.metadata as Record<string, unknown>
+        : {}
+    );
+    const firstAttrValue = (
+      attrs: typeof quoteAttributions.$inferSelect[],
+      picker: (attr: typeof quoteAttributions.$inferSelect, meta: Record<string, unknown>) => unknown,
+    ): string | null => {
+      const marketingFirst = [...attrs].sort((a, b) => {
+        const aMarketing = a.attributionType.includes("marketing") ? 0 : 1;
+        const bMarketing = b.attributionType.includes("marketing") ? 0 : 1;
+        return aMarketing - bMarketing;
+      });
+      for (const attr of marketingFirst) {
+        const value = picker(attr, getAttrMeta(attr));
+        if (typeof value === "string" && value.trim()) return value.trim();
+      }
+      return null;
+    };
 
     for (const p of parents) {
       const children = itemsByBooking.get(p.id) ?? [];
       if (children.length === 0) continue;
       const final = parseFloat(p.finalTotal);
       const isBundle = children.length > 1 || !!p.bundleAppliedCode;
+      const attrs = attributionsByBooking.get(p.id) ?? [];
+      const source = firstAttrValue(attrs, (_attr, meta) => meta.source) || p.source || "direct";
+      const promoCode = firstAttrValue(attrs, (attr) => attr.promoCode);
+      const campaign = firstAttrValue(attrs, (_attr, meta) => {
+        const tracking = meta.marketingTracking && typeof meta.marketingTracking === "object" && !Array.isArray(meta.marketingTracking)
+          ? meta.marketingTracking as Record<string, unknown>
+          : {};
+        return meta.marketingCampaignId || tracking.utmCampaign || tracking.utmContent;
+      });
 
       if (isBundle) {
         bundleCount += 1;
@@ -2149,6 +2207,35 @@ router.get("/admin/booking-analytics", isAuthenticated, async (req: any, res: Re
         slot2.revenue += final;
         combos.set(key, slot2);
       }
+
+      const sourceSlot = sourceStats.get(source) ?? {
+        source,
+        count: 0,
+        revenue: 0,
+        bundleCount: 0,
+        promoCodes: new Set<string>(),
+        campaigns: new Set<string>(),
+      };
+      sourceSlot.count += 1;
+      sourceSlot.revenue += final;
+      if (isBundle) sourceSlot.bundleCount += 1;
+      if (promoCode) sourceSlot.promoCodes.add(promoCode);
+      if (campaign) sourceSlot.campaigns.add(campaign);
+      sourceStats.set(source, sourceSlot);
+
+      if (campaign) {
+        const campaignSlot = campaignStats.get(campaign) ?? {
+          campaign,
+          source,
+          count: 0,
+          revenue: 0,
+          promoCodes: new Set<string>(),
+        };
+        campaignSlot.count += 1;
+        campaignSlot.revenue += final;
+        if (promoCode) campaignSlot.promoCodes.add(promoCode);
+        campaignStats.set(campaign, campaignSlot);
+      }
     }
 
     const attachRatePerPrimary = Array.from(attach.entries())
@@ -2164,6 +2251,29 @@ router.get("/admin/booking-analytics", isAuthenticated, async (req: any, res: Re
       .sort((a, b) => b.count - a.count)
       .slice(0, 5)
       .map((c) => ({ ...c, revenue: +c.revenue.toFixed(2) }));
+    const sourceBreakdown = Array.from(sourceStats.values())
+      .sort((a, b) => b.count - a.count || b.revenue - a.revenue)
+      .map((row) => ({
+        source: row.source,
+        count: row.count,
+        revenue: +row.revenue.toFixed(2),
+        aov: row.count > 0 ? +(row.revenue / row.count).toFixed(2) : 0,
+        bundleCount: row.bundleCount,
+        bundleRate: row.count > 0 ? +(row.bundleCount / row.count).toFixed(4) : 0,
+        promoCodes: Array.from(row.promoCodes).sort(),
+        campaigns: Array.from(row.campaigns).sort(),
+      }));
+    const campaignBreakdown = Array.from(campaignStats.values())
+      .sort((a, b) => b.count - a.count || b.revenue - a.revenue)
+      .slice(0, 10)
+      .map((row) => ({
+        campaign: row.campaign,
+        source: row.source,
+        count: row.count,
+        revenue: +row.revenue.toFixed(2),
+        aov: row.count > 0 ? +(row.revenue / row.count).toFixed(2) : 0,
+        promoCodes: Array.from(row.promoCodes).sort(),
+      }));
 
     return res.json({
       range: {
@@ -2182,6 +2292,8 @@ router.get("/admin/booking-analytics", isAuthenticated, async (req: any, res: Re
       },
       attachRatePerPrimary,
       topCombinations,
+      sourceBreakdown,
+      campaignBreakdown,
     });
   } catch (err) {
     console.error("[admin/booking-analytics] error:", err);

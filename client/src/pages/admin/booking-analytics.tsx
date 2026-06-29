@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, Package, Layers } from "lucide-react";
+import { Megaphone, Tags, TrendingUp, Package, Layers } from "lucide-react";
 
 // ── types ─────────────────────────────────────────────────────────────────
 interface BookingAnalyticsResponse {
@@ -19,10 +19,29 @@ interface BookingAnalyticsResponse {
     attachRate: number;
   }[];
   topCombinations: { combo: string[]; count: number; revenue: number }[];
+  sourceBreakdown: {
+    source: string;
+    count: number;
+    revenue: number;
+    aov: number;
+    bundleCount: number;
+    bundleRate: number;
+    promoCodes: string[];
+    campaigns: string[];
+  }[];
+  campaignBreakdown: {
+    campaign: string;
+    source: string;
+    count: number;
+    revenue: number;
+    aov: number;
+    promoCodes: string[];
+  }[];
 }
 
 const fmtMoney = (n: number) => `$${n.toFixed(2)}`;
 const fmtPct = (n: number) => `${(n * 100).toFixed(1)}%`;
+const fmtSource = (source: string) => source.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 
 // ── Booking Analytics page ────────────────────────────────────────────────
 export default function AdminBookingAnalyticsPage() {
@@ -186,6 +205,88 @@ export default function AdminBookingAnalyticsPage() {
             })()}
         </CardContent>
       </Card>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <Card data-testid="card-source-performance">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Megaphone className="h-4 w-4" /> Source performance
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-40 w-full" />
+            ) : (data?.sourceBreakdown.length ?? 0) === 0 ? (
+              <p className="text-sm text-muted-foreground">No attributed bookings in range.</p>
+            ) : (
+              <div className="space-y-3">
+                {data!.sourceBreakdown.map((row) => (
+                  <div
+                    key={row.source}
+                    className="rounded-md border p-3 text-sm"
+                    data-testid={`source-row-${row.source}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-semibold">{fmtSource(row.source)}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {row.count} booking{row.count === 1 ? "" : "s"} · {fmtMoney(row.revenue)} · AOV {fmtMoney(row.aov)}
+                        </div>
+                      </div>
+                      <Badge variant="secondary">{fmtPct(row.bundleRate)} bundle</Badge>
+                    </div>
+                    {(row.promoCodes.length > 0 || row.campaigns.length > 0) && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {row.promoCodes.slice(0, 4).map((code) => (
+                          <Badge key={code} variant="outline" className="font-mono">Promo {code}</Badge>
+                        ))}
+                        {row.campaigns.slice(0, 4).map((campaign) => (
+                          <Badge key={campaign} variant="outline" className="font-mono">Campaign {campaign}</Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-campaign-performance">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Tags className="h-4 w-4" /> Campaign performance
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-40 w-full" />
+            ) : (data?.campaignBreakdown.length ?? 0) === 0 ? (
+              <p className="text-sm text-muted-foreground">No campaign-tagged bookings in range.</p>
+            ) : (
+              <div className="space-y-2">
+                {data!.campaignBreakdown.map((row) => (
+                  <div
+                    key={row.campaign}
+                    className="flex flex-wrap items-center justify-between gap-2 border-b last:border-b-0 py-2 text-sm"
+                    data-testid={`campaign-row-${row.campaign}`}
+                  >
+                    <div>
+                      <div className="font-mono text-xs font-semibold">{row.campaign}</div>
+                      <div className="text-xs text-muted-foreground">{fmtSource(row.source)}</div>
+                    </div>
+                    <div className="text-muted-foreground">{row.count} booking{row.count === 1 ? "" : "s"}</div>
+                    <div className="font-semibold">{fmtMoney(row.revenue)}</div>
+                    {row.promoCodes.length > 0 && (
+                      <Badge variant="outline" className="font-mono">{row.promoCodes[0]}</Badge>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <Card data-testid="card-attach-rate">
         <CardHeader>
