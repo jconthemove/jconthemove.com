@@ -26,6 +26,7 @@ import { LevelBadge } from "@/components/LevelBadge";
 import { WorkerBadge } from "@/components/WorkerBadge";
 import { ConfettiBurst } from "@/components/ConfettiBurst";
 import { getWorkerLevel, type LoyaltyTierKey } from "@/lib/loyalty";
+import ProcessFlowCard, { type ProcessFlowStep } from "@/components/ProcessFlowCard";
 
 const MONTH_NAMES_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DAY_NAMES_SHORT = ["Su","Mo","Tu","We","Th","Fr","Sa"];
@@ -851,6 +852,37 @@ export default function CrewTodayPage() {
       : primaryActiveJob.ds === "en_route" ? { label: "I've Arrived", next: "on_site" }
       : { label: "Start — En Route", next: "en_route" })
     : null;
+  const completedToday = completedLeads.some((lead) => {
+    const dateStr = lead.completedAt || lead.confirmedDate || lead.moveDate || lead.createdAt;
+    if (!dateStr) return false;
+    return new Date(dateStr as string).toDateString() === todayStr;
+  });
+  const hasActiveWork = myAssignments.length > 0 || todayJobs.length > 0;
+  const hasOpenWork = visibleUpcomingBoardJobs.length > 0;
+  const crewProcessSteps: ProcessFlowStep[] = [
+    {
+      phase: "start",
+      label: "Create demand",
+      detail: "Share a tracked ad, add a customer lead, or watch the board for new cards.",
+      state: hasOpenWork || hasActiveWork ? "done" : "active",
+      href: "/crew/marketing",
+      actionLabel: "Make an ad",
+    },
+    {
+      phase: "progress",
+      label: "Work the card",
+      detail: "Quote, accept, assign, start en route, and keep the job status moving.",
+      state: hasActiveWork ? "done" : hasOpenWork ? "active" : "waiting",
+      href: "/crew/jobs",
+      actionLabel: "Open jobs",
+    },
+    {
+      phase: "finish",
+      label: "Close the loop",
+      detail: "Mark complete so payment, cash payout, JCMOVES, and reviews can happen once.",
+      state: completedToday ? "done" : hasActiveWork ? "active" : "waiting",
+    },
+  ];
 
   return (
     <div className="max-w-2xl mx-auto px-4 pt-4 pb-24 md:pb-4 space-y-3">
@@ -967,6 +999,12 @@ export default function CrewTodayPage() {
 
       {/* Tier & balance status — shows worker level for crew members */}
       <UserStatusBar variant="dark" jobCount={allTimeJobCounts[String(user?.id)] ?? 0} />
+
+      <ProcessFlowCard
+        title="Today's work loop"
+        description="Use the same simple path for marketing, quotes, jobs, and payouts: start the opportunity, progress the card, finish the closeout."
+        steps={crewProcessSteps}
+      />
 
       {/* Worker-side job completion celebration overlay */}
       {workerCelebration && (

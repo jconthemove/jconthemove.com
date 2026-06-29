@@ -13,9 +13,10 @@ import {
   Dumbbell, Truck, KeyRound, Wrench, Copy, Image as ImageIcon, Sparkles, Upload
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useState, useEffect, useMemo } from "react";
 import { notificationService } from "@/lib/notifications";
+import ProcessFlowCard, { type ProcessFlowStep } from "@/components/ProcessFlowCard";
 
 interface MiningStatus {
   currentSession: { startedAt: string; userId: string } | null;
@@ -239,9 +240,11 @@ function compressMarketingPhoto(file: File): Promise<string> {
   });
 }
 
-export default function CrewEarningsPage() {
+export default function CrewEarningsPage({ marketingOnly = false }: { marketingOnly?: boolean } = {}) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [location] = useLocation();
+  const marketingMode = marketingOnly || location.startsWith("/crew/marketing");
   const [animatedTokens, setAnimatedTokens] = useState(0);
   const [adArea, setAdArea] = useState("Ironwood / Northwoods");
   const [adFocus, setAdFocus] = useState("Moving help");
@@ -420,13 +423,47 @@ export default function CrewEarningsPage() {
     attributedCards: 0,
     errors: 0,
   };
+  const marketingFlowSteps: ProcessFlowStep[] = [
+    {
+      phase: "start",
+      label: "Create the ad",
+      detail: "Pick an area, choose the job focus, add a real photo or short note, then generate the post.",
+      state: adDraft ? "done" : "active",
+      href: "#ad-builder",
+      actionLabel: "Open builder",
+    },
+    {
+      phase: "progress",
+      label: "Share and reply",
+      detail: "Post to Facebook or local groups, then copy the fast follow-up when somebody comments or messages.",
+      state: adDraft ? (myAdSummary.funnelEvents > 0 ? "done" : "active") : "waiting",
+    },
+    {
+      phase: "finish",
+      label: "Turn clicks into cards",
+      detail: "Tracked links feed the booking funnel, request cards, campaign stats, and JCMOVES marketing credit.",
+      state: myAdSummary.attributedCards > 0 ? "done" : myAdSummary.funnelEvents > 0 ? "active" : "waiting",
+    },
+  ];
 
   return (
     <div className="max-w-2xl mx-auto px-4 pt-6 space-y-5">
       <div>
-        <h1 className="text-2xl font-black text-white">Earnings</h1>
-        <p className="text-slate-400 text-sm">Your pay visibility, JCMOVES balance, and referral tools</p>
+        <h1 className="text-2xl font-black text-white">{marketingMode ? "Marketing" : "Earnings"}</h1>
+        <p className="text-slate-400 text-sm">
+          {marketingMode
+            ? "Create tracked local ads, share them, and turn traffic into job cards"
+            : "Your pay visibility, JCMOVES balance, and referral tools"}
+        </p>
       </div>
+
+      {marketingMode && (
+        <ProcessFlowCard
+          title="Create, post, recover"
+          description="A simple loop for any local opportunity: start with a useful post, progress by replying fast, finish by turning attention into a booked job card."
+          steps={marketingFlowSteps}
+        />
+      )}
 
       <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-4">
         <div className="flex items-start justify-between gap-3">
@@ -825,6 +862,22 @@ export default function CrewEarningsPage() {
         )}
       </div>
 
+      {marketingMode && (
+        <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-4">
+          <p className="text-xs font-black uppercase tracking-widest text-emerald-300">Simple rule</p>
+          <p className="mt-1 text-sm leading-relaxed text-slate-200">
+            Start with one useful post, progress by answering every comment or message, and finish by getting the person into the booking link so the job becomes a trackable card.
+          </p>
+          <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px] font-bold text-slate-300">
+            <div className="rounded-lg border border-slate-700 bg-slate-950/45 p-2">Post</div>
+            <div className="rounded-lg border border-slate-700 bg-slate-950/45 p-2">Reply</div>
+            <div className="rounded-lg border border-slate-700 bg-slate-950/45 p-2">Book</div>
+          </div>
+        </div>
+      )}
+
+      {!marketingMode && (
+        <>
       {/* Crew Capabilities (read-only) */}
       {userCapabilities.length > 0 && (
         <div className="rounded-2xl bg-slate-800/40 border border-slate-700/30 p-4">
@@ -1121,6 +1174,8 @@ export default function CrewEarningsPage() {
       </div>
 
       <div className="h-2" />
+        </>
+      )}
     </div>
   );
 }

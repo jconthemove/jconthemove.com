@@ -1,6 +1,6 @@
 import { useLocation } from "wouter";
 import { useState, type ReactNode } from "react";
-import { CalendarDays, Briefcase, Calendar, Coins, Star, Settings2, PlusCircle, ChevronRight } from "lucide-react";
+import { CalendarDays, Briefcase, Calendar, Coins, Star, Settings2, PlusCircle, ChevronRight, Megaphone } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useCrewGpsBeacon } from "@/hooks/useCrewGpsBeacon";
 import {
@@ -14,7 +14,8 @@ const optionLinks = [
   { label: "Job Board", description: "Open jobs and assignment details", icon: Briefcase, path: "/crew/jobs" },
   { label: "Schedule", description: "Availability and blocked days", icon: Calendar, path: "/crew/schedule" },
   { label: "Reviews", description: "Customer feedback and rating", icon: Star, path: "/crew/reviews" },
-  { label: "Earn / Ads", description: "Payouts, ads, JCMOVES", icon: Coins, path: "/crew/earnings#ad-builder" },
+  { label: "Marketing", description: "Create tracked local ads", icon: Megaphone, path: "/crew/marketing" },
+  { label: "Earnings", description: "Payouts, JCMOVES, history", icon: Coins, path: "/crew/earnings" },
   { label: "Add Job", description: "Create a customer request", icon: PlusCircle, path: "/book?worker=1" },
 ];
 
@@ -33,7 +34,7 @@ export default function CrewLayout({ children }: { children: ReactNode }) {
   );
   useCrewGpsBeacon({ enabled: isOnDuty });
   const tasksActive = location === "/crew" || location === "/crew/" || location.startsWith("/crew/jobs");
-  const optionsActive = location.startsWith("/crew/schedule") || location.startsWith("/crew/reviews") || location.startsWith("/crew/earnings");
+  const optionsActive = location.startsWith("/crew/schedule") || location.startsWith("/crew/reviews") || location.startsWith("/crew/earnings") || location.startsWith("/crew/marketing");
 
   function go(path: string) {
     setOptionsOpen(false);

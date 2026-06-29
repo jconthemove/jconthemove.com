@@ -492,6 +492,7 @@ function AuthenticatedApp() {
               <Route path="/crew/jobs"><CrewJobsNewPage /></Route>
               <Route path="/crew/schedule"><CrewSchedulePage /></Route>
               <Route path="/crew/reviews"><CrewReviewsPage /></Route>
+              <Route path="/crew/marketing"><CrewEarningsPage marketingOnly /></Route>
               <Route path="/crew/earnings"><CrewEarningsPage /></Route>
               <Route><Redirect to="/crew" /></Route>
             </Switch>
