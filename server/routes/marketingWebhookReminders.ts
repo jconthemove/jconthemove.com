@@ -46,7 +46,59 @@ router.get("/admin/marketing/campaign-performance", requireOwner, async (req, re
   try {
     const limit = Number(req.query.limit || 50);
     const campaigns = await listMarketingCampaignPerformance(Number.isFinite(limit) ? limit : 50);
-    res.json({ campaigns });
+    const summary = campaigns.reduce(
+      (acc, campaign: any) => {
+        const funnelEvents = Number(campaign.funnel_events || 0);
+        const submitSuccesses = Number(campaign.submit_successes || 0);
+        const errors = Number(campaign.errors || 0);
+        const attributedCards = Math.max(
+          Number(campaign.attributed_cards || 0),
+          Number(campaign.recovered_or_linked || 0),
+        );
+        acc.funnelEvents += funnelEvents;
+        acc.submitSuccesses += submitSuccesses;
+        acc.errors += errors;
+        acc.attributedCards += attributedCards;
+        acc.attributedLeads += Number(campaign.attributed_leads || 0);
+        acc.attributedBookings += Number(campaign.attributed_bookings || 0);
+        if (campaign.source === "crew_facebook_ad") acc.crewAdCampaigns += 1;
+        if (campaign.source === "webhook_reminder") acc.webhookCampaigns += 1;
+        if (!acc.topCampaign || attributedCards > acc.topCampaign.attributedCards) {
+          acc.topCampaign = {
+            id: campaign.id,
+            title: campaign.title,
+            area: campaign.area,
+            focus: campaign.focus,
+            attributedCards,
+            submitSuccesses,
+          };
+        }
+        return acc;
+      },
+      {
+        totalCampaigns: campaigns.length,
+        crewAdCampaigns: 0,
+        webhookCampaigns: 0,
+        funnelEvents: 0,
+        submitSuccesses: 0,
+        attributedCards: 0,
+        attributedLeads: 0,
+        attributedBookings: 0,
+        errors: 0,
+        topCampaign: null as null | {
+          id: string;
+          title: string;
+          area: string | null;
+          focus: string | null;
+          attributedCards: number;
+          submitSuccesses: number;
+        },
+      },
+    );
+    const conversionRate = summary.funnelEvents > 0
+      ? Number(((summary.submitSuccesses / summary.funnelEvents) * 100).toFixed(1))
+      : 0;
+    res.json({ campaigns, summary: { ...summary, conversionRate } });
   } catch (error) {
     console.error("[marketing-webhooks] performance failed:", error instanceof Error ? error.message : error);
     res.status(500).json({ error: "Failed to load marketing campaign performance" });

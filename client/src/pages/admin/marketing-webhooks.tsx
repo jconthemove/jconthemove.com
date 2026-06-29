@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Image as ImageIcon, Megaphone, Send, Sparkles } from "lucide-react";
+import { AlertTriangle, BarChart3, BriefcaseBusiness, ExternalLink, Image as ImageIcon, Megaphone, Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,6 +44,26 @@ type CampaignPerformanceRow = CampaignRow & {
 
 type CampaignPerformanceResponse = {
   campaigns: CampaignPerformanceRow[];
+  summary?: {
+    totalCampaigns: number;
+    crewAdCampaigns: number;
+    webhookCampaigns: number;
+    funnelEvents: number;
+    submitSuccesses: number;
+    attributedCards: number;
+    attributedLeads: number;
+    attributedBookings: number;
+    errors: number;
+    conversionRate: number;
+    topCampaign: null | {
+      id: string;
+      title: string;
+      area: string | null;
+      focus: string | null;
+      attributedCards: number;
+      submitSuccesses: number;
+    };
+  };
 };
 
 const defaults = {
@@ -94,6 +114,7 @@ export default function AdminMarketingWebhooksPage() {
 
   const campaigns = campaignsQuery.data?.campaigns || [];
   const performance = performanceQuery.data?.campaigns || [];
+  const performanceSummary = performanceQuery.data?.summary;
 
   const canSend = form.title.trim().length > 0 && form.message.trim().length > 0;
 
@@ -174,6 +195,48 @@ export default function AdminMarketingWebhooksPage() {
           >
             Refresh
           </Button>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          <div className="rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] font-black uppercase tracking-widest text-blue-200">Ad Traffic</p>
+              <BarChart3 className="h-4 w-4 text-blue-300" />
+            </div>
+            <p className="mt-2 text-2xl font-black text-white">{performanceSummary?.funnelEvents ?? 0}</p>
+            <p className="text-xs text-slate-400">{performanceSummary?.conversionRate ?? 0}% request rate</p>
+          </div>
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] font-black uppercase tracking-widest text-emerald-200">Requests</p>
+              <Megaphone className="h-4 w-4 text-emerald-300" />
+            </div>
+            <p className="mt-2 text-2xl font-black text-white">{performanceSummary?.submitSuccesses ?? 0}</p>
+            <p className="text-xs text-slate-400">
+              {performanceSummary?.crewAdCampaigns ?? 0} crew ads / {performanceSummary?.webhookCampaigns ?? 0} webhook sends
+            </p>
+          </div>
+          <div className="rounded-lg border border-orange-500/20 bg-orange-500/10 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] font-black uppercase tracking-widest text-orange-200">Job Cards</p>
+              <BriefcaseBusiness className="h-4 w-4 text-orange-300" />
+            </div>
+            <p className="mt-2 text-2xl font-black text-white">{performanceSummary?.attributedCards ?? 0}</p>
+            <p className="text-xs text-slate-400">
+              {performanceSummary?.attributedLeads ?? 0} leads / {performanceSummary?.attributedBookings ?? 0} bookings
+            </p>
+          </div>
+          <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] font-black uppercase tracking-widest text-red-200">Errors</p>
+              <AlertTriangle className="h-4 w-4 text-red-300" />
+            </div>
+            <p className="mt-2 text-2xl font-black text-white">{performanceSummary?.errors ?? 0}</p>
+            <p className="truncate text-xs text-slate-400">
+              {performanceSummary?.topCampaign
+                ? `Top: ${performanceSummary.topCampaign.title}`
+                : "No top campaign yet"}
+            </p>
+          </div>
         </div>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-sm">
