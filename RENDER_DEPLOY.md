@@ -49,6 +49,10 @@ It checks three things without printing secrets:
 
 If `https://jc-on-the-move.onrender.com/api/health` reports missing env vars, fix those in Render first:
 
+- Render dashboard -> `jc-on-the-move` -> `Settings`
+- Confirm `Branch` is `main`
+- Confirm auto deploy is enabled for commits/on-commit
+- Confirm `Health Check Path` is `/health`, not `/api/health`
 - Render dashboard -> `jc-on-the-move` -> `Environment`
 - Add or update `SESSION_SECRET`
 - Add or update `SQUARE_ACCESS_TOKEN`

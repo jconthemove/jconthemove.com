@@ -327,10 +327,11 @@ line("Result: Render deploy path is blocked.");
 for (const problem of problems) line(`- ${problem}`);
 line();
 line("Fix, in order:");
-line("1. Render -> jc-on-the-move -> Environment: set DATABASE_URL, SESSION_SECRET, SQUARE_ACCESS_TOKEN, SQUARE_ENVIRONMENT, APP_URL=https://www.jconthemove.com.");
-line("2. Push a new commit or re-run GitHub Actions. The build check must finish before Render checksPass auto-deploy can begin.");
-line("3. If Render still does not deploy, create a main-branch deploy hook in Render and add it to GitHub Actions as RENDER_DEPLOY_HOOK_URL.");
-line("4. Cloudflare/DNS: point www.jconthemove.com at the Render custom-domain target, not Railway.");
-line("5. Confirm npm run render:doctor passes and /health shows version.shortCommit.");
+line("1. Render -> jc-on-the-move -> Settings: set Health Check Path to /health, branch to main, and auto-deploy to on-commit.");
+line("2. Render -> jc-on-the-move -> Environment: set DATABASE_URL, SESSION_SECRET, SQUARE_ACCESS_TOKEN, SQUARE_ENVIRONMENT, APP_URL=https://www.jconthemove.com.");
+line("3. Push a new commit or re-run GitHub Actions. The build check must finish before Render checksPass auto-deploy can begin.");
+line("4. If Render still does not deploy, create a main-branch deploy hook in Render and add it to GitHub Actions as RENDER_DEPLOY_HOOK_URL.");
+line("5. Cloudflare/DNS: point www.jconthemove.com at the Render custom-domain target, not Railway.");
+line("6. Confirm npm run render:doctor passes and /health shows version.shortCommit.");
 
 process.exit(1);
