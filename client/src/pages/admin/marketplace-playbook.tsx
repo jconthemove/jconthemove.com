@@ -26,6 +26,7 @@ import {
 } from "@shared/marketplaceShapes";
 import AuthorityTasksCard from "@/components/AuthorityTasksCard";
 import MarketplaceActionMatrix from "@/components/MarketplaceActionMatrix";
+import MarketplaceCoverageAudit from "@/components/MarketplaceCoverageAudit";
 import MarketplaceFocusRouter from "@/components/MarketplaceFocusRouter";
 import MarketplaceNextStepFlow from "@/components/MarketplaceNextStepFlow";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
@@ -176,6 +177,8 @@ export default function AdminMarketplacePlaybookPage() {
         </section>
 
         <MarketplaceFocusRouter className="mt-5" />
+
+        <MarketplaceCoverageAudit className="mt-5" />
 
         <MarketplaceNextStepFlow className="mt-5" />
 
