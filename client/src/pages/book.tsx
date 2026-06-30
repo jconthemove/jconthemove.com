@@ -26,6 +26,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import AddressField from "@/components/AddressField";
+import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
 import type { User } from "@shared/schema";
 import {
   estimateMovingCrewHours,
@@ -1030,6 +1031,37 @@ export default function MultiServiceBookPage() {
     () => items.some((item) => item.serviceCode === "moving" || item.serviceCode === "junk_removal"),
     [items],
   );
+  const primaryMarketplaceItem = useMemo(() => {
+    return (
+      items.find((item) => item.serviceCode === "moving")
+      || items.find((item) => item.serviceCode === "delivery")
+      || items.find((item) => item.serviceCode === "junk_removal")
+      || items[0]
+      || null
+    );
+  }, [items]);
+  const marketplaceSourceHint = useMemo(() => {
+    const candidates = [
+      isWorker ? workerFields.leadSource : "",
+      attribution.marketingTracking.jcFocus,
+      attribution.marketingTracking.utmSource,
+      attribution.marketingTracking.utmCampaign,
+      attribution.marketingTracking.utmMedium,
+      attribution.referralSlug,
+      attribution.promoCode,
+      "booking_funnel",
+    ];
+    return candidates.map((value) => String(value || "").trim()).find(Boolean) || "booking_funnel";
+  }, [
+    isWorker,
+    workerFields.leadSource,
+    attribution.marketingTracking.jcFocus,
+    attribution.marketingTracking.utmSource,
+    attribution.marketingTracking.utmCampaign,
+    attribution.marketingTracking.utmMedium,
+    attribution.referralSlug,
+    attribution.promoCode,
+  ]);
   const marketplacePreviewInput = useMemo(() => {
     const moving = items.find((item) => item.serviceCode === "moving");
     if (!moving) return null;
@@ -2135,6 +2167,20 @@ export default function MultiServiceBookPage() {
           )}
 
           {/* Step 1 — Services */}
+          {step !== "review" && (
+            <section data-testid="booking-marketplace-flow">
+              <MarketplaceShapeContext
+                serviceCode={primaryMarketplaceItem?.serviceCode || null}
+                serviceLabel={primaryMarketplaceItem?.label || null}
+                source={marketplaceSourceHint}
+                audience={isWorker ? "worker" : "customer"}
+                compact
+                maxIdeas={0}
+                maxFlows={1}
+              />
+            </section>
+          )}
+
           {step === "services" && (
             <section data-testid="step-services">
               <header className="mb-3">
