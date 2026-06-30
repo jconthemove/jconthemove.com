@@ -30,6 +30,18 @@ These must be provided during the first Blueprint deploy:
 
 If `https://jc-on-the-move.onrender.com/health` returns HTTP `200` but has no `version.shortCommit`, Render is serving an older build.
 
+Run the deploy doctor first:
+
+```bash
+npm run render:doctor
+```
+
+It checks three things without printing secrets:
+
+- whether live Render is still stale
+- whether the latest GitHub deploy workflow failed before triggering Render
+- whether this machine has `RENDER_DEPLOY_HOOK_URL` or `RENDER_API_KEY` + `RENDER_SERVICE_ID`
+
 If `https://jc-on-the-move.onrender.com/api/health` reports missing env vars, fix those in Render first:
 
 - Render dashboard -> `jc-on-the-move` -> `Environment`
@@ -46,6 +58,21 @@ Then add one explicit GitHub deploy trigger so future pushes do not rely on Rend
 
 - Preferred: GitHub Actions secret `RENDER_DEPLOY_HOOK_URL`
 - Fallback: GitHub Actions secrets `RENDER_API_KEY` and `RENDER_SERVICE_ID`
+
+To create the preferred hook:
+
+1. Render dashboard -> `jc-on-the-move` -> `Settings` or `Deploy Hooks`.
+2. Create a deploy hook for branch `main`.
+3. Copy the full hook URL.
+4. GitHub -> `JCONTHEMOVE.COM` -> `Settings` -> `Secrets and variables` -> `Actions`.
+5. Add repository secret `RENDER_DEPLOY_HOOK_URL` with the full hook URL.
+6. Re-run the failed `Trigger Render Deploy` workflow or push a new commit.
+
+If you also set `RENDER_DEPLOY_HOOK_URL` locally for this shell, you can trigger directly:
+
+```bash
+npm run render:trigger
+```
 
 The GitHub workflow now fails fast if no explicit trigger is configured. That is intentional: the live `jc-on-the-move.onrender.com` service has already shown that Git auto-deploy is not updating production. If Render Git auto-deploy is fixed later and you want the workflow to wait for it instead, add repository variable `ALLOW_RENDER_AUTO_DEPLOY_WAIT=true`.
 
