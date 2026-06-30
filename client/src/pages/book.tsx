@@ -28,10 +28,12 @@ import { apiRequest } from "@/lib/queryClient";
 import AddressField from "@/components/AddressField";
 import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
+import MarketplaceSourceFlowStrip from "@/components/MarketplaceSourceFlowStrip";
 import SmartRequestShapePicker from "@/components/SmartRequestShapePicker";
 import type { User } from "@shared/schema";
 import {
   getMarketplaceRequestShape,
+  type MarketplaceActionPhase,
   type MarketplaceRequestShapeId,
 } from "@shared/marketplaceShapes";
 import {
@@ -455,6 +457,13 @@ const STEP_PHASES: Record<Step, { number: 1 | 2 | 3; label: string; detail: stri
   safety: { number: 2, label: "Details", detail: "Heavy items" },
   review: { number: 3, label: "Confirm", detail: "Lock in request" },
 };
+
+function marketplaceActionPhaseForStep(step: Step): MarketplaceActionPhase {
+  const phase = STEP_PHASES[step];
+  if (phase.number === 1) return "start";
+  if (phase.number === 2) return "progress";
+  return "finish";
+}
 
 function shortHeavyLabel(label: string) {
   if (/grand piano/i.test(label)) return "Grand piano";
@@ -2168,6 +2177,7 @@ export default function MultiServiceBookPage() {
   const continueReason = canContinueReason();
   const isFirst = step === "services";
   const currentPhase = STEP_PHASES[step];
+  const marketplaceActionPhase = marketplaceActionPhaseForStep(step);
   const phaseProgress = (currentPhase.number / 3) * 100;
 
   // Wizard nav rendered both inside the desktop summary panel and inside
@@ -2323,6 +2333,15 @@ export default function MultiServiceBookPage() {
                 serviceLabel={primaryMarketplaceItem?.label || null}
                 audience={isWorker ? "worker" : "customer"}
                 compact
+                className="mb-3"
+              />
+              <MarketplaceSourceFlowStrip
+                source={marketplaceSourceHint}
+                shapeId={selectedMarketplaceShape.id}
+                serviceCode={primaryMarketplaceItem?.serviceCode || null}
+                serviceLabel={primaryMarketplaceItem?.label || null}
+                audience={isWorker ? "worker" : "customer"}
+                phase={marketplaceActionPhase}
                 className="mb-3"
               />
               <MarketplaceShapeContext
