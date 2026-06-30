@@ -25,6 +25,7 @@ import MarketplaceActionMatrix from "@/components/MarketplaceActionMatrix";
 import MarketplaceShapeBadge from "@/components/MarketplaceShapeBadge";
 import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
+import MarketplaceTaskSplit from "@/components/MarketplaceTaskSplit";
 
 const SERVICE_ICONS: Record<string, string> = {
   residential: "🚛", commercial: "🏢", junk: "🗑️", snow: "❄️",
@@ -1175,6 +1176,7 @@ export default function CrewJobsPage() {
       </div>
 
       <AuthorityTasksCard className="mb-5" />
+      <MarketplaceTaskSplit rails={["bronze", "silver", "gold"]} compact className="mb-5" />
 
       <Tabs defaultValue="board">
         <TabsList className="bg-slate-800/50 border border-slate-700/50 mb-5 w-full">

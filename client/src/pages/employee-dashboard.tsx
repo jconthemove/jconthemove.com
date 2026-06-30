@@ -21,6 +21,7 @@ import { useState } from "react";
 import { format } from "date-fns";
 import { EmployeeReviews } from "@/components/employee-reviews";
 import AuthorityTasksCard from "@/components/AuthorityTasksCard";
+import MarketplaceTaskSplit from "@/components/MarketplaceTaskSplit";
 
 interface GamificationStats {
   points: number;
@@ -179,6 +180,7 @@ export default function EmployeeDashboard() {
         </Card>
 
         <AuthorityTasksCard />
+        <MarketplaceTaskSplit rails={["bronze", "silver", "gold"]} compact />
 
         {/* Token Balance Section */}
         {dashboardSettings.showBalance && (

@@ -27,6 +27,7 @@ import {
 import AuthorityTasksCard from "@/components/AuthorityTasksCard";
 import MarketplaceActionMatrix from "@/components/MarketplaceActionMatrix";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
+import MarketplaceTaskSplit from "@/components/MarketplaceTaskSplit";
 
 const steps = [
   {
@@ -181,6 +182,8 @@ export default function AdminMarketplacePlaybookPage() {
             />
           ))}
         </section>
+
+        <MarketplaceTaskSplit className="mt-5" />
 
         <AuthorityTasksCard className="mt-5" />
 
