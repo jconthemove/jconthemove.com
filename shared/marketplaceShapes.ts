@@ -325,6 +325,17 @@ export const MARKETPLACE_FUNCTIONAL_IDEAS: MarketplaceFunctionalIdea[] = [
     status: "live",
     shapeIds: ["repeat_loop"],
   },
+  {
+    reference: "Generosity Fund",
+    pattern: "A mission-backed giveback rail that grows from verified JCMOVES activity.",
+    jcMove: "Keep Mom's fund, nominee pools, and customer/worker giving tied to real wallet events and proof.",
+    customerReality: "Can earn, redeem, or send JCMOVES love without learning crypto mechanics.",
+    workerReality: "Sees that useful work can support bonuses, family funds, and team morale.",
+    companyReality: "Tracks giveback liability separately from payout, discounts, and operating profit.",
+    surface: "Wallet, Rewards, Generosity Fund, Admin Playbook",
+    status: "live",
+    shapeIds: ["repeat_loop"],
+  },
 ];
 
 export const MARKETPLACE_REFERENCE_BLUEPRINTS: MarketplaceReferenceBlueprint[] = [
@@ -503,6 +514,17 @@ export const MARKETPLACE_REFERENCE_BLUEPRINTS: MarketplaceReferenceBlueprint[] =
     companyWin: "Rewards behavior that creates or completes real work.",
     nextBuild: "Task completion ledger with bonus JCMOVES by tier.",
     metric: "Verified reward actions",
+  },
+  {
+    reference: "Generosity Fund",
+    borrow: "Visible giveback, family/community support, and repeat goodwill tied to real transactions.",
+    avoid: "Mixing donations, reward liability, and worker payout math in one unclear bucket.",
+    jcSurface: "Wallet, Generosity Fund, Admin Playbook",
+    customerWin: "Can send JCMOVES love or see that completed jobs support something real.",
+    workerWin: "Understands how verified marketplace work can also support team and family funds.",
+    companyWin: "Separates generosity, nominee pools, rewards, discounts, and operating profit cleanly.",
+    nextBuild: "Simple admin panel for Mom fund, nominee balances, and verified giveback events.",
+    metric: "Verified giveback events",
   },
 ];
 
@@ -722,6 +744,24 @@ export const MARKETPLACE_SOURCE_FLOW_MATRIX: MarketplaceSourceFlow[] = [
     status: "live",
     shapeIds: ["repeat_loop"],
     flywheelStages: ["complete", "collect", "retain"],
+  },
+  {
+    id: "generosity_fund",
+    source: "Generosity Fund",
+    category: "Giveback / community trust",
+    borrowedSignal: "A visible mission rail turns completed work and wallet activity into goodwill.",
+    start: "Customer or worker sees a simple receive/redeem/give option inside the wallet or rewards flow.",
+    progress: "Verified wallet credits can contribute to Mom's fund, nominee pools, or approved giveback actions.",
+    finish: "Giveback events remain separate from job payout, discounts, and company profit records.",
+    customerMove: "Earns, redeems, or sends JCMOVES love from a simple wallet action.",
+    workerMove: "Knows useful marketplace work can also support family/community funds.",
+    companyControl: "Keeps generosity accounting isolated from payout safety and reward redemption limits.",
+    automationHook: "Internal wallets are excluded from circular rewards; giveback credits use verified wallet events.",
+    surfaces: "Wallet, Generosity Fund, Rewards, Admin Playbook",
+    rewardTrigger: "Giveback JCMOVES only after a verified wallet credit, donation, nominee allocation, or approved task.",
+    status: "live",
+    shapeIds: ["repeat_loop"],
+    flywheelStages: ["collect", "retain"],
   },
 ];
 
@@ -1288,6 +1328,12 @@ export function getMarketplaceSourceFlowForSource(source: string | null | undefi
     jcmoves: "jcmoves_rewards",
     rewards: "jcmoves_rewards",
     crypto: "jcmoves_rewards",
+    generosity: "generosity_fund",
+    generosity_fund: "generosity_fund",
+    giveback: "generosity_fund",
+    mom: "generosity_fund",
+    nominee: "generosity_fund",
+    nominees: "generosity_fund",
   };
 
   const exactId = directAliases[normalized];
