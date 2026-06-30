@@ -130,6 +130,29 @@ export type MarketplaceActionTask = {
   shapeIds: MarketplaceRequestShapeId[];
 };
 
+export type MarketplaceSmartBookingStepId =
+  | "where_when"
+  | "job_shape"
+  | "truck_context"
+  | "smart_package"
+  | "detail_capture"
+  | "contact_recovery";
+
+export type MarketplaceSmartBookingStep = {
+  id: MarketplaceSmartBookingStepId;
+  order: number;
+  label: string;
+  prompt: string;
+  quickOptions: string[];
+  captures: string[];
+  autoInterpretation: string;
+  customerPromise: string;
+  workerSignal: string;
+  companyControl: string;
+  sourcePatterns: string;
+  shapeIds: MarketplaceRequestShapeId[];
+};
+
 export const MARKETPLACE_REQUEST_SHAPES: MarketplaceRequestShape[] = [
   {
     id: "fast_quote",
@@ -1039,6 +1062,93 @@ export const MARKETPLACE_ACTION_TASKS: MarketplaceActionTask[] = [
   },
 ];
 
+export const MARKETPLACE_SMART_BOOKING_STEPS: MarketplaceSmartBookingStep[] = [
+  {
+    id: "where_when",
+    order: 1,
+    label: "Where and when",
+    prompt: "Ask for ZIP or address and estimated date first.",
+    quickOptions: ["Use current ZIP", "I know the address", "Date flexible"],
+    captures: ["zip", "address", "estimated date", "time window"],
+    autoInterpretation: "Resolve address/ZIP, match pricing zone, estimate travel, and create a recoverable funnel event.",
+    customerPromise: "The customer starts with the two facts that make every quote possible.",
+    workerSignal: "Workers see area, likely route, and timing before thinking about the job.",
+    companyControl: "Zone pricing, calendar fit, travel padding, and abandoned-request recovery start immediately.",
+    sourcePatterns: "Google address search, Yelp local intent, Walmart pickup/delivery ZIP checks",
+    shapeIds: ["fast_quote", "moving_help", "delivery_reuse"],
+  },
+  {
+    id: "job_shape",
+    order: 2,
+    label: "Choose the job shape",
+    prompt: "Ask load, unload, both, delivery, removal, packing, or other help.",
+    quickOptions: ["Load", "Unload", "Load + unload", "Delivery", "Junk/reuse", "Not sure"],
+    captures: ["service shape", "load/unload choice", "pickup/drop-off intent", "uncertainty flag"],
+    autoInterpretation: "Map the answer to a marketplace request shape and the matching source play.",
+    customerPromise: "One tap gets them into the right lane without learning internal service codes.",
+    workerSignal: "The card shows whether this is moving labor, delivery/reuse, or a quick quote.",
+    companyControl: "The lead card can route to the right quote rules, zone rates, and approval rail.",
+    sourcePatterns: "MovingHelp service picker, Target/Walmart category cards, Goodwill item flow",
+    shapeIds: ["fast_quote", "moving_help", "delivery_reuse"],
+  },
+  {
+    id: "truck_context",
+    order: 3,
+    label: "Truck and access",
+    prompt: "Ask who supplies the truck, truck size, stairs, elevator, and access notes.",
+    quickOptions: ["Customer truck", "Need JC truck", "U-Haul", "Trailer", "Storage/container", "Stairs"],
+    captures: ["truck provider", "truck size", "stairs", "elevator", "access notes", "container count"],
+    autoInterpretation: "Suggest crew/hours and flag travel, truck, stairs, or container risk before quote approval.",
+    customerPromise: "The quote feels simple, but the system still catches the details that change price.",
+    workerSignal: "Workers know if they are loading a customer truck, using JC equipment, or handling containers.",
+    companyControl: "Truck fees, minimums, access risk, and container/mileage variables stay visible on the card.",
+    sourcePatterns: "U-Haul truck sizes, PODS/U-Box access notes, Two Men and a Truck move readiness",
+    shapeIds: ["moving_help", "delivery_reuse"],
+  },
+  {
+    id: "smart_package",
+    order: 4,
+    label: "Smart package",
+    prompt: "Suggest the most common crew/hour package before asking for custom details.",
+    quickOptions: ["2 movers / 3 hours", "3 movers / 2 hours", "2 movers / 2 hours", "Need quote review"],
+    captures: ["crew size", "estimated hours", "package choice", "quote review flag"],
+    autoInterpretation: "Use zone rates, minimum hours, discounts, travel, and padding to show an estimate range.",
+    customerPromise: "Common jobs move fast; unusual jobs still become a quote card instead of a dead end.",
+    workerSignal: "Crew sees a standard starting expectation and whether the card needs quote review.",
+    companyControl: "Gold/Platinum can override package, margin, final price, deposit, and payout preview.",
+    sourcePatterns: "McDonald's menu simplicity, MovingHelper hourly rates, HireAHelper comparison confidence",
+    shapeIds: ["moving_help", "fast_quote"],
+  },
+  {
+    id: "detail_capture",
+    order: 5,
+    label: "Details and proof",
+    prompt: "Offer optional item selector, photos, notes, and special handling only after the package.",
+    quickOptions: ["Add photos", "Heavy item", "Fragile item", "Donation/reuse", "No extra details"],
+    captures: ["photos", "item list", "heavy items", "fragile items", "donate/dispose/deliver/store tags", "notes"],
+    autoInterpretation: "Attach media and item tags to the lead so pricing and completion proof stay connected.",
+    customerPromise: "Customers can be detailed without being forced through a long form.",
+    workerSignal: "Workers see photos, special items, and item destiny before arrival.",
+    companyControl: "Photos, risk tags, reuse categories, and completion proof connect to the same card.",
+    sourcePatterns: "Goodwill disposition, Yelp/Facebook photo trust, Target add-ons",
+    shapeIds: ["fast_quote", "moving_help", "delivery_reuse", "repeat_loop"],
+  },
+  {
+    id: "contact_recovery",
+    order: 6,
+    label: "Contact and recovery",
+    prompt: "Collect name, phone, and email last, then save the request as a quote_requested lead.",
+    quickOptions: ["Text me", "Email me", "Call me", "I need help now"],
+    captures: ["name", "phone", "email", "preferred contact", "urgency", "lead source"],
+    autoInterpretation: "Create/link the lead, notify owner/admin, and keep partial info recoverable if they leave.",
+    customerPromise: "Their request is locked in and someone can follow up quickly.",
+    workerSignal: "Assigned crew gets clean customer contact only when the job is ready for them.",
+    companyControl: "Notifications, attribution, recover-this-request, quote approval, and payment setup all begin from one card.",
+    sourcePatterns: "Porch lead routing, Facebook/Craigslist follow-up, Discord/Solbot event bus, Square payment path",
+    shapeIds: ["fast_quote", "moving_help", "delivery_reuse", "repeat_loop"],
+  },
+];
+
 export const MARKETPLACE_ZONE_SERVICE_OPTIONS: MarketplaceZoneServiceOption[] = [
   {
     code: "load_unload",
@@ -1096,6 +1206,12 @@ export function getMarketplaceActionTasksForRail(rail: MarketplaceActionRail) {
 
 export function getMarketplaceActionTasksForPhase(phase: MarketplaceActionPhase) {
   return MARKETPLACE_ACTION_TASKS.filter((task) => task.phase === phase);
+}
+
+export function getMarketplaceSmartBookingStepsForShape(id: MarketplaceRequestShapeId) {
+  return MARKETPLACE_SMART_BOOKING_STEPS
+    .filter((step) => step.shapeIds.includes(id))
+    .sort((a, b) => a.order - b.order);
 }
 
 function normalizeMarketplaceText(value: string | null | undefined): string {

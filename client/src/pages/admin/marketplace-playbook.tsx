@@ -30,6 +30,7 @@ import MarketplaceCoverageAudit from "@/components/MarketplaceCoverageAudit";
 import MarketplaceFocusRouter from "@/components/MarketplaceFocusRouter";
 import MarketplaceNextStepFlow from "@/components/MarketplaceNextStepFlow";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
+import MarketplaceSmartBookingEngine from "@/components/MarketplaceSmartBookingEngine";
 import MarketplaceSourceActionDeck from "@/components/MarketplaceSourceActionDeck";
 import MarketplaceTaskSplit from "@/components/MarketplaceTaskSplit";
 
@@ -177,6 +178,8 @@ export default function AdminMarketplacePlaybookPage() {
         </section>
 
         <MarketplaceFocusRouter className="mt-5" />
+
+        <MarketplaceSmartBookingEngine className="mt-5" />
 
         <MarketplaceCoverageAudit className="mt-5" />
 
