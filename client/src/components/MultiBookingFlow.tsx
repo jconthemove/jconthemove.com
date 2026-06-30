@@ -74,6 +74,8 @@ export interface SelectedItem {
     callToSchedule?: boolean;
     notes?: string;
     scope?: string;
+    marketplaceShapeId?: string;
+    marketplaceShape?: string;
     // Task #141: Moving / Junk Removal package picker snapshot — mirrors the
     // data the booking chatbot captures so the cart line carries the chosen
     // crew size, hours, tier, and JC222 promo when applicable.

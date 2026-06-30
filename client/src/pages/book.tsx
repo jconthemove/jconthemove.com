@@ -28,7 +28,12 @@ import { apiRequest } from "@/lib/queryClient";
 import AddressField from "@/components/AddressField";
 import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
+import SmartRequestShapePicker from "@/components/SmartRequestShapePicker";
 import type { User } from "@shared/schema";
+import {
+  getMarketplaceRequestShape,
+  type MarketplaceRequestShapeId,
+} from "@shared/marketplaceShapes";
 import {
   estimateMovingCrewHours,
   inferSmartBookingText,
@@ -411,6 +416,25 @@ function marketplaceServiceCodeForMoving(item: SelectedItem) {
   if (path === "packing_assembly") return "pack_unpack";
   if (/delivery/i.test(loadType)) return "delivery";
   return "load_unload";
+}
+
+function normalizeMarketplaceShapeId(value?: string | null): MarketplaceRequestShapeId | null {
+  if (value === "fast_quote" || value === "moving_help" || value === "delivery_reuse" || value === "repeat_loop") {
+    return value;
+  }
+  return null;
+}
+
+function marketplaceShapeForServiceCode(serviceCode?: string | null): MarketplaceRequestShapeId {
+  if (serviceCode === "delivery") return "delivery_reuse";
+  if (serviceCode === "moving" || serviceCode === "junk_removal") return "moving_help";
+  return "fast_quote";
+}
+
+function serviceCodeForMarketplaceShape(shapeId: MarketplaceRequestShapeId) {
+  if (shapeId === "delivery_reuse") return "delivery";
+  if (shapeId === "moving_help") return "moving";
+  return null;
 }
 
 const STEPS = ["services", "address", "configure", "contact", "safety", "review"] as const;
@@ -915,6 +939,7 @@ export default function MultiServiceBookPage() {
         linePrice: null as number | null,
         lineLabel: "",
         lineDetails: {} as SelectedItem["details"],
+        marketplaceShapeId: null as MarketplaceRequestShapeId | null,
       };
     }
     const sp = new URLSearchParams(window.location.search);
@@ -943,6 +968,7 @@ export default function MultiServiceBookPage() {
       : null;
     const serviceAddress = sp.get("address")?.trim() || "";
     const requestedDate = (sp.get("date") || sp.get("requestedDate") || sp.get("moveDate") || "").trim();
+    const marketplaceShapeId = normalizeMarketplaceShapeId(sp.get("shape") || sp.get("marketplaceShape"));
     const rawPrice = Number(sp.get("price"));
     const linePrice = Number.isFinite(rawPrice) && rawPrice > 0 ? rawPrice : null;
     const lineLabel = sp.get("label")?.trim() || "";
@@ -956,7 +982,7 @@ export default function MultiServiceBookPage() {
         lineDetails = {};
       }
     }
-    return { codes: Array.from(codes), jumpStep, serviceAddress, requestedDate, linePrice, lineLabel, lineDetails };
+    return { codes: Array.from(codes), jumpStep, serviceAddress, requestedDate, linePrice, lineLabel, lineDetails, marketplaceShapeId };
   }, []);
 
   const attribution = useMemo(() => {
@@ -987,6 +1013,9 @@ export default function MultiServiceBookPage() {
 
   const [step, setStep] = useState<Step>("services");
   const [items, setItems] = useState<SelectedItem[]>([]);
+  const [selectedMarketplaceShapeId, setSelectedMarketplaceShapeId] = useState<MarketplaceRequestShapeId>(
+    () => urlPrefill.marketplaceShapeId || "moving_help",
+  );
   const [serviceAddress, setServiceAddress] = useState("");
   // Task #164 — captured by AddressField so the green confirmation pill
   // can render after a Places click, geocode-on-blur, or autofill resolve.
@@ -1041,6 +1070,9 @@ export default function MultiServiceBookPage() {
       || null
     );
   }, [items]);
+  const selectedMarketplaceShape = useMemo(() => {
+    return getMarketplaceRequestShape(selectedMarketplaceShapeId) || getMarketplaceRequestShape("moving_help")!;
+  }, [selectedMarketplaceShapeId]);
   const marketplaceSourceHint = useMemo(() => {
     const candidates = [
       isWorker ? workerFields.leadSource : "",
@@ -1111,6 +1143,8 @@ export default function MultiServiceBookPage() {
     return {
       bookingMode,
       step,
+      marketplaceShapeId: selectedMarketplaceShape.id,
+      marketplaceShape: selectedMarketplaceShape.shape,
       serviceAddress: serviceAddress.trim() || null,
       city: addressCity || null,
       state: addressState || null,
@@ -1138,6 +1172,8 @@ export default function MultiServiceBookPage() {
       items: items.map((item) => ({
         serviceCode: item.serviceCode,
         label: item.label,
+        marketplaceShapeId: item.details.marketplaceShapeId || selectedMarketplaceShape.id,
+        marketplaceShape: item.details.marketplaceShape || selectedMarketplaceShape.shape,
         movingPath: item.details.movingPath || null,
         loadType: item.details.loadType || null,
         truckNeeded: item.details.truckNeeded ?? null,
@@ -1239,6 +1275,7 @@ export default function MultiServiceBookPage() {
   }, [
     bookingMode,
     step,
+    selectedMarketplaceShape.id,
     serviceAddress,
     addressCity,
     addressState,
@@ -1361,8 +1398,78 @@ export default function MultiServiceBookPage() {
   // ── Item helpers
   const selectedCodes = useMemo(() => new Set(items.map(i => i.serviceCode)), [items]);
 
+  function detailsWithMarketplaceShape(details: SelectedItem["details"], shapeId: MarketplaceRequestShapeId): SelectedItem["details"] {
+    const shape = getMarketplaceRequestShape(shapeId);
+    return {
+      ...details,
+      marketplaceShapeId: shape?.id || shapeId,
+      marketplaceShape: shape?.shape || shapeId,
+    };
+  }
+
   function addService(svc: CatalogService) {
-    setItems(prev => prev.some(i => i.serviceCode === svc.code) ? prev : [...prev, makeItem(svc)]);
+    const shapeId = selectedMarketplaceShapeId === "fast_quote" || selectedMarketplaceShapeId === "repeat_loop"
+      ? selectedMarketplaceShapeId
+      : marketplaceShapeForServiceCode(svc.code);
+    setSelectedMarketplaceShapeId(shapeId);
+    setItems(prev => {
+      const existing = prev.find(i => i.serviceCode === svc.code);
+      const next = existing || makeItem(svc);
+      const nextItem = {
+        ...next,
+        details: detailsWithMarketplaceShape(next.details, shapeId),
+      };
+      return existing
+        ? prev.map(i => i.serviceCode === svc.code ? nextItem : i)
+        : [...prev, nextItem];
+    });
+  }
+
+  function applyMarketplaceShape(shapeId: MarketplaceRequestShapeId) {
+    setSelectedMarketplaceShapeId(shapeId);
+    const targetCode = serviceCodeForMarketplaceShape(shapeId);
+    const svc = targetCode ? services.find((entry) => entry.code === targetCode) : null;
+
+    setItems(prev => {
+      if (!svc) {
+        return prev.map((item) => ({
+          ...item,
+          details: detailsWithMarketplaceShape(item.details, shapeId),
+        }));
+      }
+
+      const existing = prev.find((item) => item.serviceCode === svc.code);
+      const baseItem = existing || makeItem(svc);
+      const baseEstimate = shapeId === "moving_help" ? 2 * 3 * 85 : 0;
+      const shapedDetails: SelectedItem["details"] = {
+        ...detailsWithMarketplaceShape(baseItem.details, shapeId),
+        ...(shapeId === "moving_help" && !baseItem.details.packageId
+          ? {
+              packageId: "shape_default_2x3",
+              packageLabel: "Common moving help package",
+              crew: baseItem.details.crew || 2,
+              hours: baseItem.details.hours || 3,
+              minPrice: baseItem.details.minPrice || Math.round(baseEstimate * 0.8),
+              maxPrice: baseItem.details.maxPrice || Math.round(baseEstimate * 1.15),
+              inventoryCrewRecommendation: baseItem.details.inventoryCrewRecommendation || 2,
+              inventoryLaborHours: baseItem.details.inventoryLaborHours || 3,
+              inventoryPriceMin: baseItem.details.inventoryPriceMin || Math.round(baseEstimate * 0.8),
+              inventoryPriceMax: baseItem.details.inventoryPriceMax || Math.round(baseEstimate * 1.15),
+              quoteConfidence: baseItem.details.quoteConfidence || ("medium" as const),
+            }
+          : {}),
+      };
+      const nextItem: SelectedItem = {
+        ...baseItem,
+        details: shapedDetails,
+        priceMode: svc.code === "moving" ? "quote" : baseItem.priceMode,
+      };
+
+      return existing
+        ? prev.map((item) => item.serviceCode === svc.code ? nextItem : item)
+        : [...prev, nextItem];
+    });
+    setBookingMode("builder");
   }
 
   function applySmartStart() {
@@ -1378,6 +1485,7 @@ export default function MultiServiceBookPage() {
 
     const inferred = inferSmartBookingText(raw);
     const serviceCode = serviceCodeFromSmartInference(inferred) || "moving";
+    const inferredShapeId = marketplaceShapeForServiceCode(serviceCode);
     const svc = services.find((entry) => entry.code === serviceCode)
       || services.find((entry) => entry.code === "moving");
 
@@ -1390,6 +1498,7 @@ export default function MultiServiceBookPage() {
       return;
     }
 
+    setSelectedMarketplaceShapeId(inferredShapeId);
     const requestedDate = normalizeSmartDate(inferred.moveDate);
     const zip = inferred.fromZip?.slice(0, 5) || "";
     const movingPath = serviceCode === "moving" ? smartMovingPath(inferred) : undefined;
@@ -1421,7 +1530,7 @@ export default function MultiServiceBookPage() {
       const baseItem = existing || makeItem(svc);
       const nextDetails: SelectedItem["details"] = serviceCode === "moving"
         ? {
-            ...baseItem.details,
+            ...detailsWithMarketplaceShape(baseItem.details, inferredShapeId),
             movingPath: movingPath || baseItem.details.movingPath,
             ...(loadType ? { loadType } : {}),
             ...(truckNeeded != null ? { truckNeeded } : {}),
@@ -1446,7 +1555,7 @@ export default function MultiServiceBookPage() {
               : {}),
           }
         : {
-            ...baseItem.details,
+            ...detailsWithMarketplaceShape(baseItem.details, inferredShapeId),
             ...(requestedDate ? { requestedDate } : {}),
             notes: appendSmartNote(baseItem.details.notes || "", raw),
           };
@@ -1493,8 +1602,34 @@ export default function MultiServiceBookPage() {
   function startBuilder() {
     setBookingMode("builder");
     if (items.length === 0) {
-      const moving = services.find((svc) => svc.code === "moving");
-      if (moving) setItems([makeItem(moving)]);
+      const targetCode = serviceCodeForMarketplaceShape(selectedMarketplaceShapeId);
+      const service = (targetCode ? services.find((svc) => svc.code === targetCode) : null)
+        || services.find((svc) => svc.code === "moving");
+      if (service) {
+        const item = makeItem(service);
+        const baseEstimate = selectedMarketplaceShapeId === "moving_help" ? 2 * 3 * 85 : 0;
+        setItems([{
+          ...item,
+          details: {
+            ...detailsWithMarketplaceShape(item.details, selectedMarketplaceShapeId),
+            ...(selectedMarketplaceShapeId === "moving_help"
+              ? {
+                  packageId: "shape_default_2x3",
+                  packageLabel: "Common moving help package",
+                  crew: 2,
+                  hours: 3,
+                  minPrice: Math.round(baseEstimate * 0.8),
+                  maxPrice: Math.round(baseEstimate * 1.15),
+                  inventoryCrewRecommendation: 2,
+                  inventoryLaborHours: 3,
+                  inventoryPriceMin: Math.round(baseEstimate * 0.8),
+                  inventoryPriceMax: Math.round(baseEstimate * 1.15),
+                  quoteConfidence: "medium" as const,
+                }
+              : {}),
+          },
+        }]);
+      }
     }
     setStep(items.length === 0 ? "configure" : step);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1533,17 +1668,23 @@ export default function MultiServiceBookPage() {
       !urlPrefill.requestedDate &&
       !urlPrefill.linePrice &&
       !urlPrefill.lineLabel &&
+      !urlPrefill.marketplaceShapeId &&
       Object.keys(urlPrefill.lineDetails).length === 0
     ) {
       prefillAppliedRef.current = true;
       return;
     }
     let next = [...items];
+    const prefillShapeId = urlPrefill.marketplaceShapeId
+      || (urlPrefill.codes[0] ? marketplaceShapeForServiceCode(urlPrefill.codes[0]) : selectedMarketplaceShapeId)
+      || selectedMarketplaceShapeId;
+    if (urlPrefill.marketplaceShapeId) setSelectedMarketplaceShapeId(urlPrefill.marketplaceShapeId);
     for (const code of urlPrefill.codes) {
       const svc = services.find((s) => s.code === code);
       if (!svc) continue;
       if (!next.some((item) => item.serviceCode === svc.code)) {
-        next = [...next, makeItem(svc)];
+        const item = makeItem(svc);
+        next = [...next, { ...item, details: detailsWithMarketplaceShape(item.details, marketplaceShapeForServiceCode(svc.code)) }];
       }
     }
 
@@ -1555,11 +1696,11 @@ export default function MultiServiceBookPage() {
           ...item,
           label: urlPrefill.lineLabel || item.label,
           unitPrice: urlPrefill.linePrice ?? item.unitPrice,
-          details: {
+          details: detailsWithMarketplaceShape({
             ...item.details,
             ...(urlPrefill.requestedDate ? { requestedDate: urlPrefill.requestedDate } : {}),
             ...urlPrefill.lineDetails,
-          },
+          }, prefillShapeId),
         };
       });
     }
@@ -2170,8 +2311,14 @@ export default function MultiServiceBookPage() {
           {/* Step 1 — Services */}
           {step !== "review" && (
             <section data-testid="booking-marketplace-flow">
+              <SmartRequestShapePicker
+                selectedShapeId={selectedMarketplaceShapeId}
+                onSelect={applyMarketplaceShape}
+                className="mb-3"
+              />
               <MarketplaceProcessGuide
                 source={marketplaceSourceHint}
+                shapeId={selectedMarketplaceShape.id}
                 serviceCode={primaryMarketplaceItem?.serviceCode || null}
                 serviceLabel={primaryMarketplaceItem?.label || null}
                 audience={isWorker ? "worker" : "customer"}
@@ -2179,6 +2326,7 @@ export default function MultiServiceBookPage() {
                 className="mb-3"
               />
               <MarketplaceShapeContext
+                shapeId={selectedMarketplaceShape.id}
                 serviceCode={primaryMarketplaceItem?.serviceCode || null}
                 serviceLabel={primaryMarketplaceItem?.label || null}
                 source={marketplaceSourceHint}
@@ -2442,6 +2590,12 @@ export default function MultiServiceBookPage() {
                 <div>
                   <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Contact</p>
                   <p className="text-sm leading-relaxed break-words [overflow-wrap:anywhere]">{contact.customerName} · {contact.customerPhone} · {contact.customerEmail}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Job shape</p>
+                  <p className="text-sm leading-relaxed break-words [overflow-wrap:anywhere]">
+                    {selectedMarketplaceShape.shape} - {selectedMarketplaceShape.references}
+                  </p>
                 </div>
                 <div className="border-t border-border pt-3">
                   <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Services</p>

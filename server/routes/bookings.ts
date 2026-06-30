@@ -62,7 +62,11 @@ import {
   type FlooringAnswers,
 } from "../services/pricingEngine";
 import { quoteByLaborHours, LABOR_RATE_PER_HOUR, quoteMovingFromTable } from "@shared/pricingTables";
-import { getMarketplaceShapeForServiceCode } from "@shared/marketplaceShapes";
+import {
+  getMarketplaceRequestShape,
+  getMarketplaceShapeForServiceCode,
+  type MarketplaceRequestShapeId,
+} from "@shared/marketplaceShapes";
 
 // Task #218 spec line 44: small moving = "$300 (or $340 if floor lifted;
 // we keep $300)". The labor math 2×2×$85 naturally produces $340, but
@@ -135,6 +139,16 @@ function firstDetailValue(items: PersistedBookingInput[], keys: string[]): strin
     }
   }
   return null;
+}
+
+function marketplaceShapeForBooking(items: PersistedBookingInput[], fallbackService: string) {
+  for (const item of items) {
+    const details = (item.details || {}) as Record<string, unknown>;
+    const shapeId = typeof details.marketplaceShapeId === "string" ? details.marketplaceShapeId.trim() : "";
+    const shape = shapeId ? getMarketplaceRequestShape(shapeId as MarketplaceRequestShapeId) : null;
+    if (shape) return shape;
+  }
+  return getMarketplaceShapeForServiceCode(items[0]?.serviceCode || fallbackService);
 }
 
 function maxCrew(items: BookingPricingResult["items"], fallbackInputs: PersistedBookingInput[]): number {
@@ -1213,7 +1227,7 @@ router.post("/bookings", async (req: Request, res: Response) => {
         const requestedDate = firstDetailValue(persistInputs, ["requestedDate", "moveDate", "date"]);
         const dropoffAddress = firstDetailValue(persistInputs, ["dropoffAddress", "toAddress", "destinationAddress"]);
         const serviceType = serviceTypeForLead(persistInputs);
-        const marketplaceShape = getMarketplaceShapeForServiceCode(persistInputs[0]?.serviceCode || serviceType);
+        const marketplaceShape = marketplaceShapeForBooking(persistInputs, serviceType);
         const crewSize = maxCrew(quote.items, persistInputs);
         const confirmedHours = firstHours(quote.items, persistInputs);
         const bookingReference = `JOB-${booking.id.slice(0, 8).toUpperCase()}`;
