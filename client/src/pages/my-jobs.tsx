@@ -15,7 +15,9 @@ import MarketplaceShapeBadge from "@/components/MarketplaceShapeBadge";
 import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 import MarketplaceSourceActionDeck from "@/components/MarketplaceSourceActionDeck";
+import SmartBookingGuidanceCard from "@/components/SmartBookingGuidanceCard";
 import type { LucideIcon } from "lucide-react";
+import type { SmartBookingAnswers } from "@shared/smartBookingEngine";
 
 // Task #130: shape returned by GET /api/customer/bookings — parent bookings
 // from the new multi-service `bookings` table with their child service items.
@@ -304,6 +306,72 @@ function formatAddress(addr: string) {
   return addr;
 }
 
+function extractZipFromText(value: string | null | undefined): string | undefined {
+  const match = value?.match(/\b\d{5}(?:-\d{4})?\b/);
+  return match?.[0];
+}
+
+function readChatbotAnswers(raw: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed?._source !== "chatbot" || typeof parsed.answers !== "object" || Array.isArray(parsed.answers)) {
+      return null;
+    }
+    return parsed.answers;
+  } catch {
+    return null;
+  }
+}
+
+function inferCustomerLoadType(value: string | null | undefined): string | undefined {
+  const raw = (value || "").toLowerCase();
+  if (!raw) return undefined;
+  if (/\b(load\s*(?:and|\+|\/)\s*unload|unload\s*(?:and|\+|\/)\s*load|both)\b/.test(raw)) return "Load + unload";
+  if (/\bunload(ing)?\b/.test(raw)) return "Unload only";
+  if (/\bload(ing)?\b/.test(raw)) return "Load only";
+  if (/\bdeliver(y)?|drop[-\s]?off|pickup|pick up|transport\b/.test(raw)) return "Delivery";
+  return undefined;
+}
+
+function inferCustomerTruckContext(value: string | null | undefined): string | undefined {
+  const raw = (value || "").toLowerCase();
+  if (!raw) return undefined;
+  if (/\bu-?haul|customer truck|my truck|rental truck|truck|trailer|pods?|u-?box|container\b/.test(raw)) return value || undefined;
+  if (/\bstairs?|elevator|garage|driveway|parking|basement|storage|long carry\b/.test(raw)) return value || undefined;
+  return undefined;
+}
+
+function smartBookingAnswersForCustomerJob(job: CustomerJob): SmartBookingAnswers {
+  const rawNotes = [job.details, job.notes].filter(Boolean).join("\n");
+  const chatbotAnswers = readChatbotAnswers(job.details || "") || readChatbotAnswers(job.notes || "") || {};
+  const chatbotFromZip = typeof chatbotAnswers.fromZip === "string" ? chatbotAnswers.fromZip : undefined;
+  const parsedCrew = typeof chatbotAnswers.selectedMovingRecCrew === "string" ? Number(chatbotAnswers.selectedMovingRecCrew) : null;
+  const crewSize = job.crewSize || (Number.isFinite(parsedCrew) && parsedCrew ? parsedCrew : undefined);
+
+  return {
+    ...chatbotAnswers,
+    serviceType: job.serviceType,
+    serviceCode: job.serviceType,
+    serviceLabel: getSvcConfig(job.serviceType).label,
+    fromAddress: job.pickupAddress,
+    pickupAddress: job.pickupAddress,
+    serviceAddress: job.pickupAddress || chatbotFromZip,
+    fromZip: extractZipFromText(job.pickupAddress) || chatbotFromZip,
+    toAddress: job.dropoffAddress,
+    dropoffAddress: job.dropoffAddress,
+    moveDate: job.moveDate || chatbotAnswers.moveDate,
+    requestedDate: job.moveDate || chatbotAnswers.moveDate,
+    crewSize,
+    phone: job.phone,
+    email: job.email,
+    fullName: job.fullName,
+    notes: rawNotes,
+    loadType: chatbotAnswers.loadType || inferCustomerLoadType(rawNotes),
+    truckSituation: chatbotAnswers.truckSituation || inferCustomerTruckContext(rawNotes),
+    truckSize: chatbotAnswers.truckSize || inferCustomerTruckContext(rawNotes),
+  };
+}
+
 // Strip leading emoji chars (like "🔥 ", "✅ ") from chatbot answer text
 function stripEmoji(str: string): string {
   return str.replace(/^[\p{Emoji}\s]+/u, "").trim();
@@ -365,6 +433,7 @@ function JobSheet({ job, open, onClose, onNewJob }: {
   const isQuoted = job.status === "quoted";
   const isActive = ["available", "confirmed", "in_progress", "accepted"].includes(job.status);
   const isDone = ["completed", "paid"].includes(job.status);
+  const guidanceAnswers = smartBookingAnswersForCustomerJob(job);
 
   return (
     <Sheet open={open} onOpenChange={onClose}>
@@ -392,6 +461,11 @@ function JobSheet({ job, open, onClose, onNewJob }: {
 
           {/* Visual Status Tracker */}
           <StatusTracker status={job.status} />
+          <SmartBookingGuidanceCard
+            answers={guidanceAnswers}
+            serviceLabel={svc.label}
+            compact
+          />
           <MarketplaceProcessGuide
             serviceCode={job.serviceType}
             audience="customer"
