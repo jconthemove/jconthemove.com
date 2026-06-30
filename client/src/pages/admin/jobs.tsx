@@ -38,7 +38,9 @@ import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 import MarketplaceSourceActionDeck from "@/components/MarketplaceSourceActionDeck";
 import ProcessFlowCard, { type ProcessFlowStep, type ProcessStepState } from "@/components/ProcessFlowCard";
+import SmartBookingGuidanceCard from "@/components/SmartBookingGuidanceCard";
 import { extractCustomerMediaLink } from "@/lib/lead-details";
+import type { SmartBookingAnswers } from "@shared/smartBookingEngine";
 
 const SERVICE_ICONS: Record<string, string> = {
   residential: "🚛", commercial: "🏢", junk: "🗑️", snow: "❄️",
@@ -247,6 +249,43 @@ function leadMarketplaceShapeId(lead: Lead): string | null {
     ? lead.quoteSnapshot
     : null;
   return snapshot?.marketplaceShapeId || snapshot?.marketplaceShape?.id || null;
+}
+
+function leadFirstRequestedItem(lead: Lead): NonNullable<LeadQuoteSnapshot["requestedItems"]>[number] | null {
+  const snapshot = lead.quoteSnapshot && typeof lead.quoteSnapshot === "object" && !Array.isArray(lead.quoteSnapshot)
+    ? lead.quoteSnapshot
+    : null;
+  return Array.isArray(snapshot?.requestedItems) ? snapshot.requestedItems[0] || null : null;
+}
+
+function extractZipFromText(value: string | null | undefined): string | undefined {
+  const match = value?.match(/\b\d{5}(?:-\d{4})?\b/);
+  return match?.[0];
+}
+
+function smartBookingAnswersForLead(lead: Lead): SmartBookingAnswers {
+  const firstItem = leadFirstRequestedItem(lead);
+  const marketplaceShapeId = leadMarketplaceShapeId(lead);
+  const photos = Array.isArray(lead.photos) ? lead.photos : [];
+
+  return {
+    marketplaceShapeId,
+    serviceType: lead.serviceType,
+    serviceCode: firstItem?.serviceCode || lead.serviceType,
+    serviceLabel: firstItem?.serviceLabel || SERVICE_LABELS[lead.serviceType] || lead.serviceType,
+    fromAddress: lead.fromAddress,
+    fromZip: extractZipFromText(lead.fromAddress),
+    toAddress: lead.toAddress,
+    moveDate: lead.confirmedDate || lead.moveDate,
+    arrivalWindow: lead.arrivalWindow,
+    crewSize: lead.crewSize,
+    confirmedHours: lead.confirmedHours,
+    phone: lead.phone,
+    email: lead.email,
+    notes: [lead.details, lead.quoteNotes, lead.dispatchNotes].filter(Boolean).join("\n"),
+    photos,
+    submittedPhotos: photos,
+  };
 }
 
 function numericPrice(value: string | number | null | undefined): number {
@@ -749,6 +788,7 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
     paymentReady,
     completeReady,
   });
+  const guidanceAnswers = smartBookingAnswersForLead(lead);
 
   return (
     <Sheet open={open} onOpenChange={v => !v && onClose()}>
@@ -799,6 +839,11 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
             title="Run this card"
             description="One operating path for every request: capture the customer need, progress price and crew, then finish payment, completion, rewards, and review."
             steps={adminProcessSteps}
+          />
+          <SmartBookingGuidanceCard
+            answers={guidanceAnswers}
+            serviceLabel={lead.serviceType}
+            compact
           />
           <MarketplaceProcessGuide
             source={sourceLabel || lead.source}
