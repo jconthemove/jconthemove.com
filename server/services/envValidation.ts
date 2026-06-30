@@ -7,8 +7,11 @@ interface EnvCheck {
   purpose: string;
 }
 
-const CORE_ENV: EnvCheck[] = [
+const STARTUP_ENV: EnvCheck[] = [
   { name: "DATABASE_URL", required: true, purpose: "PostgreSQL database connection" },
+];
+
+const SECURITY_ENV: EnvCheck[] = [
   { name: "SESSION_SECRET", required: true, purpose: "session cookies and JWT signing fallback" },
 ];
 
@@ -62,11 +65,11 @@ export function validatePaymentEnv(): EnvValidationResult {
 }
 
 export function validateRequiredEnv(): EnvValidationResult {
-  return validateEnv([...CORE_ENV, ...PAYMENT_ENV]);
+  return validateEnv([...STARTUP_ENV, ...SECURITY_ENV, ...PAYMENT_ENV]);
 }
 
 export function validateStartupEnv(): EnvValidationResult {
-  return validateEnv(CORE_ENV);
+  return validateEnv(STARTUP_ENV);
 }
 
 export function assertRequiredEnvOrExit(): void {

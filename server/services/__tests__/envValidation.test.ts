@@ -32,17 +32,18 @@ function clearSquareEnv() {
 
 try {
   process.env.DATABASE_URL = "postgres://launch:test@localhost:5432/jconthemove";
-  process.env.SESSION_SECRET = "test-session-secret";
+  delete process.env.SESSION_SECRET;
   clearSquareEnv();
 
   const startupReady = validateStartupEnv();
   const paymentReady = validatePaymentEnv();
   const fullyReady = validateRequiredEnv();
 
-  assert.equal(startupReady.ok, true, "startup env should allow booting without payment credentials");
+  assert.equal(startupReady.ok, true, "startup env should allow booting without payment/session credentials");
   assert.equal(paymentReady.ok, false, "payment env should still fail when Square credentials are missing");
-  assert.equal(fullyReady.ok, false, "full launch readiness should still require payment credentials");
+  assert.equal(fullyReady.ok, false, "full launch readiness should still require session and payment credentials");
   assert.deepEqual(paymentReady.missingRequired.sort(), ["SQUARE_ACCESS_TOKEN", "SQUARE_ENVIRONMENT"]);
+  assert.deepEqual(fullyReady.missingRequired.sort(), ["SESSION_SECRET", "SQUARE_ACCESS_TOKEN", "SQUARE_ENVIRONMENT"]);
 
   delete process.env.DATABASE_URL;
   const missingCore = validateStartupEnv();

@@ -2,9 +2,12 @@ import session from "express-session";
 import type { Express, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
 import jwt from "jsonwebtoken";
+import { randomBytes } from "node:crypto";
+
+const runtimeAuthSecret = randomBytes(48).toString("hex");
 
 function getJwtSecret(): string {
-  return process.env.JWT_SECRET || process.env.SESSION_SECRET || "jcmoves-jwt-fallback-secret";
+  return process.env.JWT_SECRET || process.env.SESSION_SECRET || runtimeAuthSecret;
 }
 
 function getSessionSecret(): string {
@@ -12,7 +15,8 @@ function getSessionSecret(): string {
     return process.env.SESSION_SECRET;
   }
   if (process.env.NODE_ENV === "production") {
-    throw new Error("SESSION_SECRET must be set in production.");
+    console.warn("[session] SESSION_SECRET is not set in production; using a temporary runtime secret. Set SESSION_SECRET for stable logins and launch readiness.");
+    return runtimeAuthSecret;
   }
   console.warn("[session] SESSION_SECRET is not set; using a development-only fallback secret.");
   return "jcmoves-dev-session-secret";

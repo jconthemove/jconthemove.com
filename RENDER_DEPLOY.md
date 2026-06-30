@@ -15,16 +15,19 @@ It creates one Node web service with:
 
 `/health` is the Render liveness probe. It returns quickly during cold starts and includes deploy version/bootstrap status so Render does not kill the service while heavier route and database startup work finishes. `/api/health` remains the strict operator readiness probe; it proves API routes, database, and required environment variables are ready, and returns HTTP `503` when readiness fails.
 
-## Required Render environment variables
+## Render environment variables
 
-These must be provided during the first Blueprint deploy:
+This must be provided for the app to boot correctly:
 
 - `DATABASE_URL`
+
+These should be provided before launch readiness is considered green:
+
 - `SESSION_SECRET`
 - `SQUARE_ACCESS_TOKEN`
 - `SQUARE_ENVIRONMENT`
 
-`SESSION_SECRET` is generated automatically by Render only when the service is created from the Blueprint. If the service already exists or was created manually, set it yourself in Render with a random 32+ character value.
+`SESSION_SECRET` is generated automatically by Render only when the service is created from the Blueprint. If the service already exists or was created manually, set it yourself in Render with a random 32+ character value. If it is missing, the app can still boot with a temporary runtime secret, but users can be logged out after restarts and `/api/health` will stay not-ready.
 
 ## Repair an existing stale Render service
 
@@ -54,7 +57,7 @@ If `https://jc-on-the-move.onrender.com/api/health` reports missing env vars, fi
 - Click `Save Changes`
 - Trigger a manual deploy from Render once the env vars are saved
 
-`SESSION_SECRET` is startup-critical. The current app will not boot a new production release without it. Square variables do not block boot, but Square invoice links and the launch checklist will stay red until `SQUARE_ACCESS_TOKEN` and `SQUARE_ENVIRONMENT` are set.
+`SESSION_SECRET` and Square variables do not block liveness deploys, but `/api/health`, Square invoice links, and the launch checklist will stay red until `SESSION_SECRET`, `SQUARE_ACCESS_TOKEN`, and `SQUARE_ENVIRONMENT` are set.
 
 Then add one explicit GitHub deploy trigger if Render auto-deploy does not pick up pushes reliably:
 
