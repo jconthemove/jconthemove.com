@@ -109,6 +109,14 @@ For the strongest launch path, add one of:
 
 If neither trigger is set, the workflow fails by default. That is intentional: it prevents a stale public Render service from hiding behind a green GitHub build. Add `RENDER_DEPLOY_HOOK_URL` or `RENDER_API_KEY` plus `RENDER_SERVICE_ID`, then re-run the workflow.
 
+Current emergency fix path:
+
+1. Render -> `jc-on-the-move` -> Environment: add `SESSION_SECRET`, `SQUARE_ACCESS_TOKEN`, `SQUARE_ENVIRONMENT`, `DATABASE_URL`, and `APP_URL=https://www.jconthemove.com`.
+2. Render -> `jc-on-the-move` -> Deploy Hooks: create a hook for branch `main`.
+3. GitHub -> `JCONTHEMOVE.COM` -> Settings -> Secrets and variables -> Actions: add secret `RENDER_DEPLOY_HOOK_URL` with the hook URL.
+4. Re-run the latest `Trigger Render Deploy` workflow or push a new commit.
+5. Run `npm run render:doctor`; it should show `version.shortCommit` and no Railway host signal.
+
 If GitHub Actions shows a successful build for the current commit but `https://jc-on-the-move.onrender.com/health` still has no `version.shortCommit`, Render is not running the current release. Treat that as a Render dashboard/config issue, not an app build issue. Check that the service is connected to this GitHub repository, the branch is `main`, auto-deploy is enabled, and a deploy hook/API trigger is configured for forced deploys.
 
 ## Strongly recommended variables

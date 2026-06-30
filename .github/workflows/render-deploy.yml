@@ -22,7 +22,7 @@ jobs:
       DEPLOY_WAIT_ATTEMPTS: ${{ vars.DEPLOY_WAIT_ATTEMPTS || '40' }}
       DEPLOY_WAIT_SECONDS: ${{ vars.DEPLOY_WAIT_SECONDS || '30' }}
       DEPLOY_CHECK_TIMEOUT_MS: ${{ vars.DEPLOY_CHECK_TIMEOUT_MS || '15000' }}
-      REQUIRE_RENDER_TRIGGER: ${{ vars.REQUIRE_RENDER_TRIGGER || 'false' }}
+      REQUIRE_RENDER_TRIGGER: ${{ vars.REQUIRE_RENDER_TRIGGER || 'true' }}
     steps:
       - name: Checkout deploy verifier
         uses: actions/checkout@v4
