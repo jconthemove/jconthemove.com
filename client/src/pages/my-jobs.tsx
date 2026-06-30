@@ -12,6 +12,7 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import MarketplaceShapeBadge from "@/components/MarketplaceShapeBadge";
 import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
+import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 import type { LucideIcon } from "lucide-react";
 
 // Task #130: shape returned by GET /api/customer/bookings — parent bookings
@@ -380,6 +381,11 @@ function JobSheet({ job, open, onClose, onNewJob }: {
 
           {/* Visual Status Tracker */}
           <StatusTracker status={job.status} />
+          <MarketplaceProcessGuide
+            serviceCode={job.serviceType}
+            audience="customer"
+            compact
+          />
           <MarketplaceShapeContext
             serviceCode={job.serviceType}
             audience="customer"

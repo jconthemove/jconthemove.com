@@ -34,6 +34,7 @@ import {
 import { PaymentStatusPill } from "@/components/PaymentStatusPill";
 import JobLifecycleRail from "@/components/JobLifecycleRail";
 import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
+import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 import ProcessFlowCard, { type ProcessFlowStep, type ProcessStepState } from "@/components/ProcessFlowCard";
 import { extractCustomerMediaLink } from "@/lib/lead-details";
 
@@ -789,6 +790,13 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
             title="Run this card"
             description="One operating path for every request: capture the customer need, progress price and crew, then finish payment, completion, rewards, and review."
             steps={adminProcessSteps}
+          />
+          <MarketplaceProcessGuide
+            source={sourceLabel || lead.source}
+            shapeId={marketplaceShapeId}
+            serviceCode={lead.serviceType}
+            audience="company"
+            compact
           />
           <MarketplaceShapeContext
             shapeId={marketplaceShapeId}

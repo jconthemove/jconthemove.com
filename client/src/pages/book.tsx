@@ -27,6 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import AddressField from "@/components/AddressField";
 import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
+import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 import type { User } from "@shared/schema";
 import {
   estimateMovingCrewHours,
@@ -2169,6 +2170,14 @@ export default function MultiServiceBookPage() {
           {/* Step 1 — Services */}
           {step !== "review" && (
             <section data-testid="booking-marketplace-flow">
+              <MarketplaceProcessGuide
+                source={marketplaceSourceHint}
+                serviceCode={primaryMarketplaceItem?.serviceCode || null}
+                serviceLabel={primaryMarketplaceItem?.label || null}
+                audience={isWorker ? "worker" : "customer"}
+                compact
+                className="mb-3"
+              />
               <MarketplaceShapeContext
                 serviceCode={primaryMarketplaceItem?.serviceCode || null}
                 serviceLabel={primaryMarketplaceItem?.label || null}
