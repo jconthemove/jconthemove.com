@@ -1,12 +1,12 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Coins, TrendingUp, Lock, ArrowRight, Zap, Gift, ShoppingBag, History, DollarSign, Plus, ShieldCheck } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
+import { Coins, TrendingUp, Lock, ArrowRight, Zap, Gift, ShoppingBag, History, DollarSign, Plus, ShieldCheck, Wallet, Copy, Check } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { WalletChoiceModal } from "@/components/WalletChoiceModal";
 
 interface WalletData {
   balance: string;
@@ -25,13 +25,25 @@ interface RewardHistory {
   earnedDate: string;
 }
 
+interface WalletPreference {
+  walletMode: "personal" | "company" | null;
+  personalWalletAddress: string | null;
+  companyWalletAddress: string | null;
+  hasWalletConfigured: boolean;
+}
+
 export default function CustomerWalletPage() {
-  const { user } = useAuth();
   const { toast } = useToast();
   const [location] = useLocation();
+  const [walletChoiceOpen, setWalletChoiceOpen] = useState(false);
+  const [copiedAddress, setCopiedAddress] = useState(false);
 
   const { data: wallet, isLoading } = useQuery<WalletData>({
     queryKey: ["/api/wallet/balance"],
+  });
+
+  const { data: walletPreference } = useQuery<WalletPreference>({
+    queryKey: ["/api/user/wallet-preference"],
   });
 
   const { data: historyData } = useQuery<RewardHistory[]>({
@@ -43,6 +55,24 @@ export default function CustomerWalletPage() {
   const staked = parseFloat(wallet?.stakedAmount ?? "0");
   const pending = parseFloat(wallet?.pendingRewards ?? "0");
   const history: RewardHistory[] = Array.isArray(historyData) ? historyData.slice(0, 10) : [];
+  const receiveMode = walletPreference?.walletMode === "personal"
+    ? "Phantom wallet"
+    : walletPreference?.hasWalletConfigured
+      ? "Company rewards account"
+      : "Not set up yet";
+  const receiveDetail = walletPreference?.walletMode === "personal" && walletPreference.personalWalletAddress
+    ? `${walletPreference.personalWalletAddress.slice(0, 6)}...${walletPreference.personalWalletAddress.slice(-6)}`
+    : walletPreference?.hasWalletConfigured
+      ? "Internal JCMOVES tracking is active"
+      : "Choose how you want to receive rewards";
+
+  const copyWalletAddress = async () => {
+    if (!walletPreference?.personalWalletAddress) return;
+    await navigator.clipboard.writeText(walletPreference.personalWalletAddress);
+    setCopiedAddress(true);
+    toast({ title: "Wallet address copied", description: "Your Phantom address is ready to share." });
+    setTimeout(() => setCopiedAddress(false), 1600);
+  };
 
   // Reconcile prepaid top-up on Square redirect (?prepaid=success&intent=...)
   const reconcile = useMutation({
@@ -78,6 +108,39 @@ export default function CustomerWalletPage() {
         <div className="mb-2">
           <h1 className="text-2xl font-bold">Your Wallet</h1>
           <p className="text-sm text-muted-foreground">JCMOVES USD credit & JCMOVES tokens</p>
+        </div>
+
+        {/* Receive / Earn / Redeem hub */}
+        <div className="grid grid-cols-1 gap-2">
+          <button
+            type="button"
+            onClick={() => setWalletChoiceOpen(true)}
+            className="flex items-center justify-between rounded-2xl border-2 border-primary/30 bg-primary/10 p-4 text-left transition-all hover:border-primary/50"
+            data-testid="button-jcmoves-receive"
+          >
+            <div className="flex items-center gap-3">
+              <div className="rounded-xl bg-primary/15 p-2">
+                <Wallet className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-black">Receive JCMOVES</p>
+                <p className="text-xs text-muted-foreground">{receiveMode} - {receiveDetail}</p>
+              </div>
+            </div>
+            <ArrowRight className="h-4 w-4 text-muted-foreground" />
+          </button>
+
+          {walletPreference?.personalWalletAddress && (
+            <button
+              type="button"
+              onClick={copyWalletAddress}
+              className="flex items-center justify-center gap-2 rounded-xl border border-muted bg-muted/30 px-3 py-2 text-xs font-semibold"
+              data-testid="button-copy-jcmoves-address"
+            >
+              {copiedAddress ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+              {copiedAddress ? "Copied" : "Copy receive address"}
+            </button>
+          )}
         </div>
 
         {/* Dual-currency Balance Cards */}
@@ -205,7 +268,7 @@ export default function CustomerWalletPage() {
             </button>
           </Link>
 
-          <Link href="/rewards-marketplace">
+          <Link href="/marketplace">
             <button className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-muted hover:border-primary/40 transition-all bg-muted/20">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-purple-500/10 rounded-xl">
@@ -297,6 +360,15 @@ export default function CustomerWalletPage() {
           </CardContent>
         </Card>
       </div>
+      <WalletChoiceModal
+        open={walletChoiceOpen}
+        onClose={() => setWalletChoiceOpen(false)}
+        onComplete={() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/user/wallet-preference"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/wallet/balance"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
+        }}
+      />
     </div>
   );
 }

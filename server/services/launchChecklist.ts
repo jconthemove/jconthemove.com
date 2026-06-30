@@ -29,6 +29,7 @@ export type ScenarioId =
   | "payment_classifier_pay_on_completion"
   | "deposit_gating"
   | "wallet_table"
+  | "jcmoves_receive_redeem"
   | "btc_sweep_alive"
   | "public_app_url"
   | "public_conversion_routes"
@@ -640,6 +641,43 @@ const SCENARIOS: Scenario[] = [
     run: async () => {
       const { rows } = await pool.query(`SELECT COUNT(*)::int AS c FROM wallet_accounts`);
       return { ok: true, detail: `${rows[0]?.c ?? 0} wallet accounts on file` };
+    },
+  },
+  {
+    id: "jcmoves_receive_redeem",
+    label: "JCMOVES receive and redeem rails are ready",
+    run: async () => {
+      const { rows } = await pool.query<{
+        wallet_count: number;
+        active_reward_items: number;
+        auto_approve_threshold: string | null;
+      }>(`
+        SELECT
+          (SELECT COUNT(*)::int FROM wallet_accounts) AS wallet_count,
+          (SELECT COUNT(*)::int FROM reward_items WHERE status = 'active') AS active_reward_items,
+          (
+            SELECT token_amount::text
+            FROM reward_settings
+            WHERE setting_key = 'redemption_auto_approve_threshold'
+              AND is_active = true
+            ORDER BY created_at DESC
+            LIMIT 1
+          ) AS auto_approve_threshold
+      `);
+      const row = rows[0];
+      if (!row || Number(row.wallet_count) <= 0) {
+        return { ok: false, detail: "wallet_accounts has no user/customer/worker wallets to receive JCMOVES" };
+      }
+      if (Number(row.active_reward_items) <= 0) {
+        return { ok: false, detail: "reward shop has no active redeemable items" };
+      }
+      if (!row.auto_approve_threshold) {
+        return { ok: false, detail: "redemption_auto_approve_threshold is missing or inactive" };
+      }
+      return {
+        ok: true,
+        detail: `${row.wallet_count} wallets; ${row.active_reward_items} active rewards; approval threshold ${Number(row.auto_approve_threshold).toLocaleString()} JCMOVES`,
+      };
     },
   },
   {
