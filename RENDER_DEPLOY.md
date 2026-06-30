@@ -99,6 +99,8 @@ For the strongest launch path, add one of:
 
 If neither trigger is set, the workflow finishes after the build and Render Git auto-deploy can start from the Render dashboard/repo connection. If the live service stays stale after a green GitHub run, add `RENDER_DEPLOY_HOOK_URL` or `RENDER_API_KEY` plus `RENDER_SERVICE_ID`.
 
+If GitHub Actions shows a successful build for the current commit but `https://jc-on-the-move.onrender.com/health` still has no `version.shortCommit`, Render is not running the current release. Treat that as a Render dashboard/config issue, not an app build issue. Check that the service is connected to this GitHub repository, the branch is `main`, auto-deploy is enabled, and a deploy hook/API trigger is configured for forced deploys.
+
 ## Strongly recommended variables
 
 Set these before going live so customer links, wallet features, email, and maps work correctly:

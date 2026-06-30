@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   applySmartBookingAnswer,
+  getSmartBookingGuidance,
   inferSmartBookingText,
   shouldSkipSmartBookingStep,
 } from "../../../shared/smartBookingEngine";
@@ -104,6 +105,38 @@ test("understands compact crew/hour shorthand for fast booking", () => {
   assert.equal(patch.answers.selectedMovingRec, "moving_3m_2h");
   assert.equal(patch.answers.selectedMovingRecTotalMin, "400");
   assert.equal(patch.answers.selectedMovingRecTotalMax, "550");
+});
+
+test("guides a partial moving card to the next missing smart-booking step", () => {
+  const guidance = getSmartBookingGuidance({
+    serviceType: "Moving",
+    fromZip: "49938",
+    moveDate: "Friday",
+    loadType: "Unload only",
+  });
+
+  assert.equal(guidance.shapeId, "moving_help");
+  assert.equal(guidance.fastPathReady, false);
+  assert.equal(guidance.completedRequired, 2);
+  assert.equal(guidance.nextStep?.id, "truck_context");
+  assert.deepEqual(guidance.nextStep?.missingSignals, ["truck_context"]);
+});
+
+test("marks a fully-sized moving request ready for quote review", () => {
+  const guidance = getSmartBookingGuidance({
+    serviceType: "Moving",
+    fromZip: "49938",
+    moveDate: "Friday",
+    loadType: "Unload only",
+    truckSituation: "Customer provides truck or no truck needed",
+    selectedMovingRecLabel: "2 movers / 3 hours",
+    phone: "9062859312",
+  });
+
+  assert.equal(guidance.shapeId, "moving_help");
+  assert.equal(guidance.fastPathReady, true);
+  assert.equal(guidance.completedRequired, guidance.totalRequired);
+  assert.equal(guidance.nextStep?.id, "detail_capture");
 });
 
 console.log(`smartBookingEngine tests passed: ${passed}`);

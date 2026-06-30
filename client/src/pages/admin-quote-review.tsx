@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import SmartBookingGuidanceCard from "@/components/SmartBookingGuidanceCard";
 import {
   CheckCircle2, XCircle, Clock, Users, Home, MapPin, Calendar,
   Phone, Mail, MessageSquare, ChevronDown, ChevronUp, ArrowLeft, Sparkles
@@ -130,6 +131,17 @@ function LeadCard({ lead, onApprove, onDismiss }: {
   const bookingIntake = parsed?.bookingIntake || null;
   const engineItem = engineQuote?.items?.[0];
   const intakeItem = bookingIntake?.bookingQuoteRequest?.items?.[0];
+  const guidanceAnswers = {
+    ...a,
+    serviceType: a.serviceType || lead.serviceType,
+    serviceCode: intakeItem?.serviceCode || engineItem?.serviceCode,
+    fromAddress: lead.fromAddress || a.serviceAddress || a.fromAddress,
+    fromZip: a.fromZip,
+    toAddress: lead.toAddress || a.toAddress,
+    moveDate: a.moveDate || lead.moveDate,
+    phone: lead.phone,
+    email: lead.email,
+  };
 
   const createdAt = new Date(lead.createdAt);
   const hoursAgo = Math.round((Date.now() - createdAt.getTime()) / 3600000);
@@ -194,6 +206,13 @@ function LeadCard({ lead, onApprove, onDismiss }: {
             </span>
           )}
         </div>
+
+        <SmartBookingGuidanceCard
+          answers={guidanceAnswers}
+          serviceLabel={lead.serviceType}
+          compact
+          className="mt-3"
+        />
       </CardHeader>
 
       <CardContent className="px-4 pb-4">

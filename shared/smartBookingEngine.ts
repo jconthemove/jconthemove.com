@@ -1,3 +1,12 @@
+import {
+  MARKETPLACE_SMART_BOOKING_STEPS,
+  getMarketplaceRequestShape,
+  getMarketplaceShapeForServiceCode,
+  type MarketplaceRequestShapeId,
+  type MarketplaceSmartBookingStep,
+  type MarketplaceSmartBookingStepId,
+} from "./marketplaceShapes";
+
 export type SmartBookingAnswers = Record<string, unknown>;
 
 export type SmartBookingPatch = {
@@ -34,6 +43,28 @@ export type SmartMovingPackage = {
   outsideMin: number;
   outsideMax: number;
   notes: string;
+};
+
+export type SmartBookingGuidanceStepStatus = "complete" | "missing" | "optional";
+
+export type SmartBookingGuidanceStep = MarketplaceSmartBookingStep & {
+  status: SmartBookingGuidanceStepStatus;
+  matchedSignals: string[];
+  missingSignals: string[];
+};
+
+export type SmartBookingGuidance = {
+  shapeId: MarketplaceRequestShapeId;
+  shapeLabel: string;
+  nextStep: SmartBookingGuidanceStep | null;
+  steps: SmartBookingGuidanceStep[];
+  completedRequired: number;
+  totalRequired: number;
+  missingSignals: string[];
+  fastPathReady: boolean;
+  customerNext: string;
+  workerSignal: string;
+  companyControl: string;
 };
 
 export const SMART_MOVING_PACKAGES: SmartMovingPackage[] = [
@@ -455,4 +486,121 @@ export function shouldSkipSmartBookingStep(stepId: string, answers: SmartBooking
     return true;
   }
   return false;
+}
+
+const requiredSignalsByShape: Record<MarketplaceRequestShapeId, Record<MarketplaceSmartBookingStepId, string[]>> = {
+  fast_quote: {
+    where_when: ["location_or_zip"],
+    job_shape: ["service_type"],
+    truck_context: [],
+    smart_package: [],
+    detail_capture: [],
+    contact_recovery: ["contact_method"],
+  },
+  moving_help: {
+    where_when: ["location_or_zip", "date_or_window"],
+    job_shape: ["service_type", "load_type"],
+    truck_context: ["truck_context"],
+    smart_package: ["crew_package"],
+    detail_capture: [],
+    contact_recovery: ["contact_method"],
+  },
+  delivery_reuse: {
+    where_when: ["location_or_zip", "date_or_window"],
+    job_shape: ["service_type"],
+    truck_context: ["pickup_or_dropoff"],
+    smart_package: [],
+    detail_capture: ["item_detail"],
+    contact_recovery: ["contact_method"],
+  },
+  repeat_loop: {
+    where_when: [],
+    job_shape: ["service_type"],
+    truck_context: [],
+    smart_package: [],
+    detail_capture: [],
+    contact_recovery: ["contact_method"],
+  },
+};
+
+function hasAnyAnswer(answers: SmartBookingAnswers, keys: string[]): boolean {
+  return keys.some((key) => {
+    const value = answers[key];
+    if (Array.isArray(value)) return value.length > 0;
+    if (typeof value === "number") return Number.isFinite(value);
+    if (typeof value === "boolean") return value;
+    return text(value).length > 0;
+  });
+}
+
+function signalIsPresent(signal: string, answers: SmartBookingAnswers): boolean {
+  switch (signal) {
+    case "location_or_zip":
+      return hasAnyAnswer(answers, ["fromZip", "customerZip", "zip", "serviceAddress", "fromAddress", "address"]);
+    case "date_or_window":
+      return hasAnyAnswer(answers, ["moveDate", "estimatedDate", "requestedDate", "arrivalWindow", "timeWindow"]);
+    case "service_type":
+      return hasAnyAnswer(answers, ["serviceType", "serviceCode", "marketplaceShapeId", "jobShape"]);
+    case "load_type":
+      return hasAnyAnswer(answers, ["loadType", "movingPath"]);
+    case "truck_context":
+      return hasAnyAnswer(answers, ["truckSituation", "truckProvider", "truckSize", "containerCount", "boxCount", "accessNotes", "parkingDistance"]);
+    case "crew_package":
+      return hasAnyAnswer(answers, ["selectedMovingRec", "selectedMovingRecLabel", "selectedPackage", "packageId"])
+        || (hasAnyAnswer(answers, ["selectedMovingRecCrew", "crewSize"]) && hasAnyAnswer(answers, ["selectedMovingRecHours", "confirmedHours", "laborHours"]));
+    case "pickup_or_dropoff":
+      return hasAnyAnswer(answers, ["pickupAddress", "dropoffAddress", "fromAddress", "toAddress", "serviceAddress"]);
+    case "item_detail":
+      return hasAnyAnswer(answers, ["photos", "submittedPhotos", "items", "inventory", "furniture", "specialItems", "oversizedItemCount", "notes"]);
+    case "contact_method":
+      return hasAnyAnswer(answers, ["phone", "customerPhone", "email", "customerEmail", "fullName", "customerName", "firstName"]);
+    default:
+      return false;
+  }
+}
+
+function guidanceShapeId(answers: SmartBookingAnswers, serviceLabel?: string): MarketplaceRequestShapeId {
+  const shapeId = text(answers.marketplaceShapeId || answers.jobShapeId) as MarketplaceRequestShapeId;
+  if (["fast_quote", "moving_help", "delivery_reuse", "repeat_loop"].includes(shapeId)) return shapeId;
+  return getMarketplaceShapeForServiceCode(text(answers.serviceCode || answers.serviceType || serviceLabel)).id;
+}
+
+export function getSmartBookingGuidance(
+  answers: SmartBookingAnswers,
+  serviceLabel?: string,
+): SmartBookingGuidance {
+  const resolvedShapeId = guidanceShapeId(answers, serviceLabel);
+  const shape = getMarketplaceRequestShape(resolvedShapeId) || getMarketplaceShapeForServiceCode(resolvedShapeId);
+  const requiredSignals = requiredSignalsByShape[shape.id];
+  const steps = MARKETPLACE_SMART_BOOKING_STEPS
+    .filter((step) => step.shapeIds.includes(shape.id))
+    .sort((a, b) => a.order - b.order)
+    .map((step): SmartBookingGuidanceStep => {
+      const required = requiredSignals[step.id] || [];
+      const matchedSignals = required.filter((signal) => signalIsPresent(signal, answers));
+      const missingSignals = required.filter((signal) => !signalIsPresent(signal, answers));
+      return {
+        ...step,
+        status: required.length === 0 ? "optional" : missingSignals.length === 0 ? "complete" : "missing",
+        matchedSignals,
+        missingSignals,
+      };
+    });
+  const requiredSteps = steps.filter((step) => step.status !== "optional");
+  const missingRequired = requiredSteps.filter((step) => step.status === "missing");
+  const nextStep = missingRequired[0] || steps.find((step) => step.status === "optional") || null;
+
+  return {
+    shapeId: shape.id,
+    shapeLabel: shape.shape,
+    nextStep,
+    steps,
+    completedRequired: requiredSteps.length - missingRequired.length,
+    totalRequired: requiredSteps.length,
+    missingSignals: missingRequired.flatMap((step) => step.missingSignals),
+    fastPathReady: missingRequired.length === 0,
+    customerNext: nextStep?.prompt || "Confirm estimate range and preferred contact path.",
+    workerSignal: nextStep?.workerSignal || shape.worker,
+    companyControl: nextStep?.companyControl || shape.company,
+  };
 }
