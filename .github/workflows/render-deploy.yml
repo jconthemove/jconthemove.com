@@ -14,15 +14,15 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
-      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL || vars.RENDER_DEPLOY_HOOK_URL }}
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY || vars.RENDER_API_KEY }}
       RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID || vars.RENDER_SERVICE_ID }}
       PUBLIC_HEALTH_URL: ${{ vars.PUBLIC_HEALTH_URL || 'https://jc-on-the-move.onrender.com/health' }}
       EXPECTED_COMMIT: ${{ github.sha }}
       DEPLOY_WAIT_ATTEMPTS: ${{ vars.DEPLOY_WAIT_ATTEMPTS || '40' }}
       DEPLOY_WAIT_SECONDS: ${{ vars.DEPLOY_WAIT_SECONDS || '30' }}
       DEPLOY_CHECK_TIMEOUT_MS: ${{ vars.DEPLOY_CHECK_TIMEOUT_MS || '15000' }}
-      REQUIRE_RENDER_TRIGGER: ${{ vars.REQUIRE_RENDER_TRIGGER || 'false' }}
+      REQUIRE_RENDER_TRIGGER: ${{ vars.REQUIRE_RENDER_TRIGGER || 'true' }}
     steps:
       - name: Checkout deploy verifier
         uses: actions/checkout@v4
@@ -44,10 +44,10 @@ jobs:
         run: |
           echo "::error::No explicit Render deploy trigger is configured."
           echo "Add either:"
-          echo "  1. GitHub Actions secret RENDER_DEPLOY_HOOK_URL"
-          echo "  2. GitHub Actions secrets RENDER_API_KEY and RENDER_SERVICE_ID"
-          echo "Repository variable REQUIRE_RENDER_TRIGGER=true requires one of these trigger paths."
-          echo "Set REQUIRE_RENDER_TRIGGER=false to allow Render Git auto-deploy verification."
+          echo "  1. GitHub Actions secret or repository variable RENDER_DEPLOY_HOOK_URL"
+          echo "  2. GitHub Actions secrets/variables RENDER_API_KEY and RENDER_SERVICE_ID"
+          echo "This repository now requires an explicit Render trigger because Render Git auto-deploy is not reliably picking up main."
+          echo "Set repository variable REQUIRE_RENDER_TRIGGER=false only if Render auto-deploy is confirmed working."
           exit 1
 
       - name: Check Render trigger configuration
@@ -58,8 +58,8 @@ jobs:
           echo "That lets Render services configured with checksPass start deploying after GitHub checks pass."
           echo "Run the manual 'Verify Render Deployment' workflow after Render starts deploying."
           echo "For forced deploys, add either:"
-          echo "  1. GitHub secret RENDER_DEPLOY_HOOK_URL"
-          echo "  2. GitHub secrets RENDER_API_KEY and RENDER_SERVICE_ID"
+          echo "  1. GitHub secret or repository variable RENDER_DEPLOY_HOOK_URL"
+          echo "  2. GitHub secrets/variables RENDER_API_KEY and RENDER_SERVICE_ID"
 
       - name: Trigger Render deploy hook
         if: env.RENDER_DEPLOY_HOOK_URL != ''

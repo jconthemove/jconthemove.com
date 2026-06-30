@@ -188,6 +188,7 @@ async function checkLatestWorkflow() {
       const { response: jobsResponse, body: jobsBody } = await fetchJson(latest.jobs_url);
       if (jobsResponse.ok) {
         const jobs = Array.isArray(jobsBody?.jobs) ? jobsBody.jobs : [];
+        const steps = jobs.flatMap((job) => Array.isArray(job.steps) ? job.steps : []);
         const failedStep = jobs
           .flatMap((job) => Array.isArray(job.steps) ? job.steps : [])
           .find((step) => step.conclusion === "failure");
@@ -197,11 +198,23 @@ async function checkLatestWorkflow() {
             problems.push("GitHub has no RENDER_DEPLOY_HOOK_URL or RENDER_API_KEY + RENDER_SERVICE_ID configured");
           }
         } else if (latest.status === "in_progress") {
-          const verifyingStep = jobs
-            .flatMap((job) => Array.isArray(job.steps) ? job.steps : [])
+          const verifyingStep = steps
             .find((step) => step.name === "Verify public deployment" && step.status === "in_progress");
           if (verifyingStep) {
             problems.push("GitHub is waiting for Render before the build check can pass; this can deadlock Render services configured with checksPass. Re-run after the split verify workflow lands, or add a Render deploy hook.");
+          }
+        } else if (latest.conclusion === "success") {
+          const triggerConfigStep = steps.find((step) => step.name === "Check Render trigger configuration");
+          const hookStep = steps.find((step) => step.name === "Trigger Render deploy hook");
+          const apiStep = steps.find((step) => step.name === "Trigger Render deploy API");
+          const verifyStep = steps.find((step) => step.name === "Verify public deployment after explicit trigger");
+          const skippedExplicitTrigger =
+            triggerConfigStep?.conclusion === "success"
+            && hookStep?.conclusion === "skipped"
+            && apiStep?.conclusion === "skipped"
+            && verifyStep?.conclusion === "skipped";
+          if (skippedExplicitTrigger) {
+            problems.push("latest deploy workflow built successfully but skipped the explicit Render trigger; add RENDER_DEPLOY_HOOK_URL or RENDER_API_KEY + RENDER_SERVICE_ID");
           }
         }
       }
@@ -243,7 +256,7 @@ function checkTriggerEnv() {
   line(`- RENDER_DEPLOY_HOOK_URL: ${hasHook ? "present" : "missing"}`);
   line(`- RENDER_API_KEY + RENDER_SERVICE_ID: ${hasApi ? "present" : "missing"}`);
   if (!hasHook && !hasApi && !shouldTrigger) {
-    line("- warning: this machine cannot trigger Render directly; GitHub/Render auto-deploy can still be verified");
+    line("- warning: this machine cannot trigger Render directly; add a deploy hook/API credential before relying on forced deploys");
   }
   line();
 
