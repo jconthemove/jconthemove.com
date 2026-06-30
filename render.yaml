@@ -2,6 +2,7 @@ services:
   - type: web
     name: jc-on-the-move
     runtime: node
+    repo: https://github.com/JCONTHEMOVE/JCONTHEMOVE.COM
     plan: starter
     region: ohio
     branch: main
@@ -9,6 +10,8 @@ services:
     buildCommand: npm ci && npm run build
     startCommand: npm run start
     healthCheckPath: /health
+    domains:
+      - www.jconthemove.com
     envVars:
       - key: NODE_VERSION
         value: 20

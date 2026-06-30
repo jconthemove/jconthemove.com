@@ -6,12 +6,14 @@ This repo includes a Render Blueprint in `render.yaml`.
 
 It creates one Node web service with:
 
+- `repo`: `https://github.com/JCONTHEMOVE/JCONTHEMOVE.COM`
 - `buildCommand`: `npm ci && npm run build`
 - `startCommand`: `npm run start`
 - `healthCheckPath`: `/health`
 - `branch`: `main`
 - `plan`: `starter`
 - `region`: `ohio`
+- custom domain: `www.jconthemove.com`
 
 `/health` is the Render liveness probe. It returns quickly during cold starts and includes deploy version/bootstrap status so Render does not kill the service while heavier route and database startup work finishes. `/api/health` remains the strict operator readiness probe; it proves API routes, database, and required environment variables are ready, and returns HTTP `503` when readiness fails.
 
@@ -46,6 +48,14 @@ It checks three things without printing secrets:
 - whether `www.jconthemove.com` is still routed to the old Railway service
 - whether the latest GitHub deploy workflow failed before triggering Render
 - whether this machine has `RENDER_DEPLOY_HOOK_URL` or `RENDER_API_KEY` + `RENDER_SERVICE_ID`
+
+If the doctor shows stale Render code or missing launch env vars, run the repair guide:
+
+```bash
+npm run render:repair
+```
+
+It performs the same live probes, generates a fresh paste-ready `SESSION_SECRET`, and prints the exact Render environment variables, service settings, GitHub deploy hook, and DNS actions needed to unblock the deploy. It does not print or inspect your real Square token.
 
 If `https://jc-on-the-move.onrender.com/api/health` reports missing env vars, fix those in Render first:
 
