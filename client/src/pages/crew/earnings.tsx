@@ -17,6 +17,7 @@ import { Link, useLocation } from "wouter";
 import { useState, useEffect, useMemo } from "react";
 import { notificationService } from "@/lib/notifications";
 import ProcessFlowCard, { type ProcessFlowStep } from "@/components/ProcessFlowCard";
+import MarketplaceActionMatrix from "@/components/MarketplaceActionMatrix";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 
 interface MiningStatus {
@@ -869,6 +870,15 @@ export default function CrewEarningsPage({ marketingOnly = false }: { marketingO
           audience="worker"
           serviceLabel={adFocus}
           compact
+        />
+      )}
+
+      {marketingMode && (
+        <MarketplaceActionMatrix
+          rail="worker"
+          phase="start"
+          compact
+          limit={3}
         />
       )}
 

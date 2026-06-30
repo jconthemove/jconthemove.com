@@ -105,6 +105,31 @@ export type MarketplaceSourceFlow = {
   flywheelStages: MarketplaceFlywheelStageId[];
 };
 
+export type MarketplaceActionPhase = "start" | "progress" | "finish";
+
+export type MarketplaceActionRail =
+  | "customer"
+  | "bronze"
+  | "silver"
+  | "gold"
+  | "platinum";
+
+export type MarketplaceActionTask = {
+  id: string;
+  phase: MarketplaceActionPhase;
+  rail: MarketplaceActionRail;
+  side: MarketplaceSideId;
+  title: string;
+  action: string;
+  proof: string;
+  bonusJcMoves: number;
+  customerImpact: string;
+  companyGuardrail: string;
+  sourcePatterns: string;
+  flowIds: string[];
+  shapeIds: MarketplaceRequestShapeId[];
+};
+
 export const MARKETPLACE_REQUEST_SHAPES: MarketplaceRequestShape[] = [
   {
     id: "fast_quote",
@@ -816,6 +841,174 @@ export const MARKETPLACE_OPERATING_FLYWHEEL: MarketplaceFlywheelStage[] = [
   },
 ];
 
+export const MARKETPLACE_ACTION_TASKS: MarketplaceActionTask[] = [
+  {
+    id: "customer_seed_request",
+    phase: "start",
+    rail: "customer",
+    side: "customer",
+    title: "Submit the seed request",
+    action: "Answer ZIP/address, estimated date, service, truck/provider, contact, notes, and optional photos.",
+    proof: "quote_requested lead card plus booking funnel event.",
+    bonusJcMoves: 0,
+    customerImpact: "A customer can start the job in under 60 seconds and recover it later if they leave.",
+    companyGuardrail: "No final price is promised until staff confirms the quote.",
+    sourcePatterns: "Google, Yelp, MovingHelp, Walmart catalog flow",
+    flowIds: ["google_yelp_trust", "uhaul_movinghelp", "target_walmart_catalog"],
+    shapeIds: ["fast_quote", "moving_help", "delivery_reuse"],
+  },
+  {
+    id: "bronze_local_ad",
+    phase: "start",
+    rail: "bronze",
+    side: "worker",
+    title: "Post a tracked local ad",
+    action: "Use the ad creator, choose area/focus, attach a real photo when possible, and share the tracked link.",
+    proof: "marketing campaign row with source, rep code, and tracked link.",
+    bonusJcMoves: 250,
+    customerImpact: "More local people find a simple booking doorway instead of sending scattered messages.",
+    companyGuardrail: "Only tracked campaigns count for bonuses; no unverifiable ad credit.",
+    sourcePatterns: "Facebook, Craigslist, Google local intent",
+    flowIds: ["facebook_craigslist_ads", "google_yelp_trust", "discord_webhooks"],
+    shapeIds: ["fast_quote", "repeat_loop"],
+  },
+  {
+    id: "bronze_capture_quick_request",
+    phase: "start",
+    rail: "bronze",
+    side: "worker",
+    title: "Capture a quick request",
+    action: "Collect name, phone, ZIP/address, estimated date, service shape, and one useful note.",
+    proof: "lead card or recoverable funnel event with worker/source attribution.",
+    bonusJcMoves: 350,
+    customerImpact: "A caller or message thread becomes a real card before the opportunity goes cold.",
+    companyGuardrail: "Bronze can submit/request, not approve final pricing.",
+    sourcePatterns: "Yelp lead capture, Facebook messenger, Porch/HireAHelper intake",
+    flowIds: ["google_yelp_trust", "facebook_craigslist_ads", "porch_hireahelper_consensus"],
+    shapeIds: ["fast_quote", "moving_help", "delivery_reuse"],
+  },
+  {
+    id: "silver_sample_quote",
+    phase: "progress",
+    rail: "silver",
+    side: "worker",
+    title: "Pick a sample quote path",
+    action: "Choose the guided package/range that best matches the card: crew size, hours, travel, and service.",
+    proof: "quote consensus vote saved on the lead.",
+    bonusJcMoves: 300,
+    customerImpact: "The customer gets a faster recommendation while still waiting for final confirmation.",
+    companyGuardrail: "Multiple matching picks raise confidence; one pick alone does not finalize the quote.",
+    sourcePatterns: "HireAHelper comparison, MovingHelp rate rows, McDonald's simple menu",
+    flowIds: ["porch_hireahelper_consensus", "uhaul_movinghelp", "mcdonalds_menu"],
+    shapeIds: ["moving_help", "fast_quote"],
+  },
+  {
+    id: "silver_build_quote_card",
+    phase: "progress",
+    rail: "silver",
+    side: "worker",
+    title: "Build the quote card",
+    action: "Fill crew size, hours, window, zone, notes, estimate range, and missing customer details.",
+    proof: "lead quote snapshot has enough detail for approval.",
+    bonusJcMoves: 500,
+    customerImpact: "The request becomes understandable and schedulable.",
+    companyGuardrail: "Silver builds the card; Gold or Platinum approves customer-facing price.",
+    sourcePatterns: "MovingHelper provider profile, U-Haul crew sizing, PODS/U-Box details",
+    flowIds: ["uhaul_movinghelp", "pods_ubox_containers"],
+    shapeIds: ["moving_help", "delivery_reuse"],
+  },
+  {
+    id: "gold_approve_quote",
+    phase: "progress",
+    rail: "gold",
+    side: "worker",
+    title: "Approve the quote recommendation",
+    action: "Check zone pricing, travel, crew availability, minimums, discount threshold, and margin.",
+    proof: "quote approval record or quoted status on lead.",
+    bonusJcMoves: 700,
+    customerImpact: "The estimate becomes a real confirmed quote path.",
+    companyGuardrail: "Gold approval protects price quality before the card becomes available or assigned.",
+    sourcePatterns: "MovingHelp pricing control, Yelp trust, Square invoice readiness",
+    flowIds: ["uhaul_movinghelp", "google_yelp_trust", "square_collect"],
+    shapeIds: ["moving_help", "delivery_reuse", "fast_quote"],
+  },
+  {
+    id: "platinum_dispatch_ready",
+    phase: "progress",
+    rail: "platinum",
+    side: "company",
+    title: "Dispatch the card",
+    action: "Set date/window, assign crew, resolve leave/availability, and push the card to calendar.",
+    proof: "assignment, calendar date, dispatch status, and assigned-crew notification.",
+    bonusJcMoves: 900,
+    customerImpact: "The customer knows who is coming and when.",
+    companyGuardrail: "Only assigned crew get future job updates after dispatch.",
+    sourcePatterns: "Two Men and a Truck dispatch, Porch Moving Group ops",
+    flowIds: ["two_men_ops", "discord_webhooks"],
+    shapeIds: ["moving_help", "delivery_reuse"],
+  },
+  {
+    id: "platinum_payment_ready",
+    phase: "progress",
+    rail: "platinum",
+    side: "company",
+    title: "Prepare collection",
+    action: "Attach Square link or approved cash path, deposit rule, payout preview, and company profit split.",
+    proof: "payment URL/status, deposit flag, payout preview, and finance notes.",
+    bonusJcMoves: 600,
+    customerImpact: "Anyone trusted can collect payment with a link instead of handling card data.",
+    companyGuardrail: "No payout release before payment/deposit approval rules pass.",
+    sourcePatterns: "Square invoice links, cash payout ledger, JCMOVES rewards",
+    flowIds: ["square_collect", "jcmoves_rewards"],
+    shapeIds: ["moving_help", "delivery_reuse", "repeat_loop"],
+  },
+  {
+    id: "worker_complete_proof",
+    phase: "finish",
+    rail: "bronze",
+    side: "worker",
+    title: "Close with proof",
+    action: "Mark complete, add notes/photos when useful, and flag any payment or customer issue.",
+    proof: "completed status, completion timestamp, proof notes/photos.",
+    bonusJcMoves: 500,
+    customerImpact: "The customer gets a clean closeout and review/rebook path.",
+    companyGuardrail: "Completion rewards and payouts must run idempotently once.",
+    sourcePatterns: "Professional mover closeout, Google/Yelp review loop",
+    flowIds: ["two_men_ops", "google_yelp_trust", "jcmoves_rewards"],
+    shapeIds: ["moving_help", "delivery_reuse", "repeat_loop"],
+  },
+  {
+    id: "gold_review_recovery",
+    phase: "finish",
+    rail: "gold",
+    side: "worker",
+    title: "Recover the next opportunity",
+    action: "Request review, identify add-on/rebook/referral, and connect the customer to the next simple action.",
+    proof: "review, repeat lead, referral attribution, or campaign follow-up row.",
+    bonusJcMoves: 450,
+    customerImpact: "A completed job turns into trust, credit, and the next useful service.",
+    companyGuardrail: "Bonuses attach to verified review/recovery behavior, not vague follow-up claims.",
+    sourcePatterns: "Target loyalty, McDonald's repeat habit, Goodwill reuse loop",
+    flowIds: ["target_walmart_catalog", "mcdonalds_menu", "goodwill_reuse", "jcmoves_rewards"],
+    shapeIds: ["repeat_loop", "delivery_reuse", "fast_quote"],
+  },
+  {
+    id: "platinum_payout_close",
+    phase: "finish",
+    rail: "platinum",
+    side: "company",
+    title: "Approve payout and rewards",
+    action: "Confirm payment, worker payout, company reserves, bonuses, JCMOVES, and exception notes.",
+    proof: "payout status, reward ledger, paid timestamp, and profit-share record.",
+    bonusJcMoves: 750,
+    customerImpact: "The job is financially closed and ready for future service credit/rewards.",
+    companyGuardrail: "Cash payout now; Square/JCMOVES automation later, with no duplicate payout records.",
+    sourcePatterns: "Square collection, JCMOVES crypto, company profit rails",
+    flowIds: ["square_collect", "jcmoves_rewards"],
+    shapeIds: ["moving_help", "delivery_reuse", "repeat_loop"],
+  },
+];
+
 export const MARKETPLACE_ZONE_SERVICE_OPTIONS: MarketplaceZoneServiceOption[] = [
   {
     code: "load_unload",
@@ -865,6 +1058,14 @@ export function getMarketplaceRequestShape(id: MarketplaceRequestShapeId) {
 
 export function getMarketplaceFunctionalIdeasForShape(id: MarketplaceRequestShapeId) {
   return MARKETPLACE_FUNCTIONAL_IDEAS.filter((idea) => idea.shapeIds.includes(id));
+}
+
+export function getMarketplaceActionTasksForRail(rail: MarketplaceActionRail) {
+  return MARKETPLACE_ACTION_TASKS.filter((task) => task.rail === rail);
+}
+
+export function getMarketplaceActionTasksForPhase(phase: MarketplaceActionPhase) {
+  return MARKETPLACE_ACTION_TASKS.filter((task) => task.phase === phase);
 }
 
 function normalizeMarketplaceText(value: string | null | undefined): string {

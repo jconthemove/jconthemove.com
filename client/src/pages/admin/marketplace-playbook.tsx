@@ -25,6 +25,7 @@ import {
   type MarketplaceFunctionalIdeaStatus,
 } from "@shared/marketplaceShapes";
 import AuthorityTasksCard from "@/components/AuthorityTasksCard";
+import MarketplaceActionMatrix from "@/components/MarketplaceActionMatrix";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 
 const steps = [
@@ -182,6 +183,8 @@ export default function AdminMarketplacePlaybookPage() {
         </section>
 
         <AuthorityTasksCard className="mt-5" />
+
+        <MarketplaceActionMatrix className="mt-5" />
 
         <section className="mt-5 rounded-lg border border-slate-800 bg-slate-900/70 p-5">
           <div className="flex items-center gap-2">
