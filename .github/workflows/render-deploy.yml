@@ -11,15 +11,38 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      PUBLIC_HEALTH_URL: ${{ vars.PUBLIC_HEALTH_URL || 'https://www.jconthemove.com/api/health' }}
+      EXPECTED_COMMIT: ${{ github.sha }}
     steps:
+      - name: Checkout deploy verifier
+        uses: actions/checkout@v4
+
+      - name: Use Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Check deploy hook secret
         if: env.RENDER_DEPLOY_HOOK_URL == ''
         run: |
           echo "RENDER_DEPLOY_HOOK_URL is not set."
           echo "Add the Render deploy hook URL as a GitHub Actions secret to force Render deploys on every main push."
+          exit 1
 
       - name: Trigger Render deploy hook
         if: env.RENDER_DEPLOY_HOOK_URL != ''
         run: |
           curl --fail --show-error --silent --request POST "$RENDER_DEPLOY_HOOK_URL"
           echo "Render deploy hook triggered."
+
+      - name: Verify public deployment
+        run: |
+          for attempt in $(seq 1 20); do
+            echo "Production verify attempt $attempt/20"
+            if node scripts/check-production-deploy.mjs "$PUBLIC_HEALTH_URL"; then
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "Render deploy did not become publicly verifiable in time."
+          exit 1

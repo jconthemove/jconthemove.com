@@ -7,6 +7,12 @@ import cors from "cors";
 import type { InsertRewardItem } from "@shared/schema";
 import { assertRequiredEnvOrExit } from "./services/envValidation";
 
+const boot = {
+  status: "starting" as "starting" | "ready" | "failed",
+  error: null as string | null,
+  readyAt: null as string | null,
+};
+
 function log(message: string) {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -16,6 +22,133 @@ function log(message: string) {
   });
 
   console.log(`${formattedTime} [express] ${message}`);
+}
+
+function getDeployVersion() {
+  const commit =
+    process.env.RAILWAY_GIT_COMMIT_SHA
+    || process.env.RENDER_GIT_COMMIT
+    || process.env.VERCEL_GIT_COMMIT_SHA
+    || process.env.GITHUB_SHA
+    || null;
+  const branch =
+    process.env.RAILWAY_GIT_BRANCH
+    || process.env.RENDER_GIT_BRANCH
+    || process.env.VERCEL_GIT_COMMIT_REF
+    || process.env.GITHUB_REF_NAME
+    || null;
+  const deployId =
+    process.env.RAILWAY_DEPLOYMENT_ID
+    || process.env.RENDER_SERVICE_ID
+    || process.env.VERCEL_DEPLOYMENT_ID
+    || process.env.GITHUB_RUN_ID
+    || null;
+
+  return {
+    commit,
+    shortCommit: commit ? commit.slice(0, 8) : null,
+    branch,
+    deployId,
+  };
+}
+
+const REQUIRED_HEALTH_ENV = [
+  "DATABASE_URL",
+  "SESSION_SECRET",
+  "SQUARE_ACCESS_TOKEN",
+  "SQUARE_ENVIRONMENT",
+] as const;
+
+const OPTIONAL_HEALTH_ENV = [
+  "APP_URL",
+  "MOONSHOT_TOKEN_ADDRESS",
+  "TREASURY_WALLET_PRIVATE_KEY",
+  "TREASURY_WALLET_PUBLIC_KEY",
+  "SENDGRID_API_KEY",
+  "COMPANY_EMAIL",
+  "VITE_SOLANA_RPC_URL",
+] as const;
+
+function envPresence(names: readonly string[]) {
+  return Object.fromEntries(
+    names.map((name) => [name, process.env[name]?.trim() ? "present" : "missing"]),
+  );
+}
+
+function toHealthError(error: unknown) {
+  if (error instanceof Error) {
+    return { message: error.message };
+  }
+  return { message: String(error) };
+}
+
+async function checkDatabaseReady() {
+  const timeout = new Promise<never>((_resolve, reject) => {
+    setTimeout(() => reject(new Error("Database readiness probe timed out")), 1500);
+  });
+  const { pool } = await import("./db");
+  await Promise.race([pool.query("select 1"), timeout]);
+}
+
+async function sendEarlyReadiness(_req: Request, res: Response) {
+  const startedAt = Date.now();
+  const missingRequiredEnv = REQUIRED_HEALTH_ENV.filter((name) => !process.env[name]?.trim());
+  const envReady = missingRequiredEnv.length === 0;
+
+  let dbCheck:
+    | { status: "ready"; connected: true; latencyMs: number }
+    | { status: "not_ready"; connected: false; latencyMs: number; error: { message: string } };
+
+  if (boot.status === "ready") {
+    try {
+      await checkDatabaseReady();
+      dbCheck = {
+        status: "ready",
+        connected: true,
+        latencyMs: Date.now() - startedAt,
+      };
+    } catch (error) {
+      dbCheck = {
+        status: "not_ready",
+        connected: false,
+        latencyMs: Date.now() - startedAt,
+        error: toHealthError(error),
+      };
+    }
+  } else {
+    dbCheck = {
+      status: "not_ready",
+      connected: false,
+      latencyMs: Date.now() - startedAt,
+      error: { message: boot.status === "failed" ? boot.error || "Application bootstrap failed" : "Application bootstrap still starting" },
+    };
+  }
+
+  const ready = boot.status === "ready" && dbCheck.status === "ready" && envReady;
+
+  res.setHeader("Cache-Control", "no-store");
+  res.status(ready ? 200 : 503).json({
+    status: ready ? "ready" : "not_ready",
+    service: "jc-on-the-move",
+    timestamp: new Date().toISOString(),
+    uptimeSeconds: Math.round(process.uptime()),
+    version: getDeployVersion(),
+    boot,
+    checks: {
+      app: {
+        status: boot.status === "ready" ? "ready" : "not_ready",
+        nodeEnv: process.env.NODE_ENV || "development",
+        port: process.env.PORT || "5000",
+      },
+      db: dbCheck,
+      env: {
+        status: envReady ? "ready" : "not_ready",
+        missingRequired: missingRequiredEnv,
+        required: envPresence(REQUIRED_HEALTH_ENV),
+        optional: envPresence(OPTIONAL_HEALTH_ENV),
+      },
+    },
+  });
 }
 
 // ── Crash guard — log clearly before exiting so the auto-restart wrapper picks it up ──
@@ -46,17 +179,33 @@ app.use((req, res, next) => {
   next();
 });
 
-// Railway and other platforms need a fast liveness endpoint while the app
-// finishes heavier route/bootstrap work.
+// Platforms need a fast liveness endpoint while the app finishes heavier
+// route/bootstrap work. Keep this 200-level, but include enough deployment
+// state to tell "socket is up" from "marketplace routes are ready".
 app.get("/health", (_req, res) => {
   res.setHeader("Cache-Control", "no-store");
   res.status(200).json({
-    status: "alive",
+    status: boot.status === "failed" ? "not_ready" : "alive",
     service: "jc-on-the-move",
     timestamp: new Date().toISOString(),
     uptimeSeconds: Math.round(process.uptime()),
+    version: getDeployVersion(),
+    boot,
   });
 });
+
+app.get("/version", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.status(200).json({
+    service: "jc-on-the-move",
+    timestamp: new Date().toISOString(),
+    uptimeSeconds: Math.round(process.uptime()),
+    version: getDeployVersion(),
+    boot,
+  });
+});
+
+app.get("/api/health", sendEarlyReadiness);
 
 // CORS configuration for web and mobile clients.
 const configuredOrigins = [
@@ -824,8 +973,12 @@ server.listen(port, '0.0.0.0', () => {
     });
 
     console.log('JC ON THE MOVE application started successfully');
+    boot.status = "ready";
+    boot.readyAt = new Date().toISOString();
 
 } catch (error) {
+  boot.status = "failed";
+  boot.error = error instanceof Error ? error.message : String(error);
   console.error('Failed to initialize JC ON THE MOVE application:');
   console.error('Error details:', error);
 

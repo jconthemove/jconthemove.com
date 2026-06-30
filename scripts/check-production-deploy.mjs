@@ -1,3 +1,5 @@
+import dns from "node:dns/promises";
+
 const healthUrl = process.argv[2] || process.env.PUBLIC_HEALTH_URL || "https://www.jconthemove.com/api/health";
 const expectedCommit = (process.env.EXPECTED_COMMIT || process.env.RENDER_GIT_COMMIT || "").slice(0, 8) || null;
 
@@ -14,7 +16,26 @@ function hostSignals(res) {
   ].filter(Boolean);
 }
 
+async function getDnsSignals(url) {
+  const hostname = new URL(url).hostname;
+  const signals = [];
+
+  try {
+    const cnames = await dns.resolveCname(hostname);
+    for (const cname of cnames) {
+      signals.push(`cname=${cname}`);
+    }
+  } catch (error) {
+    if (error?.code !== "ENODATA" && error?.code !== "ENOTFOUND") {
+      signals.push(`dns=${error?.code || "lookup_failed"}`);
+    }
+  }
+
+  return signals;
+}
+
 try {
+  const dnsSignals = await getDnsSignals(healthUrl);
   const res = await fetch(healthUrl, {
     headers: {
       "Cache-Control": "no-store",
@@ -39,6 +60,9 @@ try {
   if (!parseFailed) {
     const publicCommit = body?.version?.shortCommit || null;
     const problems = [];
+    if (dnsSignals.some((signal) => signal.toLowerCase().includes("railway"))) {
+      problems.push("DNS still points at Railway instead of Render");
+    }
     if (signals.includes("railway")) {
       problems.push("public domain is still served by Railway");
     }
@@ -59,6 +83,7 @@ try {
       `commit=${publicCommit || "missing"}`,
       `uptime=${body?.uptimeSeconds ?? "unknown"}`,
       `signals=${signals.join(",") || "none"}`,
+      `dns=${dnsSignals.join(",") || "none"}`,
     ].join(" ");
 
     if (problems.length > 0) {

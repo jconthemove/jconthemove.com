@@ -8,12 +8,12 @@ It creates one Node web service with:
 
 - `buildCommand`: `npm ci && npm run build`
 - `startCommand`: `npm run start`
-- `healthCheckPath`: `/health`
+- `healthCheckPath`: `/api/health`
 - `branch`: `main`
 - `plan`: `starter`
 - `region`: `ohio`
 
-`/health` is the canonical Render/Railway platform probe. `/api/health` is the strict readiness probe for API clients and manual checks, so both paths return identical JSON for app, database, and environment readiness while `/api/health` uses HTTP `503` when readiness fails.
+`/api/health` is the canonical Render readiness probe. It proves the API routes, database, and required environment variables are ready, and returns HTTP `503` when readiness fails. `/health` stays as a fast liveness endpoint for cold starts and includes deploy version/bootstrap status, but it should not be used as the Render readiness gate.
 
 ## Required Render environment variables
 
@@ -56,8 +56,8 @@ Optional feature variables:
 3. Connect the repo and select the branch you want to deploy.
 4. When Render prompts for `sync: false` variables, enter at least the required ones above.
 5. Deploy the Blueprint.
-6. After the first deploy finishes, open `https://<your-service>.onrender.com/health`.
-7. Confirm `https://<your-service>.onrender.com/api/health` returns the same readiness JSON.
+6. After the first deploy finishes, open `https://<your-service>.onrender.com/api/health`.
+7. Confirm it returns HTTP `200` with `status: "ready"` and a `version.shortCommit`.
 
 ## Auto-deploy fallback
 
@@ -71,7 +71,7 @@ Use this even if Render's Git auto-deploy is enabled. It gives us a second, expl
 
 ## Health check response
 
-Ready services return HTTP `200` and `status: "ready"`. If the database probe fails or a required environment variable is missing, `/health` still returns HTTP `200` with `status: "not_ready"` for platform liveness, while `/api/health` returns HTTP `503` with the same JSON for strict readiness.
+Ready services return HTTP `200` and `status: "ready"` from `/api/health`. If the database probe fails or a required environment variable is missing, `/api/health` returns HTTP `503` with readiness details. `/health` always returns HTTP `200` for liveness and includes `version` plus `boot` status so you can quickly see which commit is running.
 
 The JSON shape is:
 
