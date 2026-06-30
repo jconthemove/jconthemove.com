@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import {
   Radio, Briefcase, Users, Wallet, Sliders, ChevronRight, LogOut,
   Menu, X, CalendarDays, FileBarChart, Rocket, AlertTriangle,
-  ClipboardList, Megaphone, Lightbulb,
+  ClipboardList, Megaphone, Lightbulb, Store,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, clearTokens, queryClient } from "@/lib/queryClient";
@@ -65,6 +65,7 @@ const OPTIONS = [
   { label: "Finance", icon: Wallet, path: "/admin/finance" },
   { label: "Funnel", icon: FileBarChart, path: "/admin/booking-analytics" },
   { label: "Marketing", icon: Megaphone, path: "/admin/marketing-webhooks" },
+  { label: "Marketplace", icon: Store, path: "/admin/marketplace" },
   { label: "Playbook", icon: Lightbulb, path: "/admin/marketplace-playbook" },
   { label: "Launch", icon: Rocket, path: "/admin/launch-checklist" },
 ];
@@ -107,7 +108,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   };
 
   const isActive = (path: string) =>
-    path === "/admin" ? (location === "/admin" || location === "/admin/") : location.startsWith(path);
+    path === "/admin"
+      ? (location === "/admin" || location === "/admin/")
+      : (location === path || location.startsWith(`${path}/`));
 
   const go = (p: string) => { setLocation(p); setMobileOpen(false); };
 
