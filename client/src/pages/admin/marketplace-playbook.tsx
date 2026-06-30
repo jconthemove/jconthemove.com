@@ -88,6 +88,27 @@ const humanChecks = [
   "Deleting or archiving real lead cards",
 ];
 
+const jcmovesRails = [
+  {
+    side: "Customer",
+    receive: "Earn JCMOVES from paid bookings, reviews, referrals, and approved promo campaigns.",
+    redeem: "Use Wallet to redeem toward discounts, reward-shop items, or future service credit.",
+    guardrail: "Discount rules enforce minimums, caps, and approval before money leaves the job.",
+  },
+  {
+    side: "Worker",
+    receive: "Earn JCMOVES for verified marketing, useful quote help, accepted jobs, completion, and review support.",
+    redeem: "Use worker wallet/rewards for bonuses, shop items, and approved payout-related perks.",
+    guardrail: "Rewards attach to proof and source ids so the same action cannot pay twice.",
+  },
+  {
+    side: "Company",
+    receive: "Company wallet stays the reserve and receive rail for platform-level JCMOVES flow.",
+    redeem: "Admin can approve redemptions, review reward liability, and keep Square/cash payout math aligned.",
+    guardrail: "Completion, payment, and payout checks must pass before automatic rewards close.",
+  },
+];
+
 const blueprint = [
   {
     title: "Customer Front Door",
@@ -178,6 +199,43 @@ export default function AdminMarketplacePlaybookPage() {
         </section>
 
         <MarketplaceFocusRouter className="mt-5" />
+
+        <section className="mt-5 rounded-lg border border-amber-400/25 bg-amber-500/10 p-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <WalletCards className="h-5 w-5 text-amber-200" />
+                <h2 className="font-black text-white">JCMOVES Receive And Redeem</h2>
+              </div>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+                Keep the crypto/reward side simple: earn from useful verified actions, redeem from Wallet, and let the
+                company guardrails protect payment, payout, and discount math.
+              </p>
+            </div>
+            <span className="rounded-full border border-amber-400/30 bg-slate-950/60 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-amber-100">
+              receive / redeem / verify
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            {jcmovesRails.map((rail) => (
+              <div key={rail.side} className="rounded-md border border-slate-800 bg-slate-950/70 p-4">
+                <p className="text-sm font-black text-white">{rail.side}</p>
+                <div className="mt-3 space-y-3 text-sm leading-6">
+                  <p className="text-slate-300">
+                    <span className="font-bold text-emerald-200">Receive:</span> {rail.receive}
+                  </p>
+                  <p className="text-slate-300">
+                    <span className="font-bold text-blue-200">Redeem:</span> {rail.redeem}
+                  </p>
+                  <p className="text-slate-300">
+                    <span className="font-bold text-amber-200">Guardrail:</span> {rail.guardrail}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
 
         <MarketplaceSmartBookingEngine className="mt-5" />
 
