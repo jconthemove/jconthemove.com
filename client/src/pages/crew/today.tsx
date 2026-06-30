@@ -27,6 +27,8 @@ import { WorkerBadge } from "@/components/WorkerBadge";
 import { ConfettiBurst } from "@/components/ConfettiBurst";
 import { getWorkerLevel, type LoyaltyTierKey } from "@/lib/loyalty";
 import ProcessFlowCard, { type ProcessFlowStep } from "@/components/ProcessFlowCard";
+import MarketplaceSourceFlowStrip from "@/components/MarketplaceSourceFlowStrip";
+import type { MarketplaceActionPhase } from "@shared/marketplaceShapes";
 
 const MONTH_NAMES_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DAY_NAMES_SHORT = ["Su","Mo","Tu","We","Th","Fr","Sa"];
@@ -67,6 +69,13 @@ type TrashJob = {
 type TrashJobRow = {
   job: TrashJob;
   sub: TrashJobSub;
+};
+
+type TodayMarketplaceFocus = {
+  source?: string | null;
+  serviceType?: string | null;
+  details?: string | null;
+  status?: string | null;
 };
 
 const SCRIPTURES = [
@@ -152,6 +161,39 @@ function dedupeLeadsById<T extends { id: string }>(items: T[]): T[] {
     seen.add(item.id);
     return true;
   });
+}
+
+function marketplacePhaseForToday({
+  completedToday,
+  hasActiveWork,
+  hasOpenWork,
+}: {
+  completedToday: boolean;
+  hasActiveWork: boolean;
+  hasOpenWork: boolean;
+}): MarketplaceActionPhase {
+  if (hasActiveWork || hasOpenWork) return "progress";
+  if (completedToday) return "finish";
+  return "start";
+}
+
+function marketplaceSourceForToday({
+  focus,
+  completedToday,
+  hasActiveWork,
+  hasOpenWork,
+}: {
+  focus: TodayMarketplaceFocus | null;
+  completedToday: boolean;
+  hasActiveWork: boolean;
+  hasOpenWork: boolean;
+}) {
+  const explicitSource = typeof focus?.source === "string" ? focus.source.trim() : "";
+  if (explicitSource) return explicitSource;
+  if (hasActiveWork) return "two_men";
+  if (hasOpenWork) return "movinghelp";
+  if (completedToday) return "jcmoves";
+  return "facebook";
 }
 
 function getBeaconKey(userId: string | number) {
@@ -859,6 +901,15 @@ export default function CrewTodayPage() {
   });
   const hasActiveWork = myAssignments.length > 0 || todayJobs.length > 0;
   const hasOpenWork = visibleUpcomingBoardJobs.length > 0;
+  const marketplaceFocus: TodayMarketplaceFocus | null =
+    primaryActiveJob?.job ?? myAssignments[0] ?? todayJobs[0] ?? visibleUpcomingBoardJobs[0] ?? null;
+  const marketplacePhase = marketplacePhaseForToday({ completedToday, hasActiveWork, hasOpenWork });
+  const marketplaceSource = marketplaceSourceForToday({
+    focus: marketplaceFocus,
+    completedToday,
+    hasActiveWork,
+    hasOpenWork,
+  });
   const crewProcessSteps: ProcessFlowStep[] = [
     {
       phase: "start",
@@ -1004,6 +1055,14 @@ export default function CrewTodayPage() {
         title="Today's work loop"
         description="Use the same simple path for marketing, quotes, jobs, and payouts: start the opportunity, progress the card, finish the closeout."
         steps={crewProcessSteps}
+      />
+
+      <MarketplaceSourceFlowStrip
+        source={marketplaceSource}
+        serviceCode={marketplaceFocus?.serviceType || "moving"}
+        audience="worker"
+        phase={marketplacePhase}
+        className="border-orange-400/20 bg-slate-950/80"
       />
 
       {/* Worker-side job completion celebration overlay */}
