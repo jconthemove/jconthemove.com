@@ -22,7 +22,7 @@ jobs:
       DEPLOY_WAIT_ATTEMPTS: ${{ vars.DEPLOY_WAIT_ATTEMPTS || '40' }}
       DEPLOY_WAIT_SECONDS: ${{ vars.DEPLOY_WAIT_SECONDS || '30' }}
       DEPLOY_CHECK_TIMEOUT_MS: ${{ vars.DEPLOY_CHECK_TIMEOUT_MS || '15000' }}
-      REQUIRE_RENDER_TRIGGER: ${{ vars.REQUIRE_RENDER_TRIGGER || 'false' }}
+      REQUIRE_RENDER_TRIGGER: ${{ vars.REQUIRE_RENDER_TRIGGER || 'true' }}
     steps:
       - name: Checkout deploy verifier
         uses: actions/checkout@v4
@@ -46,17 +46,17 @@ jobs:
           echo "Add either:"
           echo "  1. GitHub Actions secret or repository variable RENDER_DEPLOY_HOOK_URL"
           echo "  2. GitHub Actions secrets/variables RENDER_API_KEY and RENDER_SERVICE_ID"
-          echo "Repository variable REQUIRE_RENDER_TRIGGER=true is set, so this workflow cannot pass without an explicit Render trigger."
-          echo "Unset REQUIRE_RENDER_TRIGGER or set it to false if this Render service should deploy after GitHub checks pass."
+          echo "Launch deploys must have an explicit Render trigger so a green GitHub run means production was actually asked to deploy."
+          echo "If you intentionally want to rely on Render's dashboard auto-deploy only, set repository variable REQUIRE_RENDER_TRIGGER=false."
           exit 1
 
       - name: Check Render trigger configuration
         if: env.RENDER_DEPLOY_HOOK_URL == '' && (env.RENDER_API_KEY == '' || env.RENDER_SERVICE_ID == '')
         run: |
           echo "::warning::No explicit Render deploy trigger is configured."
-          echo "Set REQUIRE_RENDER_TRIGGER=false only if Render auto-deploy is confirmed healthy."
-          echo "Launch deploys should use an explicit Render deploy hook or Render API credentials."
-          echo "That prevents a green GitHub run while the public Render service stays on an old commit."
+          echo "This run is allowed only because REQUIRE_RENDER_TRIGGER=false."
+          echo "Use this mode only when Render dashboard auto-deploy is confirmed healthy."
+          echo "Launch deploys should use an explicit Render deploy hook or Render API credentials so stale production cannot hide behind a green workflow."
           echo "Run the manual 'Verify Render Deployment' workflow after Render starts deploying."
           echo "For forced deploys, add either:"
           echo "  1. GitHub secret or repository variable RENDER_DEPLOY_HOOK_URL"

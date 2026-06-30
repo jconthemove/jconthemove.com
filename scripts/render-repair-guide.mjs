@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
 
@@ -80,12 +81,31 @@ function printCheck(name, result) {
 }
 
 function printRenderSteps(secret) {
+  const localKeys = [
+    "DATABASE_URL",
+    "SESSION_SECRET",
+    "SQUARE_ACCESS_TOKEN",
+    "SQUARE_ENVIRONMENT",
+    "APP_URL",
+    "RENDER_DEPLOY_HOOK_URL",
+    "RENDER_API_KEY",
+    "RENDER_SERVICE_ID",
+  ];
+
+  console.log("Local .env presence check (values hidden)");
+  console.log("=========================================");
+  for (const key of localKeys) {
+    console.log(`- ${key}: ${process.env[key]?.trim() ? "present" : "missing"}`);
+  }
+  console.log();
+
   console.log("Paste these into Render -> jc-on-the-move -> Environment");
   console.log("========================================================");
   console.log(`SESSION_SECRET=${secret}`);
   console.log("APP_URL=https://www.jconthemove.com");
   console.log("SQUARE_ENVIRONMENT=sandbox");
   console.log("SQUARE_ACCESS_TOKEN=<paste Square sandbox token for testing, or production token when you switch SQUARE_ENVIRONMENT=production>");
+  console.log("DATABASE_URL=<copy the same DATABASE_URL value from local .env if Render does not already have it>");
   console.log();
   console.log("Confirm these Render settings");
   console.log("=============================");
