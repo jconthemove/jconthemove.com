@@ -9,6 +9,7 @@ type SmartBookingGuidanceCardProps = {
   answers: SmartBookingAnswers;
   serviceLabel?: string;
   compact?: boolean;
+  nextOnly?: boolean;
   className?: string;
 };
 
@@ -22,10 +23,12 @@ export default function SmartBookingGuidanceCard({
   answers,
   serviceLabel,
   compact = false,
+  nextOnly = false,
   className = "",
 }: SmartBookingGuidanceCardProps) {
   const guidance = getSmartBookingGuidance(answers, serviceLabel);
   const next = guidance.nextStep;
+  const visibleSteps = nextOnly && next ? [next] : guidance.steps;
 
   return (
     <section className={`rounded-xl border border-cyan-400/20 bg-cyan-500/10 p-3 ${className}`}>
@@ -58,7 +61,7 @@ export default function SmartBookingGuidanceCard({
       )}
 
       <div className="mt-3 grid gap-2">
-        {guidance.steps.map((step) => {
+        {visibleSteps.map((step) => {
           const active = next?.id === step.id;
           const Icon = step.status === "complete" ? CheckCircle2 : active ? ArrowRight : Circle;
           return (

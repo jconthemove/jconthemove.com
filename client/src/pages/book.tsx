@@ -30,6 +30,7 @@ import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 import MarketplaceSourceFlowStrip from "@/components/MarketplaceSourceFlowStrip";
 import SmartRequestShapePicker from "@/components/SmartRequestShapePicker";
+import SmartBookingGuidanceCard from "@/components/SmartBookingGuidanceCard";
 import type { User } from "@shared/schema";
 import {
   getMarketplaceRequestShape,
@@ -39,6 +40,7 @@ import {
 import {
   estimateMovingCrewHours,
   inferSmartBookingText,
+  type SmartBookingAnswers,
   type SmartBookingTextInference,
 } from "@shared/smartBookingEngine";
 import {
@@ -1103,6 +1105,82 @@ export default function MultiServiceBookPage() {
     attribution.marketingTracking.utmMedium,
     attribution.referralSlug,
     attribution.promoCode,
+  ]);
+  const smartBookingGuidanceAnswers = useMemo<SmartBookingAnswers>(() => {
+    const moving = items.find((item) => item.serviceCode === "moving");
+    const primary = primaryMarketplaceItem;
+    const scheduledItem = items.find((item) => item.details.requestedDate || item.details.requestedStartTime) || primary;
+    const zip = addressZip || zipFromAddress(serviceAddress);
+    const movingDetails = moving?.details;
+    const crew = movingDetails?.crew || movingDetails?.inventoryCrewRecommendation || undefined;
+    const hours = movingDetails?.hours || movingDetails?.inventoryLaborHours || undefined;
+    const truckSituation =
+      movingDetails?.truckNeeded === true
+        ? "JC ON THE MOVE provides truck"
+        : movingDetails?.truckNeeded === false
+          ? "Customer provides truck or no truck needed"
+          : undefined;
+    const inventoryItems = items.flatMap((item) => [
+      ...(item.details.inventoryItems || []),
+      ...(item.details.junkItems || []),
+    ]);
+    const specialItems = items.flatMap((item) => item.details.specialItems || []);
+    const itemNotes = items.map((item) => item.details.notes || item.details.scope || "").filter(Boolean).join("\n");
+    const notes = [contact.notes, itemNotes, smartStartSummary, smartStartText].filter(Boolean).join("\n");
+
+    return {
+      marketplaceShapeId: selectedMarketplaceShape.id,
+      serviceType: primary?.serviceCode || selectedMarketplaceShape.id,
+      serviceCode: primary?.serviceCode || serviceCodeForMarketplaceShape(selectedMarketplaceShape.id),
+      serviceLabel: primary?.label || selectedMarketplaceShape.shape,
+      serviceAddress: serviceAddress.trim() || undefined,
+      address: serviceAddress.trim() || undefined,
+      fromAddress: serviceAddress.trim() || undefined,
+      fromZip: zip || undefined,
+      zip: zip || undefined,
+      pickupAddress: serviceAddress.trim() || undefined,
+      dropoffAddress: movingDetails?.dropoffAddress || undefined,
+      toAddress: movingDetails?.dropoffAddress || undefined,
+      requestedDate: scheduledItem?.details.requestedDate || undefined,
+      moveDate: scheduledItem?.details.requestedDate || undefined,
+      timeWindow: scheduledItem?.details.requestedStartTime || undefined,
+      loadType: movingDetails?.loadType || movingDetails?.movingPath || undefined,
+      movingPath: movingDetails?.movingPath || undefined,
+      truckSituation,
+      truckProvider: truckSituation,
+      truckSize: movingDetails?.truckSize || undefined,
+      selectedMovingRec: movingDetails?.packageId || undefined,
+      selectedMovingRecLabel: movingDetails?.packageLabel || undefined,
+      selectedMovingRecCrew: crew,
+      selectedMovingRecHours: hours,
+      crewSize: crew,
+      laborHours: hours,
+      packageId: movingDetails?.packageId || undefined,
+      selectedPackage: movingDetails?.packageLabel || undefined,
+      items: inventoryItems,
+      inventory: inventoryItems,
+      specialItems,
+      notes: notes || undefined,
+      fullName: contact.customerName.trim() || undefined,
+      customerName: contact.customerName.trim() || undefined,
+      phone: contact.customerPhone.trim() || undefined,
+      customerPhone: contact.customerPhone.trim() || undefined,
+      email: contact.customerEmail.trim() || undefined,
+      customerEmail: contact.customerEmail.trim() || undefined,
+    };
+  }, [
+    items,
+    primaryMarketplaceItem,
+    selectedMarketplaceShape.id,
+    selectedMarketplaceShape.shape,
+    addressZip,
+    serviceAddress,
+    contact.notes,
+    contact.customerName,
+    contact.customerPhone,
+    contact.customerEmail,
+    smartStartSummary,
+    smartStartText,
   ]);
   const marketplacePreviewInput = useMemo(() => {
     const moving = items.find((item) => item.serviceCode === "moving");
@@ -2324,6 +2402,13 @@ export default function MultiServiceBookPage() {
               <SmartRequestShapePicker
                 selectedShapeId={selectedMarketplaceShapeId}
                 onSelect={applyMarketplaceShape}
+                className="mb-3"
+              />
+              <SmartBookingGuidanceCard
+                answers={smartBookingGuidanceAnswers}
+                serviceLabel={primaryMarketplaceItem?.label || selectedMarketplaceShape.shape}
+                compact
+                nextOnly
                 className="mb-3"
               />
               <MarketplaceProcessGuide
