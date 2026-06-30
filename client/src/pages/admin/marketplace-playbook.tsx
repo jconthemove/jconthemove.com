@@ -20,6 +20,7 @@ import {
   MARKETPLACE_REFERENCE_BLUEPRINTS,
   MARKETPLACE_REQUEST_SHAPES,
   MARKETPLACE_SIMPLE_SIDES,
+  MARKETPLACE_SOURCE_FLOW_MATRIX,
   type MarketplaceFlywheelStageId,
   type MarketplaceFunctionalIdeaStatus,
 } from "@shared/marketplaceShapes";
@@ -277,6 +278,100 @@ export default function AdminMarketplacePlaybookPage() {
                 </div>
               );
             })}
+          </div>
+        </section>
+
+        <section className="mt-5 rounded-lg border border-cyan-400/20 bg-cyan-500/10 p-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-cyan-300" />
+                <h2 className="font-black text-white">Source Flow Matrix</h2>
+              </div>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+                Each outside model becomes a JC operating pattern: start the request, progress the card, finish the
+                money/reward loop. This keeps customers, workers, and company controls pointed at the same lead.
+              </p>
+            </div>
+            <span className="rounded-full border border-cyan-400/30 bg-slate-950/60 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-cyan-200">
+              {MARKETPLACE_SOURCE_FLOW_MATRIX.length} sources
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3">
+            {MARKETPLACE_SOURCE_FLOW_MATRIX.map((item) => (
+              <div key={item.id} className="rounded-md border border-slate-800 bg-slate-950/70 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-black text-white">{item.source}</p>
+                    <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.16em] text-cyan-200">
+                      {item.category}
+                    </p>
+                  </div>
+                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${statusClasses[item.status]}`}>
+                    {statusLabel(item.status)}
+                  </span>
+                </div>
+
+                <p className="mt-3 text-xs leading-5 text-slate-400">
+                  <span className="font-bold text-slate-200">Borrowed signal:</span> {item.borrowedSignal}
+                </p>
+
+                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                  {[
+                    ["Start", item.start],
+                    ["Progress", item.progress],
+                    ["Finish", item.finish],
+                  ].map(([label, detail]) => (
+                    <div key={label} className="rounded-md border border-cyan-400/15 bg-cyan-500/10 p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-200">{label}</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-300">{detail}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                  {[
+                    ["Customer", item.customerMove],
+                    ["Worker", item.workerMove],
+                    ["Company", item.companyControl],
+                  ].map(([label, detail]) => (
+                    <div key={label} className="rounded-md border border-slate-800 bg-slate-900/60 p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{label}</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-300">{detail}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-3 grid gap-2 md:grid-cols-[1fr_1fr_0.8fr]">
+                  <div className="rounded-md border border-blue-400/20 bg-blue-500/10 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-200">Automation</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-300">{item.automationHook}</p>
+                  </div>
+                  <div className="rounded-md border border-amber-400/20 bg-amber-500/10 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-200">Reward Trigger</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-300">{item.rewardTrigger}</p>
+                  </div>
+                  <div className="rounded-md border border-slate-800 bg-slate-900/60 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Surfaces</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-300">{item.surfaces}</p>
+                  </div>
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {item.flywheelStages.map((stageId) => (
+                    <span key={stageId} className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-200">
+                      {stageId}
+                    </span>
+                  ))}
+                  {item.shapeIds.map((shapeId) => (
+                    <span key={shapeId} className="rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                      {shapeId.replace(/_/g, " ")}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </section>
 
