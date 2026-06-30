@@ -24,9 +24,9 @@ services:
       - key: SQUARE_ACCESS_TOKEN
         sync: false
       - key: SQUARE_ENVIRONMENT
-        sync: false
+        value: sandbox
       - key: APP_URL
-        sync: false
+        value: https://www.jconthemove.com
       - key: MOONSHOT_TOKEN_ADDRESS
         sync: false
       - key: TREASURY_WALLET_PRIVATE_KEY
