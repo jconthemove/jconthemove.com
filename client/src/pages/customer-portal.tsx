@@ -22,6 +22,8 @@ import QuoteForm from "@/components/QuoteForm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { LotteryPanel } from "@/components/lottery-panel";
 import JobLifecycleRail from "@/components/JobLifecycleRail";
+import MarketplaceShapeBadge from "@/components/MarketplaceShapeBadge";
+import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
 
 interface WalletAccount {
   id: string;
@@ -162,6 +164,7 @@ function CustomerJobCard({ job }: { job: CustomerJob }) {
             <Badge variant="secondary" className="bg-slate-700/50 text-slate-300 text-xs">
               {job.serviceType}
             </Badge>
+            <MarketplaceShapeBadge serviceCode={job.serviceType} />
             {job.orderNumber != null && (
               <span className="font-mono text-xs font-semibold text-blue-400">
                 {formatOrderNumber(job.orderNumber)}
@@ -185,6 +188,15 @@ function CustomerJobCard({ job }: { job: CustomerJob }) {
             crewMembers: job.crewMembers,
             completedAt: job.completedAt,
           }}
+        />
+
+        <MarketplaceShapeContext
+          serviceCode={job.serviceType}
+          audience="customer"
+          compact
+          maxIdeas={0}
+          maxFlows={1}
+          className="mb-3"
         />
 
         <div className="space-y-1.5 text-sm">
