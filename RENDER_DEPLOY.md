@@ -76,7 +76,14 @@ If you also set `RENDER_DEPLOY_HOOK_URL` locally in `.env` or in this shell, you
 npm run render:trigger
 ```
 
-The GitHub workflow builds the release and waits for the public Render health endpoint to show the pushed commit. By default it allows Render Git auto-deploy to do the actual deploy. If you want GitHub to hard-fail unless it can explicitly trigger Render, set repository variable `REQUIRE_RENDER_TRIGGER=true`.
+The GitHub workflow builds the release first. If a deploy hook or Render API credentials are configured, it triggers Render and waits inline for the public health endpoint to show the pushed commit. If no explicit trigger is configured, the build workflow exits successfully so Render services configured with `checksPass` can start deploying after GitHub checks pass. A separate `Verify Render Deployment` workflow then waits for the public health endpoint to show the pushed commit.
+
+This split avoids the classic deadlock:
+
+- GitHub waits for Render before marking checks green.
+- Render waits for GitHub checks to pass before deploying.
+
+If you want GitHub to hard-fail unless it can explicitly trigger Render, set repository variable `REQUIRE_RENDER_TRIGGER=true`.
 
 For the strongest launch path, add one of:
 
@@ -122,7 +129,7 @@ Optional feature variables:
 
 ## Auto-deploy fallback
 
-The repo also includes `.github/workflows/render-deploy.yml`. This workflow fires on every push to `main`, builds the app, triggers Render, and then waits for the public health endpoint to report the pushed commit.
+The repo also includes `.github/workflows/render-deploy.yml`. This workflow fires on every push to `main` and builds the app. With a Render hook/API secret it also triggers Render and verifies inline. Without an explicit trigger, it exits green so Render `checksPass` auto-deploy can begin, and `.github/workflows/render-verify.yml` performs the public commit verification afterward.
 
 Preferred trigger:
 
@@ -135,7 +142,13 @@ API trigger fallback:
 
 Add it in GitHub under `Settings` -> `Secrets and variables` -> `Actions` -> `New repository secret`.
 
-Use an explicit trigger even if Render's Git auto-deploy is enabled. It gives us a second deploy path and makes it easier to tell whether GitHub saw the push. When neither trigger is set, the workflow waits for Render Git auto-deploy and verifies the public commit.
+Use an explicit trigger even if Render's Git auto-deploy is enabled. It gives us a second deploy path and makes it easier to tell whether GitHub saw the push.
+
+When neither trigger is set:
+
+1. `Trigger Render Deploy` builds and exits successfully.
+2. Render's Git auto-deploy can begin after the GitHub check passes, including when the service uses `checksPass`.
+3. `.github/workflows/render-verify.yml` starts after the build workflow and waits for the public commit.
 
 ## Health check response
 

@@ -6,6 +6,7 @@ const shouldTrigger = args.has("--trigger");
 
 const repo = process.env.GITHUB_REPOSITORY || "JCONTHEMOVE/JCONTHEMOVE.COM";
 const workflowName = process.env.RENDER_WORKFLOW_NAME || "Trigger Render Deploy";
+const verifyWorkflowName = process.env.RENDER_VERIFY_WORKFLOW_NAME || "Verify Render Deployment";
 const healthUrl = process.env.PUBLIC_HEALTH_URL || "https://jc-on-the-move.onrender.com/health";
 const readinessUrl = process.env.RENDER_READINESS_URL || new URL("/api/health", healthUrl).toString();
 const customDomainHealthUrl = process.env.CUSTOM_DOMAIN_HEALTH_URL || "https://www.jconthemove.com/health";
@@ -198,9 +199,24 @@ async function checkLatestWorkflow() {
             .flatMap((job) => Array.isArray(job.steps) ? job.steps : [])
             .find((step) => step.name === "Verify public deployment" && step.status === "in_progress");
           if (verifyingStep) {
-            problems.push("GitHub is waiting for public Render health to show the pushed commit; add a Render deploy hook if this keeps timing out");
+            problems.push("GitHub is waiting for Render before the build check can pass; this can deadlock Render services configured with checksPass. Re-run after the split verify workflow lands, or add a Render deploy hook.");
           }
         }
+      }
+    }
+
+    const latestVerify = runs.find((run) => run.name === verifyWorkflowName);
+    if (latestVerify) {
+      line(`- verify run: #${latestVerify.run_number} ${latestVerify.display_title || latestVerify.name}`);
+      line(`- verify sha: ${(latestVerify.head_sha || "").slice(0, 8) || "unknown"}`);
+      line(`- verify status: ${latestVerify.status}`);
+      line(`- verify conclusion: ${latestVerify.conclusion || "none"}`);
+      line(`- verify url: ${latestVerify.html_url}`);
+
+      if (latestVerify.status === "in_progress") {
+        problems.push("Render verification is still waiting for the live service to report the pushed commit");
+      } else if (latest.conclusion === "success" && latestVerify.conclusion && latestVerify.conclusion !== "success") {
+        problems.push(`Render verification workflow concluded ${latestVerify.conclusion}`);
       }
     }
 
@@ -292,7 +308,7 @@ for (const problem of problems) line(`- ${problem}`);
 line();
 line("Fix, in order:");
 line("1. Render -> jc-on-the-move -> Environment: set DATABASE_URL, SESSION_SECRET, SQUARE_ACCESS_TOKEN, SQUARE_ENVIRONMENT, APP_URL=https://www.jconthemove.com.");
-line("2. Push a new commit or re-run GitHub Actions so Render Git auto-deploy can update the service.");
+line("2. Push a new commit or re-run GitHub Actions. The build check must finish before Render checksPass auto-deploy can begin.");
 line("3. If Render still does not deploy, create a main-branch deploy hook in Render and add it to GitHub Actions as RENDER_DEPLOY_HOOK_URL.");
 line("4. Cloudflare/DNS: point www.jconthemove.com at the Render custom-domain target, not Railway.");
 line("5. Confirm npm run render:doctor passes and /health shows version.shortCommit.");

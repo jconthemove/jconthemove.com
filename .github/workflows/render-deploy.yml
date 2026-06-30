@@ -54,7 +54,9 @@ jobs:
         if: env.RENDER_DEPLOY_HOOK_URL == '' && (env.RENDER_API_KEY == '' || env.RENDER_SERVICE_ID == '')
         run: |
           echo "::warning::No explicit Render deploy trigger is configured."
-          echo "The workflow will wait for Render Git auto-deploy because REQUIRE_RENDER_TRIGGER=false."
+          echo "The workflow will finish after the build because REQUIRE_RENDER_TRIGGER=false."
+          echo "That lets Render services configured with checksPass start deploying after GitHub checks pass."
+          echo "The follow-up 'Verify Render Deployment' workflow will wait for the public commit."
           echo "For forced deploys, add either:"
           echo "  1. GitHub secret RENDER_DEPLOY_HOOK_URL"
           echo "  2. GitHub secrets RENDER_API_KEY and RENDER_SERVICE_ID"
@@ -75,7 +77,8 @@ jobs:
             --data '{}'
           echo "Render deploy API triggered for service $RENDER_SERVICE_ID."
 
-      - name: Verify public deployment
+      - name: Verify public deployment after explicit trigger
+        if: env.RENDER_DEPLOY_HOOK_URL != '' || (env.RENDER_API_KEY != '' && env.RENDER_SERVICE_ID != '')
         run: |
           for attempt in $(seq 1 "$DEPLOY_WAIT_ATTEMPTS"); do
             echo "Production verify attempt $attempt/$DEPLOY_WAIT_ATTEMPTS"
@@ -86,3 +89,9 @@ jobs:
           done
           echo "Render deploy did not become publicly verifiable in time."
           exit 1
+
+      - name: Skip inline deployment wait for Render checks-pass auto-deploy
+        if: env.RENDER_DEPLOY_HOOK_URL == '' && (env.RENDER_API_KEY == '' || env.RENDER_SERVICE_ID == '') && env.REQUIRE_RENDER_TRIGGER != 'true'
+        run: |
+          echo "Build passed. Inline deploy wait skipped to avoid a Render checksPass deadlock."
+          echo "Render can now deploy after GitHub checks pass; the Verify Render Deployment workflow will validate the live commit."
