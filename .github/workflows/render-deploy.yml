@@ -22,7 +22,7 @@ jobs:
       DEPLOY_WAIT_ATTEMPTS: ${{ vars.DEPLOY_WAIT_ATTEMPTS || '40' }}
       DEPLOY_WAIT_SECONDS: ${{ vars.DEPLOY_WAIT_SECONDS || '30' }}
       DEPLOY_CHECK_TIMEOUT_MS: ${{ vars.DEPLOY_CHECK_TIMEOUT_MS || '15000' }}
-      REQUIRE_RENDER_TRIGGER: ${{ vars.REQUIRE_RENDER_TRIGGER || 'false' }}
+      REQUIRE_RENDER_TRIGGER: ${{ vars.REQUIRE_RENDER_TRIGGER || 'true' }}
     steps:
       - name: Checkout deploy verifier
         uses: actions/checkout@v4
@@ -46,14 +46,15 @@ jobs:
           echo "Add either:"
           echo "  1. GitHub Actions secret RENDER_DEPLOY_HOOK_URL"
           echo "  2. GitHub Actions secrets RENDER_API_KEY and RENDER_SERVICE_ID"
-          echo "Or set repository variable REQUIRE_RENDER_TRIGGER=false to wait for Render Git auto-deploy."
+          echo "Render Git auto-deploy is not reliable enough for launch verification."
+          echo "Only set repository variable REQUIRE_RENDER_TRIGGER=false if Render auto-deploy is confirmed healthy."
           exit 1
 
       - name: Check Render trigger configuration
         if: env.RENDER_DEPLOY_HOOK_URL == '' && (env.RENDER_API_KEY == '' || env.RENDER_SERVICE_ID == '')
         run: |
           echo "::warning::No explicit Render deploy trigger is configured."
-          echo "The workflow will wait for Render Git auto-deploy."
+          echo "The workflow will wait for Render Git auto-deploy because REQUIRE_RENDER_TRIGGER=false."
           echo "For forced deploys, add either:"
           echo "  1. GitHub secret RENDER_DEPLOY_HOOK_URL"
           echo "  2. GitHub secrets RENDER_API_KEY and RENDER_SERVICE_ID"

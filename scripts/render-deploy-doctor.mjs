@@ -193,6 +193,13 @@ async function checkLatestWorkflow() {
           if (failedStep.name === "Stop if Render trigger is missing") {
             problems.push("GitHub has no RENDER_DEPLOY_HOOK_URL or RENDER_API_KEY + RENDER_SERVICE_ID configured");
           }
+        } else if (latest.status === "in_progress") {
+          const verifyingStep = jobs
+            .flatMap((job) => Array.isArray(job.steps) ? job.steps : [])
+            .find((step) => step.name === "Verify public deployment" && step.status === "in_progress");
+          if (verifyingStep) {
+            problems.push("GitHub is waiting for public Render health to show the pushed commit; add a Render deploy hook if this keeps timing out");
+          }
         }
       }
     }
@@ -283,13 +290,12 @@ if (problems.length === 0) {
 line("Result: Render deploy path is blocked.");
 for (const problem of problems) line(`- ${problem}`);
 line();
-line("Fix:");
-line("1. Confirm Render service jc-on-the-move has Git auto-deploy enabled for branch main.");
-line("2. Preferred: Render -> Settings/Deploy Hooks -> create a main hook.");
-line("3. GitHub -> JCONTHEMOVE.COM -> Settings -> Secrets and variables -> Actions.");
-line("4. Add repository secret RENDER_DEPLOY_HOOK_URL with the full Render deploy hook URL.");
-line("5. Optional local shortcut: add the same RENDER_DEPLOY_HOOK_URL to .env and run npm run render:trigger.");
-line("6. Re-run the failed GitHub workflow or push a new commit.");
-line("7. Confirm npm run verify:production passes and /health shows version.shortCommit.");
+line("Fix, in order:");
+line("1. Render -> jc-on-the-move -> Environment: set DATABASE_URL, SESSION_SECRET, SQUARE_ACCESS_TOKEN, SQUARE_ENVIRONMENT, APP_URL=https://www.jconthemove.com.");
+line("2. Render -> jc-on-the-move -> Settings/Deploy Hooks: create a main-branch deploy hook.");
+line("3. GitHub -> JCONTHEMOVE.COM -> Settings -> Secrets and variables -> Actions: add secret RENDER_DEPLOY_HOOK_URL with the full hook URL.");
+line("4. GitHub -> Actions -> Trigger Render Deploy: re-run the failed workflow, or push a new commit.");
+line("5. Cloudflare/DNS: point www.jconthemove.com at the Render custom-domain target, not Railway.");
+line("6. Confirm npm run render:doctor passes and /health shows version.shortCommit.");
 
 process.exit(1);

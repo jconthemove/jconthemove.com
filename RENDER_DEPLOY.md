@@ -76,7 +76,14 @@ If you also set `RENDER_DEPLOY_HOOK_URL` locally in `.env` or in this shell, you
 npm run render:trigger
 ```
 
-The GitHub workflow now builds the release, triggers Render when credentials are available, and otherwise waits for Render Git auto-deploy to publish the pushed commit. For the most reliable deploys, still add an explicit deploy hook. If you want CI to fail immediately when the hook/API credentials are missing, add repository variable `REQUIRE_RENDER_TRIGGER=true`.
+The GitHub workflow now builds the release and requires an explicit Render trigger by default. This prevents a launch deploy from sitting in a long verification loop while Render auto-deploy is disconnected or stale.
+
+For the normal launch path, add one of:
+
+- GitHub Actions secret `RENDER_DEPLOY_HOOK_URL`
+- GitHub Actions secrets `RENDER_API_KEY` and `RENDER_SERVICE_ID`
+
+Only if Render Git auto-deploy is confirmed healthy should you add repository variable `REQUIRE_RENDER_TRIGGER=false` to allow the workflow to wait without a hook/API trigger.
 
 ## Strongly recommended variables
 
@@ -115,7 +122,7 @@ Optional feature variables:
 
 ## Auto-deploy fallback
 
-The repo also includes `.github/workflows/render-deploy.yml`. This workflow fires on every push to `main`, builds the app, triggers Render when credentials are available, and then waits for the public health endpoint to report the pushed commit.
+The repo also includes `.github/workflows/render-deploy.yml`. This workflow fires on every push to `main`, builds the app, triggers Render, and then waits for the public health endpoint to report the pushed commit.
 
 Preferred trigger:
 
@@ -128,7 +135,7 @@ API trigger fallback:
 
 Add it in GitHub under `Settings` -> `Secrets and variables` -> `Actions` -> `New repository secret`.
 
-Use an explicit trigger even if Render's Git auto-deploy is enabled. It gives us a second deploy path and makes it easier to tell whether GitHub saw the push. When neither trigger is set, the workflow waits for Render Git auto-deploy and verifies `/health` until the pushed commit is public. To require an explicit trigger before waiting, add repository variable `REQUIRE_RENDER_TRIGGER=true`.
+Use an explicit trigger even if Render's Git auto-deploy is enabled. It gives us a second deploy path and makes it easier to tell whether GitHub saw the push. When neither trigger is set, the workflow now fails immediately unless repository variable `REQUIRE_RENDER_TRIGGER=false` is set.
 
 ## Health check response
 
