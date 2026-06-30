@@ -5,6 +5,21 @@ export type SmartBookingPatch = {
   inferred: Record<string, unknown>;
 };
 
+export type SmartBookingTextInference = {
+  serviceType?: string;
+  fromZip?: string;
+  moveDate?: string;
+  loadType?: string;
+  truckSituation?: string;
+  truckSize?: string;
+  jobSize?: string;
+  homeSize?: string;
+  selectedMovingRecCrew?: string;
+  selectedMovingRecHours?: string;
+  selectedMovingRecLabel?: string;
+  notes?: string;
+};
+
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -23,6 +38,118 @@ function firstNumber(value: unknown): number | null {
   if (!match) return null;
   const parsed = Number(match[0]);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function numberText(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(value).replace(/\.0+$/, "");
+}
+
+function inferZip(raw: string): string | undefined {
+  return raw.match(/\b\d{5}(?:-\d{4})?\b/)?.[0];
+}
+
+function inferDateHint(raw: string): string | undefined {
+  const explicit = raw.match(/\b(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\b/)?.[0];
+  if (explicit) return explicit;
+
+  const relative = raw.match(/\b(today|tomorrow|this weekend|next weekend|weekend|next week|asap|soon)\b/i)?.[0];
+  if (relative) return relative;
+
+  return raw.match(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i)?.[0];
+}
+
+function inferLoadType(raw: string): string | undefined {
+  if (/\b(load\s*(?:and|\+|\/)\s*unload|unload\s*(?:and|\+|\/)\s*load|both)\b/i.test(raw)) {
+    return "Both - load AND unload";
+  }
+  if (/\b(unload|unloading|empty truck|emptying)\b/i.test(raw)) return "Unload only";
+  if (/\b(load|loading|pack truck|packing truck)\b/i.test(raw)) return "Load only";
+  if (/\b(deliver|delivery|drop\s*off|pickup|pick\s*up)\b/i.test(raw)) return "Delivery / transport";
+  return undefined;
+}
+
+function inferTruckSituation(raw: string): string | undefined {
+  if (/\b(jc truck|your truck|you supply|company truck|need truck|bring truck)\b/i.test(raw)) {
+    return "JC ON THE MOVE provides truck";
+  }
+  if (/\b(customer truck|my truck|own truck|rental|u-?haul|budget truck|penske|pods?|u-?box)\b/i.test(raw)) {
+    return "Customer provides truck or no truck needed";
+  }
+  return undefined;
+}
+
+function inferTruckSize(raw: string): string | undefined {
+  if (/\bu-?box\b/i.test(raw)) return "U-Box / storage container";
+  if (/\bpod\b|\bpods\b/i.test(raw)) return "PODS / storage container";
+  const match = raw.match(/\b(10|12|15|16|17|20|22|24|26)\s*(?:'|ft|foot|feet|footer)?\b/i);
+  if (!match) return undefined;
+  return `${match[1]}' truck`;
+}
+
+function inferHomeSize(raw: string): string | undefined {
+  if (/\b(studio|efficiency)\b/i.test(raw)) return "Studio or 1-bed";
+  if (/\b1\s*(?:bed|bedroom|br)\b/i.test(raw)) return "Studio or 1-bed";
+  if (/\b2\s*(?:bed|bedroom|br)\b/i.test(raw) || /\b3\s*(?:bed|bedroom|br)\b/i.test(raw)) return "2-3 bed";
+  if (/\b4\s*\+?\s*(?:bed|bedroom|br)|full house|whole house|large house\b/i.test(raw)) return "4+ bed";
+  if (/\b(single item|one item|1 item|couple items|few items|1-2 items?)\b/i.test(raw)) return "1-2 items";
+  return undefined;
+}
+
+function inferCrewHours(raw: string): Pick<SmartBookingTextInference, "selectedMovingRecCrew" | "selectedMovingRecHours" | "selectedMovingRecLabel"> {
+  const crewMatch = raw.match(/\b([1-4])\s*(?:movers?|helpers?|crew)\b/i);
+  const hoursMatch = raw.match(/\b([1-9](?:\.\d+)?)\s*(?:hours?|hrs?|hr)\b/i);
+  const crew = crewMatch ? Number(crewMatch[1]) : null;
+  const hours = hoursMatch ? Number(hoursMatch[1]) : null;
+  const result: Pick<SmartBookingTextInference, "selectedMovingRecCrew" | "selectedMovingRecHours" | "selectedMovingRecLabel"> = {};
+
+  if (crew && crew >= 1 && crew <= 4) result.selectedMovingRecCrew = String(crew);
+  if (hours && hours > 0) result.selectedMovingRecHours = numberText(hours);
+  if (result.selectedMovingRecCrew && result.selectedMovingRecHours) {
+    result.selectedMovingRecLabel = `${result.selectedMovingRecCrew} movers / ${result.selectedMovingRecHours} hours`;
+  }
+  return result;
+}
+
+export function inferSmartBookingText(value: unknown): SmartBookingTextInference {
+  const raw = text(value);
+  if (!raw) return {};
+
+  const inferred: SmartBookingTextInference = {};
+  const serviceType = inferServiceTypeFromSingleAnswer(raw);
+  if (serviceType) inferred.serviceType = serviceType;
+
+  const zip = inferZip(raw);
+  if (zip) inferred.fromZip = zip;
+
+  const date = inferDateHint(raw);
+  if (date) inferred.moveDate = date;
+
+  const loadType = inferLoadType(raw);
+  if (loadType) inferred.loadType = loadType;
+
+  const truckSituation = inferTruckSituation(raw);
+  if (truckSituation) inferred.truckSituation = truckSituation;
+
+  const truckSize = inferTruckSize(raw);
+  if (truckSize) inferred.truckSize = truckSize;
+
+  const homeSize = inferHomeSize(raw);
+  if (homeSize) {
+    inferred.homeSize = homeSize;
+    inferred.jobSize = homeSize;
+  }
+
+  Object.assign(inferred, inferCrewHours(raw));
+  inferred.notes = raw;
+  return inferred;
+}
+
+function applyMissing(answers: SmartBookingAnswers, inferred: Record<string, unknown>, key: keyof SmartBookingTextInference, value: unknown) {
+  if (value == null || value === "") return;
+  if (answers[key] == null || answers[key] === "") {
+    answers[key] = value;
+    inferred[key] = value;
+  }
 }
 
 export function inferServiceTypeFromSingleAnswer(value: unknown): string | null {
@@ -78,6 +205,19 @@ export function applySmartBookingAnswer(
 ): SmartBookingPatch {
   const answers: SmartBookingAnswers = { ...previousAnswers, [stepId]: value };
   const inferred: Record<string, unknown> = {};
+  const textInference = inferSmartBookingText(value);
+
+  applyMissing(answers, inferred, "serviceType", textInference.serviceType);
+  applyMissing(answers, inferred, "fromZip", textInference.fromZip);
+  applyMissing(answers, inferred, "moveDate", textInference.moveDate);
+  applyMissing(answers, inferred, "loadType", textInference.loadType);
+  applyMissing(answers, inferred, "truckSituation", textInference.truckSituation);
+  applyMissing(answers, inferred, "truckSize", textInference.truckSize);
+  applyMissing(answers, inferred, "jobSize", textInference.jobSize);
+  applyMissing(answers, inferred, "homeSize", textInference.homeSize);
+  applyMissing(answers, inferred, "selectedMovingRecCrew", textInference.selectedMovingRecCrew);
+  applyMissing(answers, inferred, "selectedMovingRecHours", textInference.selectedMovingRecHours);
+  applyMissing(answers, inferred, "selectedMovingRecLabel", textInference.selectedMovingRecLabel);
 
   if (stepId === "serviceType") {
     const serviceType = inferServiceTypeFromSingleAnswer(value);
@@ -126,6 +266,10 @@ export function applySmartBookingAnswer(
       answers.selectedMovingRecHours = String(crewPlan.hours);
       inferred.selectedMovingRecHours = answers.selectedMovingRecHours;
     }
+    if (!answers.selectedMovingRecLabel && answers.selectedMovingRecCrew && answers.selectedMovingRecHours) {
+      answers.selectedMovingRecLabel = `${answers.selectedMovingRecCrew} movers / ${answers.selectedMovingRecHours} hours`;
+      inferred.selectedMovingRecLabel = answers.selectedMovingRecLabel;
+    }
     inferred.smartSizingReason = crewPlan.reason;
   }
 
@@ -150,4 +294,3 @@ export function shouldSkipSmartBookingStep(stepId: string, answers: SmartBooking
   }
   return false;
 }
-
