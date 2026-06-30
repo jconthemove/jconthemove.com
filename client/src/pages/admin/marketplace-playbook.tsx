@@ -28,6 +28,7 @@ import AuthorityTasksCard from "@/components/AuthorityTasksCard";
 import MarketplaceActionMatrix from "@/components/MarketplaceActionMatrix";
 import MarketplaceNextStepFlow from "@/components/MarketplaceNextStepFlow";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
+import MarketplaceSourceActionDeck from "@/components/MarketplaceSourceActionDeck";
 import MarketplaceTaskSplit from "@/components/MarketplaceTaskSplit";
 
 const steps = [
@@ -191,6 +192,8 @@ export default function AdminMarketplacePlaybookPage() {
         <AuthorityTasksCard className="mt-5" />
 
         <MarketplaceActionMatrix className="mt-5" />
+
+        <MarketplaceSourceActionDeck className="mt-5" limit={6} />
 
         <section className="mt-5 rounded-lg border border-slate-800 bg-slate-900/70 p-5">
           <div className="flex items-center gap-2">

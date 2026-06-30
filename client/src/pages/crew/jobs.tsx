@@ -26,6 +26,7 @@ import MarketplaceShapeBadge from "@/components/MarketplaceShapeBadge";
 import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 import MarketplaceNextStepFlow from "@/components/MarketplaceNextStepFlow";
+import MarketplaceSourceActionDeck from "@/components/MarketplaceSourceActionDeck";
 import MarketplaceTaskSplit from "@/components/MarketplaceTaskSplit";
 
 const SERVICE_ICONS: Record<string, string> = {
@@ -747,6 +748,12 @@ function JobDetailSheet({
             serviceCode={lead.serviceType}
             compact
             limit={3}
+          />
+          <MarketplaceSourceActionDeck
+            serviceCode={lead.serviceType}
+            audience="worker"
+            compact
+            limit={1}
           />
           <MarketplaceShapeContext
             serviceCode={lead.serviceType}

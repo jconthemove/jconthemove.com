@@ -14,6 +14,7 @@ import MarketplaceActionMatrix from "@/components/MarketplaceActionMatrix";
 import MarketplaceShapeBadge from "@/components/MarketplaceShapeBadge";
 import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
+import MarketplaceSourceActionDeck from "@/components/MarketplaceSourceActionDeck";
 import type { LucideIcon } from "lucide-react";
 
 // Task #130: shape returned by GET /api/customer/bookings — parent bookings
@@ -402,6 +403,12 @@ function JobSheet({ job, open, onClose, onNewJob }: {
             serviceCode={job.serviceType}
             compact
             limit={2}
+          />
+          <MarketplaceSourceActionDeck
+            serviceCode={job.serviceType}
+            audience="customer"
+            compact
+            limit={1}
           />
           <MarketplaceShapeContext
             serviceCode={job.serviceType}
