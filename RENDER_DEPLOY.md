@@ -17,13 +17,33 @@ It creates one Node web service with:
 
 ## Required Render environment variables
 
-These must be provided during the first Blueprint deploy because the app refuses to boot without them:
+These must be provided during the first Blueprint deploy:
 
 - `DATABASE_URL`
+- `SESSION_SECRET`
 - `SQUARE_ACCESS_TOKEN`
 - `SQUARE_ENVIRONMENT`
 
-`SESSION_SECRET` is generated automatically by Render.
+`SESSION_SECRET` is generated automatically by Render only when the service is created from the Blueprint. If the service already exists or was created manually, set it yourself in Render with a random 32+ character value.
+
+## Repair an existing stale Render service
+
+If `https://jc-on-the-move.onrender.com/health` returns HTTP `200` but has no `version.shortCommit`, Render is serving an older build.
+
+If `https://jc-on-the-move.onrender.com/api/health` reports missing env vars, fix those in Render first:
+
+- Render dashboard -> `jc-on-the-move` -> `Environment`
+- Add or update `SESSION_SECRET`
+- Add or update `SQUARE_ACCESS_TOKEN`
+- Add or update `SQUARE_ENVIRONMENT`
+- Add or update `APP_URL=https://www.jconthemove.com`
+- Click `Save Changes`
+- Trigger a manual deploy from Render once the env vars are saved
+
+Then add one explicit GitHub deploy trigger so future pushes do not rely on Render auto-deploy guessing:
+
+- Preferred: GitHub Actions secret `RENDER_DEPLOY_HOOK_URL`
+- Fallback: GitHub Actions secrets `RENDER_API_KEY` and `RENDER_SERVICE_ID`
 
 ## Strongly recommended variables
 
