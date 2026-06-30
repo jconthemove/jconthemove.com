@@ -7,6 +7,8 @@ const shouldTrigger = args.has("--trigger");
 const repo = process.env.GITHUB_REPOSITORY || "JCONTHEMOVE/JCONTHEMOVE.COM";
 const workflowName = process.env.RENDER_WORKFLOW_NAME || "Trigger Render Deploy";
 const healthUrl = process.env.PUBLIC_HEALTH_URL || "https://jc-on-the-move.onrender.com/health";
+const readinessUrl = process.env.RENDER_READINESS_URL || new URL("/api/health", healthUrl).toString();
+const customDomainHealthUrl = process.env.CUSTOM_DOMAIN_HEALTH_URL || "https://www.jconthemove.com/health";
 const expectedCommit = (
   process.env.EXPECTED_COMMIT
   || process.env.RENDER_GIT_COMMIT
@@ -32,6 +34,20 @@ function present(name) {
 
 function line(message = "") {
   console.log(message);
+}
+
+function header(response, name) {
+  return response.headers.get(name) || "";
+}
+
+function hostSignals(response) {
+  return [
+    header(response, "x-railway-67") ? "railway" : "",
+    header(response, "x-railway-edge") ? "railway" : "",
+    header(response, "x-render-origin-server") ? "render" : "",
+    header(response, "cf-ray") ? "cloudflare" : "",
+    header(response, "server") ? `server=${header(response, "server")}` : "",
+  ].filter(Boolean);
 }
 
 async function fetchJson(url) {
@@ -75,6 +91,62 @@ async function checkLiveHealth() {
   } catch (error) {
     line(`- error: ${error instanceof Error ? error.message : String(error)}`);
     return ["could not reach live Render health"];
+  } finally {
+    line();
+  }
+}
+
+async function checkRenderReadiness() {
+  line("Render readiness");
+  try {
+    const { response, body } = await fetchJson(readinessUrl);
+    const missingRequired = Array.isArray(body?.checks?.env?.missingRequired)
+      ? body.checks.env.missingRequired
+      : [];
+    line(`- url: ${readinessUrl}`);
+    line(`- http: ${response.status}`);
+    line(`- app status: ${body?.status || "unknown"}`);
+    line(`- missing required env: ${missingRequired.length ? missingRequired.join(", ") : "none"}`);
+
+    const problems = [];
+    if (!response.ok || body?.status !== "ready") {
+      problems.push(`Render readiness is not ready: http=${response.status} status=${body?.status || "unknown"}`);
+    }
+    if (missingRequired.length) {
+      problems.push(`Render missing required env vars: ${missingRequired.join(", ")}`);
+    }
+    return problems;
+  } catch (error) {
+    line(`- error: ${error instanceof Error ? error.message : String(error)}`);
+    return ["could not reach Render readiness health"];
+  } finally {
+    line();
+  }
+}
+
+async function checkCustomDomain() {
+  if (!customDomainHealthUrl || customDomainHealthUrl.toLowerCase() === "skip") return [];
+
+  line("Custom domain routing");
+  try {
+    const { response, body } = await fetchJson(customDomainHealthUrl);
+    const signals = hostSignals(response);
+    line(`- url: ${customDomainHealthUrl}`);
+    line(`- http: ${response.status}`);
+    line(`- host signals: ${signals.join(", ") || "none"}`);
+    line(`- app status: ${body?.status || "unknown"}`);
+
+    const problems = [];
+    if (signals.includes("railway")) {
+      problems.push(`${new URL(customDomainHealthUrl).hostname} is still served by Railway instead of Render`);
+    }
+    if (!response.ok) {
+      problems.push(`custom domain health returned HTTP ${response.status}`);
+    }
+    return problems;
+  } catch (error) {
+    line(`- error: ${error instanceof Error ? error.message : String(error)}`);
+    return [`could not reach custom domain health at ${customDomainHealthUrl}`];
   } finally {
     line();
   }
@@ -186,6 +258,8 @@ line();
 
 const problems = [
   ...(await checkLiveHealth()),
+  ...(await checkRenderReadiness()),
+  ...(await checkCustomDomain()),
   ...(await checkLatestWorkflow()),
   ...checkTriggerEnv(),
 ];

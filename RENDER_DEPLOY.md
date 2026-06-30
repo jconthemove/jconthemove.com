@@ -39,6 +39,8 @@ npm run render:doctor
 It checks three things without printing secrets:
 
 - whether live Render is still stale
+- whether Render readiness is blocked by missing required env vars
+- whether `www.jconthemove.com` is still routed to the old Railway service
 - whether the latest GitHub deploy workflow failed before triggering Render
 - whether this machine has `RENDER_DEPLOY_HOOK_URL` or `RENDER_API_KEY` + `RENDER_SERVICE_ID`
 
