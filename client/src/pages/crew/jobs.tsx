@@ -28,6 +28,8 @@ import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 import MarketplaceNextStepFlow from "@/components/MarketplaceNextStepFlow";
 import MarketplaceSourceActionDeck from "@/components/MarketplaceSourceActionDeck";
 import MarketplaceTaskSplit from "@/components/MarketplaceTaskSplit";
+import SmartBookingGuidanceCard from "@/components/SmartBookingGuidanceCard";
+import type { SmartBookingAnswers } from "@shared/smartBookingEngine";
 
 const SERVICE_ICONS: Record<string, string> = {
   residential: "🚛", commercial: "🏢", junk: "🗑️", snow: "❄️",
@@ -80,6 +82,50 @@ function calcEstimatedTokens(hours: number | null): number {
 
 function workerActionPhaseForLead(lead: { status: string | null }): "progress" | "finish" {
   return String(lead.status || "").toLowerCase() === "completed" ? "finish" : "progress";
+}
+
+function extractZipFromText(value: string | null | undefined): string | undefined {
+  const match = value?.match(/\b\d{5}(?:-\d{4})?\b/);
+  return match?.[0];
+}
+
+function inferLoadType(value: string | null | undefined): string | undefined {
+  const raw = (value || "").toLowerCase();
+  if (!raw) return undefined;
+  if (/\b(load\s*\+?\s*unload|both|load and unload)\b/.test(raw)) return "Load + unload";
+  if (/\bunload(ing)?\b/.test(raw)) return "Unload only";
+  if (/\bload(ing)?\b/.test(raw)) return "Load only";
+  if (/\bdeliver(y)?|drop[-\s]?off|pickup|pick up\b/.test(raw)) return "Delivery";
+  return undefined;
+}
+
+function inferTruckContext(value: string | null | undefined): string | undefined {
+  const raw = (value || "").toLowerCase();
+  if (!raw) return undefined;
+  if (/\bu-?haul|customer truck|rental truck|truck|trailer|pods?|u-?box|container\b/.test(raw)) return value || undefined;
+  if (/\bstairs?|elevator|garage|driveway|parking|basement|storage\b/.test(raw)) return value || undefined;
+  return undefined;
+}
+
+function smartBookingAnswersForCrewLead(lead: JobBoardLead | EnrichedLead): SmartBookingAnswers {
+  const notes = [lead.details, "dispatchNotes" in lead ? lead.dispatchNotes : null].filter(Boolean).join("\n");
+
+  return {
+    serviceType: lead.serviceType,
+    serviceCode: lead.serviceType,
+    serviceLabel: SERVICE_LABELS[lead.serviceType] || lead.serviceType,
+    fromAddress: lead.fromAddress,
+    fromZip: extractZipFromText(lead.fromAddress),
+    toAddress: lead.toAddress,
+    moveDate: lead.confirmedDate || lead.moveDate,
+    arrivalWindow: lead.arrivalWindow,
+    crewSize: lead.crewSize,
+    confirmedHours: lead.confirmedHours,
+    loadType: inferLoadType(notes),
+    truckSituation: inferTruckContext(notes),
+    accessNotes: notes,
+    notes,
+  };
 }
 
 type JobBoardLead = {
@@ -699,6 +745,7 @@ function JobDetailSheet({
   const flatPay = 500;
   const hrPay = 25;
   const crewMembersArr: string[] = Array.isArray(lead.crewMembers) ? lead.crewMembers : [];
+  const guidanceAnswers = smartBookingAnswersForCrewLead(lead);
 
   const crewEmployees = crewMembersArr
     .map(id => employees.find(e => e.id === id))
@@ -737,6 +784,11 @@ function JobDetailSheet({
 
         <div className="pt-4 space-y-5">
           <JobLifecycleRail lead={lead} />
+          <SmartBookingGuidanceCard
+            answers={guidanceAnswers}
+            serviceLabel={lead.serviceType}
+            compact
+          />
           <MarketplaceProcessGuide
             serviceCode={lead.serviceType}
             audience="worker"
