@@ -214,7 +214,7 @@ async function checkLatestWorkflow() {
             && apiStep?.conclusion === "skipped"
             && verifyStep?.conclusion === "skipped";
           if (skippedExplicitTrigger) {
-            problems.push("latest deploy workflow built successfully but skipped the explicit Render trigger; add RENDER_DEPLOY_HOOK_URL or RENDER_API_KEY + RENDER_SERVICE_ID");
+            line("- explicit trigger: skipped; relying on Render auto-deploy after GitHub checks pass");
           }
         }
       }

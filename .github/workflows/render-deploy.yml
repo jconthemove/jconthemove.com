@@ -22,7 +22,7 @@ jobs:
       DEPLOY_WAIT_ATTEMPTS: ${{ vars.DEPLOY_WAIT_ATTEMPTS || '40' }}
       DEPLOY_WAIT_SECONDS: ${{ vars.DEPLOY_WAIT_SECONDS || '30' }}
       DEPLOY_CHECK_TIMEOUT_MS: ${{ vars.DEPLOY_CHECK_TIMEOUT_MS || '15000' }}
-      REQUIRE_RENDER_TRIGGER: ${{ vars.REQUIRE_RENDER_TRIGGER || 'true' }}
+      REQUIRE_RENDER_TRIGGER: ${{ vars.REQUIRE_RENDER_TRIGGER || 'false' }}
     steps:
       - name: Checkout deploy verifier
         uses: actions/checkout@v4
@@ -46,8 +46,8 @@ jobs:
           echo "Add either:"
           echo "  1. GitHub Actions secret or repository variable RENDER_DEPLOY_HOOK_URL"
           echo "  2. GitHub Actions secrets/variables RENDER_API_KEY and RENDER_SERVICE_ID"
-          echo "This repository now requires an explicit Render trigger because Render Git auto-deploy is not reliably picking up main."
-          echo "Set repository variable REQUIRE_RENDER_TRIGGER=false only if Render auto-deploy is confirmed working."
+          echo "Repository variable REQUIRE_RENDER_TRIGGER=true is set, so this workflow cannot pass without an explicit Render trigger."
+          echo "Unset REQUIRE_RENDER_TRIGGER or set it to false if this Render service should deploy after GitHub checks pass."
           exit 1
 
       - name: Check Render trigger configuration
