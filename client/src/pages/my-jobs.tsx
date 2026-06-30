@@ -14,7 +14,7 @@ import MarketplaceActionMatrix from "@/components/MarketplaceActionMatrix";
 import MarketplaceShapeBadge from "@/components/MarketplaceShapeBadge";
 import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
-import MarketplaceSourceActionDeck from "@/components/MarketplaceSourceActionDeck";
+import MarketplaceSourceFlowStrip from "@/components/MarketplaceSourceFlowStrip";
 import SmartBookingGuidanceCard from "@/components/SmartBookingGuidanceCard";
 import type { LucideIcon } from "lucide-react";
 import type { SmartBookingAnswers } from "@shared/smartBookingEngine";
@@ -478,11 +478,11 @@ function JobSheet({ job, open, onClose, onNewJob }: {
             compact
             limit={2}
           />
-          <MarketplaceSourceActionDeck
+          <MarketplaceSourceFlowStrip
             serviceCode={job.serviceType}
+            serviceLabel={svc.label}
             audience="customer"
-            compact
-            limit={1}
+            phase={customerActionPhaseForJob(job)}
           />
           <MarketplaceShapeContext
             serviceCode={job.serviceType}

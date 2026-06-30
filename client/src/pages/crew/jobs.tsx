@@ -26,7 +26,7 @@ import MarketplaceShapeBadge from "@/components/MarketplaceShapeBadge";
 import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 import MarketplaceNextStepFlow from "@/components/MarketplaceNextStepFlow";
-import MarketplaceSourceActionDeck from "@/components/MarketplaceSourceActionDeck";
+import MarketplaceSourceFlowStrip from "@/components/MarketplaceSourceFlowStrip";
 import MarketplaceTaskSplit from "@/components/MarketplaceTaskSplit";
 import SmartBookingGuidanceCard from "@/components/SmartBookingGuidanceCard";
 import type { SmartBookingAnswers } from "@shared/smartBookingEngine";
@@ -801,11 +801,11 @@ function JobDetailSheet({
             compact
             limit={3}
           />
-          <MarketplaceSourceActionDeck
+          <MarketplaceSourceFlowStrip
             serviceCode={lead.serviceType}
+            serviceLabel={SERVICE_LABELS[lead.serviceType] || lead.serviceType}
             audience="worker"
-            compact
-            limit={1}
+            phase={workerActionPhaseForLead(lead)}
           />
           <MarketplaceShapeContext
             serviceCode={lead.serviceType}

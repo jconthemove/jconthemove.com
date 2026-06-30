@@ -36,7 +36,7 @@ import JobLifecycleRail from "@/components/JobLifecycleRail";
 import MarketplaceActionMatrix from "@/components/MarketplaceActionMatrix";
 import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
-import MarketplaceSourceActionDeck from "@/components/MarketplaceSourceActionDeck";
+import MarketplaceSourceFlowStrip from "@/components/MarketplaceSourceFlowStrip";
 import ProcessFlowCard, { type ProcessFlowStep, type ProcessStepState } from "@/components/ProcessFlowCard";
 import SmartBookingGuidanceCard from "@/components/SmartBookingGuidanceCard";
 import { extractCustomerMediaLink } from "@/lib/lead-details";
@@ -861,13 +861,13 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
             compact
             limit={3}
           />
-          <MarketplaceSourceActionDeck
+          <MarketplaceSourceFlowStrip
             source={sourceLabel || lead.source}
             shapeId={marketplaceShapeId}
             serviceCode={lead.serviceType}
+            serviceLabel={SERVICE_LABELS[lead.serviceType] || lead.serviceType}
             audience="company"
-            compact
-            limit={2}
+            phase={marketplaceActionPhaseForLead(lead)}
           />
           <MarketplaceShapeContext
             shapeId={marketplaceShapeId}
