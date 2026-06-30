@@ -6,11 +6,19 @@ import {
   MARKETPLACE_REQUEST_SHAPES,
   MARKETPLACE_ZONE_SERVICE_OPTIONS,
 } from "@shared/marketplaceShapes";
+import MarketplaceZoneMapBuilder from "@/components/MarketplaceZoneMapBuilder";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  marketplaceEstimateLabel,
+  marketplacePreviewBillableHours,
+  marketplacePreviewCrewSize,
+  marketplacePreviewZoneName,
+  type MarketplaceQuotePreview,
+} from "@/lib/marketplaceQuotePreview";
 
 type ZoneRate = {
   id: string;
@@ -34,33 +42,12 @@ type PricingZone = {
   travelBaseFee: string | number;
   travelPerMile: string | number;
   estimatePaddingPct: string | number;
+  polygon?: [number, number][];
   rates: ZoneRate[];
 };
 
 type ZonesResponse = {
   zones: PricingZone[];
-};
-
-type PreviewResponse = {
-  matched: boolean;
-  reason?: string;
-  zone?: {
-    id: string;
-    code: string;
-    name: string;
-  };
-  serviceCode: string;
-  crewSize: number;
-  requestedHours: number;
-  billableHours: number;
-  hourlyRate: number;
-  discountedHourlyRate?: number | null;
-  laborSubtotal: number;
-  travelFee: number;
-  subtotal: number;
-  minEstimate: number;
-  maxEstimate: number;
-  estimateLabel: string;
 };
 
 function money(value: string | number | null | undefined) {
@@ -71,6 +58,12 @@ function money(value: string | number | null | undefined) {
 function numberValue(value: string | number | null | undefined) {
   const n = Number(value ?? 0);
   return Number.isFinite(n) ? n : 0;
+}
+
+function percentValue(value: string | number | null | undefined) {
+  const n = numberValue(value);
+  const percent = n <= 1 ? n * 100 : n;
+  return `${percent.toFixed(percent % 1 === 0 ? 0 : 1)}%`;
 }
 
 export default function MarketplaceZonePricingPage() {
@@ -107,9 +100,12 @@ export default function MarketplaceZonePricingPage() {
         hours: Number(preview.hours),
         distanceMiles: Number(preview.distanceMiles || 0),
       });
-      return res.json() as Promise<PreviewResponse>;
+      return res.json() as Promise<MarketplaceQuotePreview>;
     },
   });
+  const previewData = previewMutation.data;
+  const previewCrewSize = previewData ? marketplacePreviewCrewSize(previewData, Number(preview.crewSize)) : 0;
+  const previewBillableHours = previewData ? marketplacePreviewBillableHours(previewData, Number(preview.hours)) : 0;
 
   const rateMutation = useMutation({
     mutationFn: async (rate: ZoneRate) => {
@@ -182,6 +178,11 @@ export default function MarketplaceZonePricingPage() {
         </div>
       </section>
 
+      <MarketplaceZoneMapBuilder
+        zones={zones}
+        onSaved={() => queryClient.invalidateQueries({ queryKey: ["/api/admin/marketplace/pricing-zones"] })}
+      />
+
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
         <section className="rounded-xl border border-slate-700/60 bg-slate-900/50 p-4">
           <div className="flex items-start gap-3">
@@ -191,7 +192,7 @@ export default function MarketplaceZonePricingPage() {
             <div>
               <h2 className="text-lg font-black text-white">Zone Rates</h2>
               <p className="text-sm text-slate-400">
-                Polygon zones choose the lowest matching estimate. This editor handles the rate rows now; map drawing comes next.
+                Polygon zones choose the lowest matching estimate. Use the map builder above for base/radius zones, then tune rates below.
               </p>
             </div>
           </div>
@@ -208,7 +209,7 @@ export default function MarketplaceZonePricingPage() {
                     <div>
                       <p className="text-sm font-black text-white">{zone.name}</p>
                       <p className="text-xs text-slate-500">
-                        {zone.code} · padding {numberValue(zone.estimatePaddingPct)}% · travel {money(zone.travelBaseFee)} + {money(zone.travelPerMile)}/mi
+                        {zone.code} - padding {percentValue(zone.estimatePaddingPct)} - travel {money(zone.travelBaseFee)} + {money(zone.travelPerMile)}/mi
                       </p>
                     </div>
                     <span className={`rounded-full px-2 py-1 text-xs font-bold ${zone.active ? "bg-emerald-500/15 text-emerald-300" : "bg-slate-700 text-slate-300"}`}>
@@ -369,15 +370,15 @@ export default function MarketplaceZonePricingPage() {
             </Button>
           </div>
 
-          {previewMutation.data && (
+          {previewData && (
             <div className="mt-5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4">
               <p className="text-xs uppercase tracking-wide text-emerald-300">
-                {previewMutation.data.matched ? previewMutation.data.zone?.name : "Quote review"}
+                {marketplacePreviewZoneName(previewData)}
               </p>
-              <p className="mt-1 text-3xl font-black text-white">{previewMutation.data.estimateLabel}</p>
+              <p className="mt-1 text-3xl font-black text-white">{marketplaceEstimateLabel(previewData)}</p>
               <div className="mt-3 space-y-1 text-xs text-emerald-100/80">
-                <p>{selectedService.label} · {previewMutation.data.crewSize} crew · {previewMutation.data.billableHours} billable hours</p>
-                <p>Labor {money(previewMutation.data.laborSubtotal)} · travel {money(previewMutation.data.travelFee)}</p>
+                <p>{selectedService.label} - {previewCrewSize} crew - {previewBillableHours} billable hours</p>
+                <p>Labor {money(previewData.quote.labor)} - travel {money(previewData.quote.travel)}</p>
               </div>
             </div>
           )}

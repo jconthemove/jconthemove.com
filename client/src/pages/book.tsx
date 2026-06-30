@@ -31,6 +31,13 @@ import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 import MarketplaceSourceFlowStrip from "@/components/MarketplaceSourceFlowStrip";
 import SmartRequestShapePicker from "@/components/SmartRequestShapePicker";
 import SmartBookingGuidanceCard from "@/components/SmartBookingGuidanceCard";
+import {
+  marketplaceEstimateLabel,
+  marketplacePreviewBillableHours,
+  marketplacePreviewCrewSize,
+  marketplacePreviewZoneName,
+  type MarketplaceQuotePreview,
+} from "@/lib/marketplaceQuotePreview";
 import type { User } from "@shared/schema";
 import {
   getMarketplaceRequestShape,
@@ -150,28 +157,6 @@ type BookingAttribution = {
   referralSlug: string;
   marketingCampaignId: string;
   marketingTracking: MarketingTracking;
-};
-
-type MarketplaceQuotePreview = {
-  matched: boolean;
-  reason?: string;
-  zone?: {
-    id: string;
-    code: string;
-    name: string;
-  };
-  serviceCode: string;
-  crewSize: number;
-  requestedHours: number;
-  billableHours: number;
-  hourlyRate: number;
-  discountedHourlyRate?: number | null;
-  laborSubtotal: number;
-  travelFee: number;
-  subtotal: number;
-  minEstimate: number;
-  maxEstimate: number;
-  estimateLabel: string;
 };
 
 type BookingMode = "choose" | "quick" | "builder";
@@ -1289,10 +1274,10 @@ export default function MultiServiceBookPage() {
       marketplacePreview: marketplacePreviewQuery.data
         ? {
             matched: marketplacePreviewQuery.data.matched,
-            zone: marketplacePreviewQuery.data.zone?.name || null,
-            estimateLabel: marketplacePreviewQuery.data.estimateLabel,
-            minEstimate: marketplacePreviewQuery.data.minEstimate,
-            maxEstimate: marketplacePreviewQuery.data.maxEstimate,
+            zone: marketplacePreviewQuery.data.quote.zone?.name || null,
+            estimateLabel: marketplaceEstimateLabel(marketplacePreviewQuery.data),
+            minEstimate: marketplacePreviewQuery.data.quote.minEstimate,
+            maxEstimate: marketplacePreviewQuery.data.quote.maxEstimate,
           }
         : null,
       continueReason: canContinueReason(),
@@ -1376,7 +1361,8 @@ export default function MultiServiceBookPage() {
     workerFields.internalNotes,
     JSON.stringify(items),
     quote?.finalTotal,
-    marketplacePreviewQuery.data?.estimateLabel,
+    marketplacePreviewQuery.data?.quote.minEstimate,
+    marketplacePreviewQuery.data?.quote.maxEstimate,
     tokenError,
     confirmation,
   ]);
@@ -2745,10 +2731,10 @@ export default function MultiServiceBookPage() {
                           ) : marketplacePreviewQuery.data ? (
                             <>
                               <p className="mt-1 text-lg font-black text-white">
-                                {marketplacePreviewQuery.data.estimateLabel}
+                                {marketplaceEstimateLabel(marketplacePreviewQuery.data)}
                               </p>
                               <p className="mt-1 text-[11px] text-muted-foreground">
-                                {marketplacePreviewQuery.data.zone?.name || "Out-of-zone quote review"} · {marketplacePreviewQuery.data.crewSize} movers · {marketplacePreviewQuery.data.billableHours} billable hours
+                                {marketplacePreviewZoneName(marketplacePreviewQuery.data)} - {marketplacePreviewCrewSize(marketplacePreviewQuery.data, marketplacePreviewInput?.crewSize ?? 2)} movers - {marketplacePreviewBillableHours(marketplacePreviewQuery.data, marketplacePreviewInput?.hours ?? 0)} billable hours
                               </p>
                             </>
                           ) : (

@@ -3,6 +3,8 @@ import { MapPin, Loader2, AlertCircle } from "lucide-react";
 
 interface NominatimResult {
   place_id: number;
+  lat: string;
+  lon: string;
   display_name: string;
   address: {
     house_number?: string;
@@ -37,6 +39,8 @@ interface Props {
   required?: boolean;
   className?: string;
   dark?: boolean;
+  onSelect?: (value: string, result: NominatimResult) => void;
+  allowPlaceResults?: boolean;
 }
 
 export default function AddressAutocomplete({
@@ -49,6 +53,8 @@ export default function AddressAutocomplete({
   label,
   required,
   dark = true,
+  onSelect,
+  allowPlaceResults = false,
 }: Props) {
   const [suggestions, setSuggestions] = useState<NominatimResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -72,15 +78,15 @@ export default function AddressAutocomplete({
       });
       if (!res.ok) return;
       const data: NominatimResult[] = await res.json();
-      const us = data.filter(r => r.address.country_code === "us" && r.address.road);
+      const us = data.filter((r) => r.address.country_code === "us" && (allowPlaceResults || r.address.road));
       setSuggestions(us.slice(0, 5));
       setOpen(us.length > 0);
     } catch {
-      // silent — still usable as plain input
+      // Still usable as a plain input if lookup is unavailable.
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [allowPlaceResults]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -99,7 +105,9 @@ export default function AddressAutocomplete({
   }, []);
 
   const pick = (r: NominatimResult) => {
-    onChange(formatAddress(r));
+    const formatted = formatAddress(r);
+    onChange(formatted);
+    onSelect?.(formatted, r);
     setSuggestions([]);
     setOpen(false);
   };
