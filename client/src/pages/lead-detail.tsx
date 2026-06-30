@@ -24,6 +24,8 @@ import { Switch } from "@/components/ui/switch";
 import { JobOrderBuilder } from "@/components/JobOrderBuilder";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
+import MarketplaceSourceFlowStrip from "@/components/MarketplaceSourceFlowStrip";
+import type { MarketplaceActionPhase } from "@shared/marketplaceShapes";
 
 interface SquareInvoice {
   id: string;
@@ -59,6 +61,21 @@ interface OrderLineItem {
   category?: string;
 }
 
+type LeadQuoteSnapshot = {
+  source?: string | null;
+  marketplaceShapeId?: string | null;
+  marketplaceShape?: { id?: string | null } | null;
+  requestedItems?: Array<{
+    serviceCode?: string | null;
+    serviceLabel?: string | null;
+  }>;
+  attribution?: {
+    source?: string | null;
+    referralSlug?: string | null;
+    marketingCampaignId?: string | null;
+  } | null;
+};
+
 interface Lead {
   id: string;
   orderNumber?: number | null;
@@ -72,6 +89,8 @@ interface Lead {
   moveDate?: string;
   propertySize?: string;
   details?: string;
+  source?: string | null;
+  quoteSnapshot?: LeadQuoteSnapshot | null;
   status: string;
   assignedToUserId?: string;
   createdByUserId?: string;
@@ -151,6 +170,38 @@ interface Employee {
   email: string;
   isApproved: boolean;
   status: string;
+}
+
+function leadSnapshot(lead: Lead): LeadQuoteSnapshot | null {
+  return lead.quoteSnapshot && typeof lead.quoteSnapshot === "object" && !Array.isArray(lead.quoteSnapshot)
+    ? lead.quoteSnapshot
+    : null;
+}
+
+function leadFirstRequestedItem(lead: Lead): NonNullable<LeadQuoteSnapshot["requestedItems"]>[number] | null {
+  const snapshot = leadSnapshot(lead);
+  return Array.isArray(snapshot?.requestedItems) ? snapshot.requestedItems[0] || null : null;
+}
+
+function leadMarketplaceShapeId(lead: Lead): string | null {
+  const snapshot = leadSnapshot(lead);
+  return snapshot?.marketplaceShapeId || snapshot?.marketplaceShape?.id || null;
+}
+
+function leadMarketplaceSource(lead: Lead): string | null {
+  const snapshot = leadSnapshot(lead);
+  return lead.source || snapshot?.attribution?.source || snapshot?.source || null;
+}
+
+function marketplacePhaseForLeadDetail(status: string | null | undefined): MarketplaceActionPhase {
+  const normalized = String(status || "").toLowerCase();
+  if (["completed", "customer_approved", "payout_calculated", "payout_sent", "closed", "paid"].includes(normalized)) {
+    return "finish";
+  }
+  if (["quote_requested", "new", "chatbot_pending", "deposit_pending"].includes(normalized)) {
+    return "start";
+  }
+  return "progress";
 }
 
 function DisbursementSummaryCard({ lead }: { lead: Lead }) {
@@ -813,6 +864,14 @@ export default function LeadDetailPage() {
   };
 
   const currentStep = getCurrentStep();
+  const marketplaceFirstItem = leadFirstRequestedItem(lead);
+  const marketplaceShapeId = leadMarketplaceShapeId(lead);
+  const marketplaceSource = leadMarketplaceSource(lead);
+  const marketplaceAudience: "customer" | "worker" | "company" = hasAdminAccess ? "company" : isEmployee ? "worker" : "customer";
+  const marketplacePhase = marketplacePhaseForLeadDetail(lead.status);
+  const marketplaceServiceCode = marketplaceFirstItem?.serviceCode || lead.serviceType;
+  const marketplaceServiceLabel =
+    marketplaceFirstItem?.serviceLabel || lead.serviceType?.replace(/_/g, " ") || "Service";
 
   const handlePhotoUpload = async (files: FileList) => {
     if (!files.length) return;
@@ -957,6 +1016,15 @@ export default function LeadDetailPage() {
               </div>
             </div>
           )}
+          <MarketplaceSourceFlowStrip
+            source={marketplaceSource}
+            shapeId={marketplaceShapeId}
+            serviceCode={marketplaceServiceCode}
+            serviceLabel={marketplaceServiceLabel}
+            audience={marketplaceAudience}
+            phase={marketplacePhase}
+            className="mt-3"
+          />
         </div>
 
         {/* === Sticky Customer Summary Bar === */}
