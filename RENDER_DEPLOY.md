@@ -68,7 +68,7 @@ To create the preferred hook:
 5. Add repository secret `RENDER_DEPLOY_HOOK_URL` with the full hook URL.
 6. Re-run the failed `Trigger Render Deploy` workflow or push a new commit.
 
-If you also set `RENDER_DEPLOY_HOOK_URL` locally for this shell, you can trigger directly:
+If you also set `RENDER_DEPLOY_HOOK_URL` locally in `.env` or in this shell, you can trigger directly:
 
 ```bash
 npm run render:trigger
@@ -126,7 +126,7 @@ API trigger fallback:
 
 Add it in GitHub under `Settings` -> `Secrets and variables` -> `Actions` -> `New repository secret`.
 
-Use an explicit trigger even if Render's Git auto-deploy is enabled. It gives us a second deploy path and makes it easier to tell whether GitHub saw the push. If neither trigger is set, the workflow waits for Render Git auto-deploy and fails only if the public health check never shows the expected commit.
+Use an explicit trigger even if Render's Git auto-deploy is enabled. It gives us a second deploy path and makes it easier to tell whether GitHub saw the push. Because this service has already served stale builds from auto-deploy, the workflow now fails fast when neither trigger is set. To intentionally fall back to Render Git auto-deploy waiting, add repository variable `ALLOW_RENDER_AUTO_DEPLOY_WAIT=true`.
 
 ## Health check response
 

@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { execFileSync } from "node:child_process";
 
 const args = new Set(process.argv.slice(2));
@@ -209,7 +210,8 @@ line("Fix:");
 line("1. In Render, open jc-on-the-move -> Settings/Deploy Hooks and create a deploy hook for main.");
 line("2. In GitHub, open JCONTHEMOVE.COM -> Settings -> Secrets and variables -> Actions.");
 line("3. Add repository secret RENDER_DEPLOY_HOOK_URL with the full Render deploy hook URL.");
-line("4. Re-run the failed GitHub workflow or push a new commit.");
-line("5. Confirm npm run verify:production passes and /health shows version.shortCommit.");
+line("4. Optional local shortcut: add the same RENDER_DEPLOY_HOOK_URL to .env and run npm run render:trigger.");
+line("5. Re-run the failed GitHub workflow or push a new commit.");
+line("6. Confirm npm run verify:production passes and /health shows version.shortCommit.");
 
 process.exit(1);
