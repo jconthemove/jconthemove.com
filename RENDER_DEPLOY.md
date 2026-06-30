@@ -74,7 +74,7 @@ If you also set `RENDER_DEPLOY_HOOK_URL` locally in `.env` or in this shell, you
 npm run render:trigger
 ```
 
-The GitHub workflow now fails fast if no explicit trigger is configured. That is intentional: the live `jc-on-the-move.onrender.com` service has already shown that Git auto-deploy is not updating production. If Render Git auto-deploy is fixed later and you want the workflow to wait for it instead, add repository variable `ALLOW_RENDER_AUTO_DEPLOY_WAIT=true`.
+The GitHub workflow now builds the release, triggers Render when credentials are available, and otherwise waits for Render Git auto-deploy to publish the pushed commit. For the most reliable deploys, still add an explicit deploy hook. If you want CI to fail immediately when the hook/API credentials are missing, add repository variable `REQUIRE_RENDER_TRIGGER=true`.
 
 ## Strongly recommended variables
 
@@ -126,7 +126,7 @@ API trigger fallback:
 
 Add it in GitHub under `Settings` -> `Secrets and variables` -> `Actions` -> `New repository secret`.
 
-Use an explicit trigger even if Render's Git auto-deploy is enabled. It gives us a second deploy path and makes it easier to tell whether GitHub saw the push. Because this service has already served stale builds from auto-deploy, the workflow now fails fast when neither trigger is set. To intentionally fall back to Render Git auto-deploy waiting, add repository variable `ALLOW_RENDER_AUTO_DEPLOY_WAIT=true`.
+Use an explicit trigger even if Render's Git auto-deploy is enabled. It gives us a second deploy path and makes it easier to tell whether GitHub saw the push. When neither trigger is set, the workflow waits for Render Git auto-deploy and verifies `/health` until the pushed commit is public. To require an explicit trigger before waiting, add repository variable `REQUIRE_RENDER_TRIGGER=true`.
 
 ## Health check response
 

@@ -18,7 +18,7 @@ jobs:
       DEPLOY_WAIT_ATTEMPTS: ${{ vars.DEPLOY_WAIT_ATTEMPTS || '40' }}
       DEPLOY_WAIT_SECONDS: ${{ vars.DEPLOY_WAIT_SECONDS || '30' }}
       DEPLOY_CHECK_TIMEOUT_MS: ${{ vars.DEPLOY_CHECK_TIMEOUT_MS || '15000' }}
-      ALLOW_RENDER_AUTO_DEPLOY_WAIT: ${{ vars.ALLOW_RENDER_AUTO_DEPLOY_WAIT || 'false' }}
+      REQUIRE_RENDER_TRIGGER: ${{ vars.REQUIRE_RENDER_TRIGGER || 'false' }}
     steps:
       - name: Checkout deploy verifier
         uses: actions/checkout@v4
@@ -36,17 +36,17 @@ jobs:
         run: npm run build
 
       - name: Stop if Render trigger is missing
-        if: env.RENDER_DEPLOY_HOOK_URL == '' && (env.RENDER_API_KEY == '' || env.RENDER_SERVICE_ID == '') && env.ALLOW_RENDER_AUTO_DEPLOY_WAIT != 'true'
+        if: env.RENDER_DEPLOY_HOOK_URL == '' && (env.RENDER_API_KEY == '' || env.RENDER_SERVICE_ID == '') && env.REQUIRE_RENDER_TRIGGER == 'true'
         run: |
-          echo "::error::No explicit Render deploy trigger is configured, and Render Git auto-deploy is not currently updating production."
+          echo "::error::No explicit Render deploy trigger is configured."
           echo "Add either:"
           echo "  1. GitHub Actions secret RENDER_DEPLOY_HOOK_URL"
           echo "  2. GitHub Actions secrets RENDER_API_KEY and RENDER_SERVICE_ID"
-          echo "If Render Git auto-deploy is intentionally fixed later, set repository variable ALLOW_RENDER_AUTO_DEPLOY_WAIT=true."
+          echo "Or set repository variable REQUIRE_RENDER_TRIGGER=false to wait for Render Git auto-deploy."
           exit 1
 
       - name: Check Render trigger configuration
-        if: env.RENDER_DEPLOY_HOOK_URL == '' && (env.RENDER_API_KEY == '' || env.RENDER_SERVICE_ID == '') && env.ALLOW_RENDER_AUTO_DEPLOY_WAIT == 'true'
+        if: env.RENDER_DEPLOY_HOOK_URL == '' && (env.RENDER_API_KEY == '' || env.RENDER_SERVICE_ID == '')
         run: |
           echo "::warning::No explicit Render deploy trigger is configured."
           echo "The workflow will wait for Render Git auto-deploy."

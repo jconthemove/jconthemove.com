@@ -140,9 +140,12 @@ function checkTriggerEnv() {
   const hasApi = present("RENDER_API_KEY") && present("RENDER_SERVICE_ID");
   line(`- RENDER_DEPLOY_HOOK_URL: ${hasHook ? "present" : "missing"}`);
   line(`- RENDER_API_KEY + RENDER_SERVICE_ID: ${hasApi ? "present" : "missing"}`);
+  if (!hasHook && !hasApi && !shouldTrigger) {
+    line("- warning: this machine cannot trigger Render directly; GitHub/Render auto-deploy can still be verified");
+  }
   line();
 
-  if (!hasHook && !hasApi) {
+  if (shouldTrigger && !hasHook && !hasApi) {
     return ["no local Render deploy trigger credentials are available"];
   }
   return [];
@@ -207,11 +210,12 @@ line("Result: Render deploy path is blocked.");
 for (const problem of problems) line(`- ${problem}`);
 line();
 line("Fix:");
-line("1. In Render, open jc-on-the-move -> Settings/Deploy Hooks and create a deploy hook for main.");
-line("2. In GitHub, open JCONTHEMOVE.COM -> Settings -> Secrets and variables -> Actions.");
-line("3. Add repository secret RENDER_DEPLOY_HOOK_URL with the full Render deploy hook URL.");
-line("4. Optional local shortcut: add the same RENDER_DEPLOY_HOOK_URL to .env and run npm run render:trigger.");
-line("5. Re-run the failed GitHub workflow or push a new commit.");
-line("6. Confirm npm run verify:production passes and /health shows version.shortCommit.");
+line("1. Confirm Render service jc-on-the-move has Git auto-deploy enabled for branch main.");
+line("2. Preferred: Render -> Settings/Deploy Hooks -> create a main hook.");
+line("3. GitHub -> JCONTHEMOVE.COM -> Settings -> Secrets and variables -> Actions.");
+line("4. Add repository secret RENDER_DEPLOY_HOOK_URL with the full Render deploy hook URL.");
+line("5. Optional local shortcut: add the same RENDER_DEPLOY_HOOK_URL to .env and run npm run render:trigger.");
+line("6. Re-run the failed GitHub workflow or push a new commit.");
+line("7. Confirm npm run verify:production passes and /health shows version.shortCommit.");
 
 process.exit(1);
