@@ -20,6 +20,7 @@ import { getAppUrl } from "../appUrl";
 export type ScenarioId =
   | "env_required"
   | "database_readiness"
+  | "public_deploy_freshness"
   | "square_configured"
   | "btc_address_configured"
   | "pricing_engine"
@@ -53,6 +54,84 @@ interface Scenario {
   id: ScenarioId;
   label: string;
   run: () => Promise<{ ok: boolean; detail: string }>;
+}
+
+type HealthBody = {
+  status?: string;
+  service?: string;
+  uptimeSeconds?: number;
+  version?: {
+    commit?: string | null;
+    shortCommit?: string | null;
+    branch?: string | null;
+    buildGeneratedAt?: string | null;
+  };
+  boot?: {
+    status?: string;
+    error?: string | null;
+  };
+  checks?: {
+    env?: {
+      status?: string;
+      missingRequired?: string[];
+    };
+  };
+};
+
+function readExpectedDeployCommit(): string | null {
+  const envCommit =
+    process.env.RENDER_GIT_COMMIT
+    || process.env.RAILWAY_GIT_COMMIT_SHA
+    || process.env.VERCEL_GIT_COMMIT_SHA
+    || process.env.GITHUB_SHA;
+  if (envCommit?.trim()) return envCommit.trim().slice(0, 8);
+
+  const buildInfoPath = path.resolve(process.cwd(), "dist/build-info.json");
+  try {
+    if (!existsSync(buildInfoPath)) return null;
+    const parsed = JSON.parse(readFileSync(buildInfoPath, "utf8")) as { shortCommit?: string; commit?: string };
+    return (parsed.shortCommit || parsed.commit?.slice(0, 8) || null) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function publicRenderHealthUrl(): string {
+  const explicit = process.env.PUBLIC_HEALTH_URL?.trim() || process.env.RENDER_HEALTH_URL?.trim();
+  if (explicit) return explicit;
+
+  const renderUrl = process.env.RENDER_EXTERNAL_URL?.trim();
+  if (renderUrl) return new URL("/health", renderUrl).toString();
+
+  return "https://jc-on-the-move.onrender.com/health";
+}
+
+function siblingHealthUrl(baseHealthUrl: string, pathname: string): string {
+  const url = new URL(baseHealthUrl);
+  url.pathname = pathname;
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
+async function fetchHealthJson(url: string): Promise<{ status: number; ok: boolean; body: HealthBody }> {
+  const timeoutMs = Number(process.env.LAUNCH_HEALTH_TIMEOUT_MS || 12_000);
+  const signal = AbortSignal.timeout(Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 12_000);
+  const response = await fetch(url, {
+    headers: {
+      "Cache-Control": "no-store",
+      Pragma: "no-cache",
+    },
+    signal,
+  });
+  const raw = await response.text();
+  let body: HealthBody;
+  try {
+    body = JSON.parse(raw) as HealthBody;
+  } catch {
+    throw new Error(`${url} returned non-JSON response (${response.status})`);
+  }
+  return { status: response.status, ok: response.ok, body };
 }
 
 type MarketingProbeIds = {
@@ -408,6 +487,44 @@ const SCENARIOS: Scenario[] = [
       return row?.database_name
         ? { ok: true, detail: `connected to ${row.database_name} at ${row.server_time}` }
         : { ok: false, detail: "Postgres responded without database metadata" };
+    },
+  },
+  {
+    id: "public_deploy_freshness",
+    label: "Public Render deployment is fresh and ready",
+    run: async () => {
+      const healthUrl = publicRenderHealthUrl();
+      const readinessUrl = siblingHealthUrl(healthUrl, "/api/health");
+      const expectedCommit = readExpectedDeployCommit();
+      const liveness = await fetchHealthJson(healthUrl);
+      const liveCommit = liveness.body.version?.shortCommit || liveness.body.version?.commit?.slice(0, 8) || null;
+
+      if (!liveness.ok || !["alive", "ready"].includes(liveness.body.status || "")) {
+        return { ok: false, detail: `${healthUrl} not alive: http=${liveness.status} status=${liveness.body.status || "unknown"}` };
+      }
+      if (!liveCommit) {
+        return { ok: false, detail: `${healthUrl} is alive but missing version.shortCommit; public Render is serving an older build` };
+      }
+      if (expectedCommit && liveCommit !== expectedCommit) {
+        return { ok: false, detail: `${healthUrl} commit ${liveCommit} does not match current build ${expectedCommit}` };
+      }
+      if (liveness.body.boot?.status === "failed") {
+        return { ok: false, detail: `${healthUrl} boot failed: ${liveness.body.boot.error || "unknown error"}` };
+      }
+
+      const readiness = await fetchHealthJson(readinessUrl);
+      const missingEnv = readiness.body.checks?.env?.missingRequired || [];
+      if (missingEnv.length > 0) {
+        return { ok: false, detail: `${readinessUrl} missing env: ${missingEnv.join(", ")}` };
+      }
+      if (!readiness.ok || readiness.body.status !== "ready") {
+        return { ok: false, detail: `${readinessUrl} not ready: http=${readiness.status} status=${readiness.body.status || "unknown"}` };
+      }
+
+      return {
+        ok: true,
+        detail: `${healthUrl} running ${liveCommit}${expectedCommit ? " (matches current build)" : ""}; strict readiness passed`,
+      };
     },
   },
   {

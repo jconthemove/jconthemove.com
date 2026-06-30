@@ -50,7 +50,7 @@ export default function AdminLaunchChecklistPage() {
       `Generated: ${new Date().toLocaleString()}`,
       `Status: ${summary.allOk ? "READY" : "NOT READY"}`,
       `Results: ${summary.green} green, ${summary.red} failed, ${summary.notRun} not run, ${summary.total} total`,
-      "Coverage: health/readiness, payments, public routes, booking funnel, quick requests with photos/media links, tracked marketing attribution, worker rep pages, profit share, payout safety",
+      "Coverage: deploy freshness, health/readiness, payments, public routes, booking funnel, quick requests with photos/media links, tracked marketing attribution, worker rep pages, profit share, payout safety",
       "",
       ...scenarios.map((s) => {
         const r = results[s.id];
@@ -94,7 +94,7 @@ export default function AdminLaunchChecklistPage() {
             <h1 className="text-2xl font-bold text-white">Launch Checklist</h1>
           </div>
           <p className="text-slate-400 text-sm max-w-3xl">
-            Run every launch probe and confirm all rows are green before publishing a deploy or driving marketing traffic. This covers health/readiness, payments, public conversion routes, the booking funnel, quick-request photos, media links, tracked marketing attribution, worker rep pages, profit-share defaults, and payout safety.
+            Run every launch probe and confirm all rows are green before publishing a deploy or driving marketing traffic. This covers deploy freshness, health/readiness, payments, public conversion routes, the booking funnel, quick-request photos, media links, tracked marketing attribution, worker rep pages, profit-share defaults, and payout safety.
           </p>
         </div>
         <button
@@ -145,6 +145,7 @@ export default function AdminLaunchChecklistPage() {
         <div className="text-xs uppercase tracking-wide text-slate-500">Coverage</div>
         <div className="mt-3 grid gap-2 text-sm text-slate-300 sm:grid-cols-2 lg:grid-cols-3">
           <span>Payments and deposits</span>
+          <span>Deploy freshness</span>
           <span>Health and database readiness</span>
           <span>Public customer and worker routes</span>
           <span>Public booking catalog</span>
