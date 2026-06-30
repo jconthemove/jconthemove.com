@@ -93,21 +93,21 @@ If you also set `RENDER_DEPLOY_HOOK_URL` locally in `.env` or in this shell, you
 npm run render:trigger
 ```
 
-The GitHub workflow builds the release first. If a deploy hook or Render API credentials are configured, it triggers Render and waits inline for the public health endpoint to show the pushed commit. For launch safety, the workflow now requires an explicit Render trigger by default so a green GitHub run cannot hide a stale public service. The separate `Verify Render Deployment` workflow is manual-only so it cannot become another check that Render waits on.
+The GitHub workflow builds the release first. If a deploy hook or Render API credentials are configured, it triggers Render and waits inline for the public health endpoint to show the pushed commit. Without a trigger, the workflow now passes by default so Render services configured to deploy after GitHub checks pass are not deadlocked. The separate `Verify Render Deployment` workflow is manual-only so it cannot become another check that Render waits on.
 
 This split avoids the classic deadlock:
 
 - GitHub waits for Render before marking checks green.
 - Render waits for GitHub checks to pass before deploying.
 
-If Render's Git auto-deploy is confirmed healthy and you intentionally want to rely on it, set repository variable `REQUIRE_RENDER_TRIGGER=false`.
+If you want launch deploys to fail until GitHub can force Render and verify the public commit, set repository variable `REQUIRE_RENDER_TRIGGER=true`.
 
 For the strongest launch path, add one of:
 
 - GitHub Actions secret `RENDER_DEPLOY_HOOK_URL`
 - GitHub Actions secrets `RENDER_API_KEY` and `RENDER_SERVICE_ID`
 
-If neither trigger is set, the workflow fails by default and tells you exactly which Render trigger secret is missing. That is intentional for launch readiness. If the live service stays stale after a green GitHub run, add `RENDER_DEPLOY_HOOK_URL` or `RENDER_API_KEY` plus `RENDER_SERVICE_ID`.
+If neither trigger is set, the workflow builds and passes with a warning. Render should then deploy from its GitHub auto-deploy connection. If the live service stays stale after a green GitHub run, add `RENDER_DEPLOY_HOOK_URL` or `RENDER_API_KEY` plus `RENDER_SERVICE_ID`.
 
 If GitHub Actions shows a successful build for the current commit but `https://jc-on-the-move.onrender.com/health` still has no `version.shortCommit`, Render is not running the current release. Treat that as a Render dashboard/config issue, not an app build issue. Check that the service is connected to this GitHub repository, the branch is `main`, auto-deploy is enabled, and a deploy hook/API trigger is configured for forced deploys.
 
@@ -148,7 +148,7 @@ Optional feature variables:
 
 ## Auto-deploy fallback
 
-The repo also includes `.github/workflows/render-deploy.yml`. This workflow fires on every push to `main` and builds the app. With a Render hook/API secret or variable it also triggers Render and verifies inline. Without an explicit trigger, it fails by default so launch deploys cannot look healthy while Render is stale. `.github/workflows/render-verify.yml` is kept as a manual workflow for checking the public commit after Render starts.
+The repo also includes `.github/workflows/render-deploy.yml`. This workflow fires on every push to `main` and builds the app. With a Render hook/API secret or variable it also triggers Render and verifies inline. Without an explicit trigger, it passes with a warning so Render can start after GitHub checks pass. `.github/workflows/render-verify.yml` is kept as a manual workflow for checking the public commit after Render starts.
 
 Preferred trigger:
 
