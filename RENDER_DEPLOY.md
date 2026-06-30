@@ -8,12 +8,12 @@ It creates one Node web service with:
 
 - `buildCommand`: `npm ci && npm run build`
 - `startCommand`: `npm run start`
-- `healthCheckPath`: `/api/health`
+- `healthCheckPath`: `/health`
 - `branch`: `main`
 - `plan`: `starter`
 - `region`: `ohio`
 
-`/api/health` is the canonical Render readiness probe. It proves the API routes, database, and required environment variables are ready, and returns HTTP `503` when readiness fails. `/health` stays as a fast liveness endpoint for cold starts and includes deploy version/bootstrap status, but it should not be used as the Render readiness gate.
+`/health` is the Render liveness probe. It returns quickly during cold starts and includes deploy version/bootstrap status so Render does not kill the service while heavier route and database startup work finishes. `/api/health` remains the strict operator readiness probe; it proves API routes, database, and required environment variables are ready, and returns HTTP `503` when readiness fails.
 
 ## Required Render environment variables
 
@@ -56,22 +56,30 @@ Optional feature variables:
 3. Connect the repo and select the branch you want to deploy.
 4. When Render prompts for `sync: false` variables, enter at least the required ones above.
 5. Deploy the Blueprint.
-6. After the first deploy finishes, open `https://<your-service>.onrender.com/api/health`.
-7. Confirm it returns HTTP `200` with `status: "ready"` and a `version.shortCommit`.
+6. After the first deploy starts, open `https://<your-service>.onrender.com/health`.
+7. Confirm it returns HTTP `200` with `status: "alive"` or `status: "ready"` and a `version.shortCommit`.
+8. Then open `https://<your-service>.onrender.com/api/health` and confirm strict readiness before launch.
 
 ## Auto-deploy fallback
 
-The repo also includes `.github/workflows/render-deploy.yml`. This workflow fires on every push to `main` and calls a Render deploy hook when the GitHub Actions secret below is present:
+The repo also includes `.github/workflows/render-deploy.yml`. This workflow fires on every push to `main`, builds the app, triggers Render when credentials are available, and then waits for the public health endpoint to report the pushed commit.
+
+Preferred trigger:
 
 - `RENDER_DEPLOY_HOOK_URL`
 
+API trigger fallback:
+
+- `RENDER_API_KEY`
+- `RENDER_SERVICE_ID`
+
 Add it in GitHub under `Settings` -> `Secrets and variables` -> `Actions` -> `New repository secret`.
 
-Use this even if Render's Git auto-deploy is enabled. It gives us a second, explicit deploy trigger and makes it easier to tell whether GitHub saw the push.
+Use an explicit trigger even if Render's Git auto-deploy is enabled. It gives us a second deploy path and makes it easier to tell whether GitHub saw the push. If neither trigger is set, the workflow waits for Render Git auto-deploy and fails only if the public health check never shows the expected commit.
 
 ## Health check response
 
-Ready services return HTTP `200` and `status: "ready"` from `/api/health`. If the database probe fails or a required environment variable is missing, `/api/health` returns HTTP `503` with readiness details. `/health` always returns HTTP `200` for liveness and includes `version` plus `boot` status so you can quickly see which commit is running.
+Live services return HTTP `200` and `status: "alive"` from `/health`. Ready services return HTTP `200` and `status: "ready"` from `/api/health`. If the database probe fails or a required environment variable is missing, `/api/health` returns HTTP `503` with readiness details. `/health` always returns HTTP `200` for liveness and includes `version` plus `boot` status so you can quickly see which commit is running.
 
 The JSON shape is:
 
@@ -128,7 +136,7 @@ If `https://www.jconthemove.com/api/health` includes Railway headers, the public
 - `www` to the Render custom-domain target Render gives you.
 - The apex/root domain to Render if your DNS supports CNAME flattening/ALIAS, or redirect `jconthemove.com` to `www.jconthemove.com`.
 
-Run `npm run verify:production` after DNS changes. It should pass and show a deployed commit from `/api/health`; then run `/admin/launch-checklist` for the rest of the launch checks.
+Run `npm run verify:production` after DNS changes. It should pass and show a deployed commit from `/health`; then run `/admin/launch-checklist` for the rest of the launch checks.
 
 ## Notes
 

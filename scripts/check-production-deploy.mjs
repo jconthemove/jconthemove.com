@@ -1,9 +1,10 @@
 import dns from "node:dns/promises";
 
-const healthUrl = process.argv[2] || process.env.PUBLIC_HEALTH_URL || "https://www.jconthemove.com/api/health";
+const healthUrl = process.argv[2] || process.env.PUBLIC_HEALTH_URL || "https://jc-on-the-move.onrender.com/health";
 const expectedCommit = (process.env.EXPECTED_COMMIT || process.env.RENDER_GIT_COMMIT || "").slice(0, 8) || null;
 const healthPath = new URL(healthUrl).pathname.replace(/\/+$/, "") || "/";
 const platformHealth = healthPath === "/health" || healthPath === "/version";
+const requestTimeoutMs = Number(process.env.DEPLOY_CHECK_TIMEOUT_MS || 15_000);
 
 function header(res, name) {
   return res.headers.get(name) || "";
@@ -38,11 +39,13 @@ async function getDnsSignals(url) {
 
 try {
   const dnsSignals = await getDnsSignals(healthUrl);
+  const signal = AbortSignal.timeout(Number.isFinite(requestTimeoutMs) && requestTimeoutMs > 0 ? requestTimeoutMs : 15_000);
   const res = await fetch(healthUrl, {
     headers: {
       "Cache-Control": "no-store",
       Pragma: "no-cache",
     },
+    signal,
   });
   const signals = hostSignals(res);
   const raw = await res.text();
