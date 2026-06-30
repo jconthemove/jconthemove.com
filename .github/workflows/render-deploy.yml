@@ -22,7 +22,7 @@ jobs:
       DEPLOY_WAIT_ATTEMPTS: ${{ vars.DEPLOY_WAIT_ATTEMPTS || '40' }}
       DEPLOY_WAIT_SECONDS: ${{ vars.DEPLOY_WAIT_SECONDS || '30' }}
       DEPLOY_CHECK_TIMEOUT_MS: ${{ vars.DEPLOY_CHECK_TIMEOUT_MS || '15000' }}
-      REQUIRE_RENDER_TRIGGER: ${{ vars.REQUIRE_RENDER_TRIGGER || 'false' }}
+      REQUIRE_RENDER_TRIGGER: ${{ vars.REQUIRE_RENDER_TRIGGER || 'true' }}
     steps:
       - name: Checkout deploy verifier
         uses: actions/checkout@v4
@@ -54,8 +54,9 @@ jobs:
         if: env.RENDER_DEPLOY_HOOK_URL == '' && (env.RENDER_API_KEY == '' || env.RENDER_SERVICE_ID == '')
         run: |
           echo "::warning::No explicit Render deploy trigger is configured."
-          echo "The workflow will finish after the build because REQUIRE_RENDER_TRIGGER=false."
-          echo "That lets Render services configured with checksPass start deploying after GitHub checks pass."
+          echo "Set REQUIRE_RENDER_TRIGGER=false only if Render auto-deploy is confirmed healthy."
+          echo "Launch deploys should use an explicit Render deploy hook or Render API credentials."
+          echo "That prevents a green GitHub run while the public Render service stays on an old commit."
           echo "Run the manual 'Verify Render Deployment' workflow after Render starts deploying."
           echo "For forced deploys, add either:"
           echo "  1. GitHub secret or repository variable RENDER_DEPLOY_HOOK_URL"
