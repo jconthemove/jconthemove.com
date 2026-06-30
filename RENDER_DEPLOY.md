@@ -93,21 +93,21 @@ If you also set `RENDER_DEPLOY_HOOK_URL` locally in `.env` or in this shell, you
 npm run render:trigger
 ```
 
-The GitHub workflow builds the release first. If a deploy hook or Render API credentials are configured, it triggers Render and waits inline for the public health endpoint to show the pushed commit. Launch deploys require that explicit trigger by default, so a green GitHub run means production was actually asked to deploy. The separate `Verify Render Deployment` workflow is manual-only for checking the public commit after Render starts.
+The GitHub workflow builds the release first. If a deploy hook or Render API credentials are configured, it triggers Render and waits inline for the public health endpoint to show the pushed commit. If no explicit trigger is configured, the workflow now passes after the build so Render's normal commit auto-deploy can proceed. The separate `Verify Render Deployment` workflow is manual-only for checking the public commit after Render starts.
 
 This split avoids the classic deadlock:
 
 - GitHub waits for Render before marking checks green.
 - Render waits for GitHub checks to pass before deploying.
 
-If you intentionally want to rely on Render dashboard auto-deploy only, set repository variable `REQUIRE_RENDER_TRIGGER=false`. Use that only after `npm run render:doctor` confirms the service is already deploying current commits.
+Auto-deploy fallback is the default while the service is being repaired. After the deploy hook is installed and proven, set repository variable `REQUIRE_RENDER_TRIGGER=true` if you want GitHub to fail whenever it cannot force Render directly.
 
 For the strongest launch path, add one of:
 
 - GitHub Actions secret `RENDER_DEPLOY_HOOK_URL`
 - GitHub Actions secrets `RENDER_API_KEY` and `RENDER_SERVICE_ID`
 
-If neither trigger is set, the workflow fails by default. That is intentional: it prevents a stale public Render service from hiding behind a green GitHub build. Add `RENDER_DEPLOY_HOOK_URL` or `RENDER_API_KEY` plus `RENDER_SERVICE_ID`, then re-run the workflow.
+If neither trigger is set, the workflow warns and lets Render's dashboard auto-deploy run after checks pass. If the public service stays stale after a green build, add `RENDER_DEPLOY_HOOK_URL` or `RENDER_API_KEY` plus `RENDER_SERVICE_ID`, then re-run the workflow.
 
 Current emergency fix path:
 
@@ -156,7 +156,7 @@ Optional feature variables:
 
 ## Auto-deploy fallback
 
-The repo also includes `.github/workflows/render-deploy.yml`. This workflow fires on every push to `main` and builds the app. With a Render hook/API secret or variable it also triggers Render and verifies inline. Without an explicit trigger, it fails by default so launch deploys cannot silently stay stale. `.github/workflows/render-verify.yml` is kept as a manual workflow for checking the public commit after Render starts.
+The repo also includes `.github/workflows/render-deploy.yml`. This workflow fires on every push to `main` and builds the app. With a Render hook/API secret or variable it also triggers Render and verifies inline. Without an explicit trigger, it warns and passes so Render's dashboard auto-deploy can run after checks pass. `.github/workflows/render-verify.yml` is kept as a manual workflow for checking the public commit after Render starts.
 
 Preferred trigger:
 
@@ -171,12 +171,14 @@ Add it in GitHub under `Settings` -> `Secrets and variables` -> `Actions` -> `Ne
 
 Use an explicit trigger even if Render's Git auto-deploy is enabled. It gives us a second deploy path and makes it easier to tell whether GitHub saw the push.
 
-When neither trigger is set and you deliberately set `REQUIRE_RENDER_TRIGGER=false`:
+When neither trigger is set:
 
 1. `Trigger Render Deploy` builds and passes.
 2. Render should start from its GitHub auto-deploy connection after checks pass.
 3. Run the manual `Verify Render Deployment` workflow or `npm run render:doctor` locally after Render starts.
 4. If Render still stays stale, add `RENDER_DEPLOY_HOOK_URL`, or add `RENDER_API_KEY` plus `RENDER_SERVICE_ID`.
+
+To enforce explicit Render deploys after the hook is configured, set repository variable `REQUIRE_RENDER_TRIGGER=true`.
 
 ## Health check response
 

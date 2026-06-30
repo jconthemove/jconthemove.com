@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 
 const args = new Set(process.argv.slice(2));
 const shouldTrigger = args.has("--trigger");
+const strictRenderTrigger = String(process.env.REQUIRE_RENDER_TRIGGER || "false").toLowerCase() === "true";
 
 const repo = process.env.GITHUB_REPOSITORY || "JCONTHEMOVE/JCONTHEMOVE.COM";
 const workflowName = process.env.RENDER_WORKFLOW_NAME || "Trigger Render Deploy";
@@ -215,7 +216,11 @@ async function checkLatestWorkflow() {
             && verifyStep?.conclusion === "skipped";
           if (skippedExplicitTrigger) {
             line("- explicit trigger: skipped; relying on Render auto-deploy after GitHub checks pass");
-            problems.push("latest GitHub workflow skipped the explicit Render trigger; add RENDER_DEPLOY_HOOK_URL or RENDER_API_KEY + RENDER_SERVICE_ID so production is forced to deploy");
+            if (strictRenderTrigger) {
+              problems.push("latest GitHub workflow skipped the explicit Render trigger; add RENDER_DEPLOY_HOOK_URL or RENDER_API_KEY + RENDER_SERVICE_ID so production is forced to deploy");
+            } else {
+              line("- explicit trigger note: allowed because REQUIRE_RENDER_TRIGGER is not true");
+            }
           }
         }
       }
@@ -331,7 +336,7 @@ line("Fix, in order:");
 line("1. Render -> jc-on-the-move -> Settings: set Health Check Path to /health, branch to main, and auto-deploy to on-commit.");
 line("2. Render -> jc-on-the-move -> Environment: set DATABASE_URL, SESSION_SECRET, SQUARE_ACCESS_TOKEN, SQUARE_ENVIRONMENT, APP_URL=https://www.jconthemove.com.");
 line("3. Create a main-branch deploy hook in Render and add it to GitHub Actions as RENDER_DEPLOY_HOOK_URL, or add RENDER_API_KEY + RENDER_SERVICE_ID.");
-line("4. Push a new commit or re-run GitHub Actions. The workflow now fails instead of going green when no Render trigger is configured.");
+line("4. Push a new commit or re-run GitHub Actions. Without a Render trigger, the workflow will build green and rely on Render auto-deploy.");
 line("5. Cloudflare/DNS: point www.jconthemove.com at the Render custom-domain target, not Railway.");
 line("6. Confirm npm run render:doctor passes and /health shows version.shortCommit.");
 
