@@ -21,6 +21,7 @@ import LawnJobBrief from "@/components/LawnJobBrief";
 import { PaymentStatusPill } from "@/components/PaymentStatusPill";
 import AuthorityTasksCard from "@/components/AuthorityTasksCard";
 import JobLifecycleRail from "@/components/JobLifecycleRail";
+import MarketplaceActionMatrix from "@/components/MarketplaceActionMatrix";
 import MarketplaceShapeBadge from "@/components/MarketplaceShapeBadge";
 import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
@@ -72,6 +73,10 @@ const DEFAULT_HOURS = 3;
 
 function calcEstimatedTokens(hours: number | null): number {
   return FLAT_TOKEN_BASE + TOKENS_PER_HOUR * (hours || DEFAULT_HOURS);
+}
+
+function workerActionPhaseForLead(lead: { status: string | null }): "progress" | "finish" {
+  return String(lead.status || "").toLowerCase() === "completed" ? "finish" : "progress";
 }
 
 type JobBoardLead = {
@@ -733,6 +738,13 @@ function JobDetailSheet({
             serviceCode={lead.serviceType}
             audience="worker"
             compact
+          />
+          <MarketplaceActionMatrix
+            rail="worker"
+            phase={workerActionPhaseForLead(lead)}
+            serviceCode={lead.serviceType}
+            compact
+            limit={3}
           />
           <MarketplaceShapeContext
             serviceCode={lead.serviceType}

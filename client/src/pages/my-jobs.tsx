@@ -10,6 +10,7 @@ import {
   Pause, SkipForward, RotateCw
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import MarketplaceActionMatrix from "@/components/MarketplaceActionMatrix";
 import MarketplaceShapeBadge from "@/components/MarketplaceShapeBadge";
 import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
@@ -83,6 +84,15 @@ function getStepIndex(status: string): number {
   if (["dispatched", "available", "confirmed", "in_progress", "accepted"].includes(status)) return 4;
   if (status === "cancelled") return -1;
   return 0;
+}
+
+function customerActionPhaseForJob(job: CustomerJob): "start" | "progress" | "finish" {
+  const status = String(job.status || "").toLowerCase();
+  if (["completed", "paid"].includes(status)) return "finish";
+  if (["quoted", "quote_sent", "invoice_sent", "available", "confirmed", "accepted", "in_progress", "dispatched"].includes(status)) {
+    return "progress";
+  }
+  return "start";
 }
 
 function StatusTracker({ status }: { status: string }) {
@@ -385,6 +395,13 @@ function JobSheet({ job, open, onClose, onNewJob }: {
             serviceCode={job.serviceType}
             audience="customer"
             compact
+          />
+          <MarketplaceActionMatrix
+            rail="customer"
+            phase={customerActionPhaseForJob(job)}
+            serviceCode={job.serviceType}
+            compact
+            limit={2}
           />
           <MarketplaceShapeContext
             serviceCode={job.serviceType}

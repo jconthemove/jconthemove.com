@@ -33,6 +33,7 @@ import {
 } from "@shared/marketplaceShapes";
 import { PaymentStatusPill } from "@/components/PaymentStatusPill";
 import JobLifecycleRail from "@/components/JobLifecycleRail";
+import MarketplaceActionMatrix from "@/components/MarketplaceActionMatrix";
 import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 import ProcessFlowCard, { type ProcessFlowStep, type ProcessStepState } from "@/components/ProcessFlowCard";
@@ -250,6 +251,13 @@ function leadMarketplaceShapeId(lead: Lead): string | null {
 function numericPrice(value: string | number | null | undefined): number {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function marketplaceActionPhaseForLead(lead: Lead): "progress" | "finish" {
+  const status = String(lead.status || "").toLowerCase();
+  return ["completed", "customer_approved", "payout_calculated", "payout_sent", "closed", "paid"].includes(status)
+    ? "finish"
+    : "progress";
 }
 
 function buildAdminProcessSteps({
@@ -797,6 +805,15 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
             serviceCode={lead.serviceType}
             audience="company"
             compact
+          />
+          <MarketplaceActionMatrix
+            rail="platinum"
+            phase={marketplaceActionPhaseForLead(lead)}
+            source={sourceLabel || lead.source}
+            shapeId={marketplaceShapeId}
+            serviceCode={lead.serviceType}
+            compact
+            limit={3}
           />
           <MarketplaceShapeContext
             shapeId={marketplaceShapeId}

@@ -10,10 +10,13 @@ import {
 } from "lucide-react";
 import {
   MARKETPLACE_ACTION_TASKS,
+  getMarketplaceSourceFlowsForContext,
   type MarketplaceActionPhase,
   type MarketplaceActionRail,
   type MarketplaceActionTask,
+  type MarketplaceRequestShapeId,
 } from "@shared/marketplaceShapes";
+import { resolveMarketplaceShape } from "@/components/MarketplaceShapeBadge";
 
 type RailFilter = MarketplaceActionRail | "worker" | "all";
 type PhaseFilter = MarketplaceActionPhase | "all";
@@ -21,6 +24,10 @@ type PhaseFilter = MarketplaceActionPhase | "all";
 type MarketplaceActionMatrixProps = {
   rail?: RailFilter;
   phase?: PhaseFilter;
+  shapeId?: string | null;
+  serviceCode?: string | null;
+  serviceLabel?: string | null;
+  source?: string | null;
   compact?: boolean;
   limit?: number;
   className?: string;
@@ -64,16 +71,45 @@ function matchesRail(task: MarketplaceActionTask, rail: RailFilter) {
 function visibleTasks({
   rail,
   phase,
+  shapeId,
+  serviceCode,
+  serviceLabel,
+  source,
   limit,
 }: {
   rail: RailFilter;
   phase: PhaseFilter;
+  shapeId?: string | null;
+  serviceCode?: string | null;
+  serviceLabel?: string | null;
+  source?: string | null;
   limit?: number;
 }) {
+  const hasContext = Boolean(shapeId || serviceCode || serviceLabel || source);
+  const shape = hasContext ? resolveMarketplaceShape({ shapeId, serviceCode, serviceLabel }) : null;
+  const flows = hasContext
+    ? getMarketplaceSourceFlowsForContext({
+      source,
+      shapeId,
+      serviceCode,
+      serviceLabel,
+      limit: 4,
+    })
+    : [];
+  const flowIds = new Set(flows.map((flow) => flow.id));
+
   const tasks = MARKETPLACE_ACTION_TASKS.filter((task) => {
     const phaseMatch = phase === "all" || task.phase === phase;
-    return phaseMatch && matchesRail(task, rail);
+    const railMatch = matchesRail(task, rail);
+    const shapeMatch = !shape || task.shapeIds.includes(shape.id as MarketplaceRequestShapeId);
+    return phaseMatch && railMatch && shapeMatch;
+  }).sort((a, b) => {
+    if (flowIds.size === 0) return 0;
+    const aScore = a.flowIds.some((flowId) => flowIds.has(flowId)) ? 1 : 0;
+    const bScore = b.flowIds.some((flowId) => flowIds.has(flowId)) ? 1 : 0;
+    return bScore - aScore;
   });
+
   return typeof limit === "number" ? tasks.slice(0, limit) : tasks;
 }
 
@@ -89,11 +125,15 @@ function phaseGroups(tasks: MarketplaceActionTask[]) {
 export default function MarketplaceActionMatrix({
   rail = "all",
   phase = "all",
+  shapeId,
+  serviceCode,
+  serviceLabel,
+  source,
   compact = false,
   limit,
   className = "",
 }: MarketplaceActionMatrixProps) {
-  const tasks = visibleTasks({ rail, phase, limit });
+  const tasks = visibleTasks({ rail, phase, shapeId, serviceCode, serviceLabel, source, limit });
   const groups = phaseGroups(tasks);
 
   if (tasks.length === 0) return null;
