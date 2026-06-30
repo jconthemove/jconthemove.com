@@ -17,6 +17,7 @@ import { Link, useLocation } from "wouter";
 import { useState, useEffect, useMemo } from "react";
 import { notificationService } from "@/lib/notifications";
 import ProcessFlowCard, { type ProcessFlowStep } from "@/components/ProcessFlowCard";
+import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 
 interface MiningStatus {
   currentSession: { startedAt: string; userId: string } | null;
@@ -863,17 +864,12 @@ export default function CrewEarningsPage({ marketingOnly = false }: { marketingO
       </div>
 
       {marketingMode && (
-        <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-4">
-          <p className="text-xs font-black uppercase tracking-widest text-emerald-300">Simple rule</p>
-          <p className="mt-1 text-sm leading-relaxed text-slate-200">
-            Start with one useful post, progress by answering every comment or message, and finish by getting the person into the booking link so the job becomes a trackable card.
-          </p>
-          <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px] font-bold text-slate-300">
-            <div className="rounded-lg border border-slate-700 bg-slate-950/45 p-2">Post</div>
-            <div className="rounded-lg border border-slate-700 bg-slate-950/45 p-2">Reply</div>
-            <div className="rounded-lg border border-slate-700 bg-slate-950/45 p-2">Book</div>
-          </div>
-        </div>
+        <MarketplaceProcessGuide
+          source="facebook"
+          audience="worker"
+          serviceLabel={adFocus}
+          compact
+        />
       )}
 
       {!marketingMode && (

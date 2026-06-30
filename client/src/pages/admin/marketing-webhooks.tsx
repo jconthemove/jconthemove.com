@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 
 type CampaignRow = {
   id: string;
@@ -179,6 +180,13 @@ export default function AdminMarketingWebhooksPage() {
           </div>
         )}
       </div>
+
+      <MarketplaceProcessGuide
+        className="mb-5"
+        source="facebook"
+        audience="company"
+        serviceLabel={form.focus}
+      />
 
       <section className="mb-5 rounded-xl border border-slate-800 bg-slate-900/70 p-4 md:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
