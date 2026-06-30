@@ -28,6 +28,11 @@ import { apiRequest } from "@/lib/queryClient";
 import AddressField from "@/components/AddressField";
 import type { User } from "@shared/schema";
 import {
+  estimateMovingCrewHours,
+  inferSmartBookingText,
+  type SmartBookingTextInference,
+} from "@shared/smartBookingEngine";
+import {
   ServiceSelector, InlineItemConfigure, BookingSummarySticky,
   BundleSuggestionDialog, type BundleSuggestion,
   type CatalogService, type FeaturedBundle, type SelectedItem, type QuoteResult,
@@ -237,6 +242,139 @@ function serviceCodeFromAdFocus(value?: string): string {
   if (/\b(demo|demolition)\b/.test(focus)) return "demolition";
   if (/\b(labor|helper|extra hands|last-minute)\b/.test(focus)) return "labor";
   return "";
+}
+
+function serviceCodeFromSmartInference(inferred: SmartBookingTextInference): string {
+  const serviceType = String(inferred.serviceType || "").toLowerCase();
+  if (!serviceType.trim()) return "";
+  if (/\btrash valet\b/.test(serviceType)) return "trash_valet";
+  if (/\bjunk|haul|removal|cleanout\b/.test(serviceType)) return "junk_removal";
+  if (/\bmove|moving|load|unload|u-?haul|u-?box|pods?\b/.test(serviceType)) return "moving";
+  if (/\bdeliver|delivery|pickup\b/.test(serviceType)) return "delivery";
+  if (/\bclean|maid\b/.test(serviceType)) return "cleaning";
+  if (/\bhandyman|repair|assembly\b/.test(serviceType)) return "handyman";
+  if (/\bwindow\b/.test(serviceType)) return "window_cleaning";
+  if (/\bsnow|plow|shovel\b/.test(serviceType)) return "snow_removal";
+  if (/\blawn|mow|yard\b/.test(serviceType)) return "lawn_care";
+  if (/\bdemo|demolition\b/.test(serviceType)) return "demolition";
+  if (/\blabor|helper|extra hands\b/.test(serviceType)) return "labor";
+  if (/\bpaint\b/.test(serviceType)) return "painting";
+  if (/\bfloor\b/.test(serviceType)) return "flooring";
+  if (/\broof\b/.test(serviceType)) return "roofing";
+  return serviceCodeFromAdFocus(serviceType);
+}
+
+function normalizeSmartDate(value?: string): string {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (iso) {
+    const [, year, month, day] = iso;
+    const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+    if (
+      parsed.getFullYear() === Number(year) &&
+      parsed.getMonth() === Number(month) - 1 &&
+      parsed.getDate() === Number(day)
+    ) {
+      return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    }
+    return "";
+  }
+
+  const slash = raw.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
+  if (!slash) return "";
+  const [, month, day, yearRaw] = slash;
+  const now = new Date();
+  const fullYear = yearRaw
+    ? Number(yearRaw.length === 2 ? `20${yearRaw}` : yearRaw)
+    : now.getFullYear();
+  const parsed = new Date(fullYear, Number(month) - 1, Number(day));
+  if (
+    parsed.getFullYear() !== fullYear ||
+    parsed.getMonth() !== Number(month) - 1 ||
+    parsed.getDate() !== Number(day)
+  ) {
+    return "";
+  }
+  return `${fullYear}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+}
+
+function smartLoadType(inferred: SmartBookingTextInference): string | undefined {
+  const loadType = String(inferred.loadType || "").toLowerCase();
+  if (!loadType) return undefined;
+  if (/delivery|transport/.test(loadType)) return "Delivery / transport";
+  if (/unload only/.test(loadType)) return "Unload only";
+  if (/load only/.test(loadType)) return "Load only";
+  if (/both|load.*unload|unload.*load/.test(loadType)) return "Load + unload";
+  return undefined;
+}
+
+function smartMovingPath(inferred: SmartBookingTextInference): SelectedItem["details"]["movingPath"] {
+  const loadType = String(inferred.loadType || "").toLowerCase();
+  const jobSize = `${inferred.jobSize || ""} ${inferred.homeSize || ""}`.toLowerCase();
+  if (/heavy|specialty|piano|safe|pool table|hot tub/.test(jobSize)) return "heavy_specialty";
+  if (/unload only/.test(loadType)) return "unload_only";
+  if (/load only/.test(loadType)) return "load_only";
+  if (/both|load.*unload|unload.*load/.test(loadType)) return "load_unload";
+  if (/4\+|4 bed|full house|whole house|large house/.test(jobSize)) return "full_household";
+  if (/1-2 items|single item|couple items/.test(jobSize)) return "tiny_items";
+  return "load_unload";
+}
+
+function smartJobSize(inferred: SmartBookingTextInference): string | undefined {
+  const size = String(inferred.jobSize || inferred.homeSize || "").toLowerCase();
+  if (!size) return undefined;
+  if (/1-2 items|single item|couple/.test(size)) return "1-2 Items";
+  if (/studio|1-bed|1 bed|1 bedroom/.test(size)) return "Studio or 1 Bedroom";
+  if (/2-3|2 bed|2 bedroom/.test(size)) return "2 Bedroom House";
+  if (/3 bed|3 bedroom/.test(size)) return "3 Bedroom House";
+  if (/4\+|4 bed|4 bedroom|full house|whole house|large house/.test(size)) return "4 Bedroom House";
+  return inferred.jobSize || inferred.homeSize;
+}
+
+function smartTruckNeeded(inferred: SmartBookingTextInference): boolean | undefined {
+  const situation = String(inferred.truckSituation || "").toLowerCase();
+  if (!situation) return undefined;
+  if (/jc|company|provide|bring|need truck|your truck/.test(situation)) return true;
+  if (/customer|my truck|own truck|rental|no truck|u-?haul|budget|penske|pods?|u-?box/.test(situation)) return false;
+  return undefined;
+}
+
+function smartTruckSize(inferred: SmartBookingTextInference, path?: SelectedItem["details"]["movingPath"]): string | undefined {
+  const truckSize = String(inferred.truckSize || "").toLowerCase();
+  if (/26/.test(truckSize)) return "26 ft";
+  if (/15|16|17|20|22|24/.test(truckSize)) return "15 ft";
+  if (/10|12|u-?box|pod|container|custom/.test(truckSize)) return "Custom";
+  if (path === "full_household" || path === "load_unload") return "26 ft";
+  if (path) return "15 ft";
+  return undefined;
+}
+
+function appendSmartNote(existing: string, raw: string) {
+  const trimmed = raw.trim();
+  if (!trimmed || existing.includes(trimmed)) return existing;
+  return existing.trim()
+    ? `${existing.trim()}\n\nSmart start: ${trimmed}`
+    : `Smart start: ${trimmed}`;
+}
+
+function smartStartSummaryParts(input: {
+  serviceCode: string;
+  zip?: string;
+  date?: string;
+  loadType?: string;
+  truckSize?: string;
+  crew?: number;
+  hours?: number;
+}) {
+  const parts = [input.serviceCode.replace(/_/g, " ")];
+  if (input.zip) parts.push(`ZIP ${input.zip}`);
+  if (input.date) parts.push(input.date);
+  if (input.loadType) parts.push(input.loadType);
+  if (input.truckSize) parts.push(input.truckSize);
+  if (input.crew && input.hours) parts.push(`${input.crew} movers / ${input.hours} hours`);
+  return parts.filter(Boolean).join(" - ");
 }
 
 function formatAttributionSummary(attribution: Pick<BookingAttribution, "promoCode" | "referralSlug">) {
@@ -861,6 +999,8 @@ export default function MultiServiceBookPage() {
     customerPhone: user?.phoneNumber || "",
     notes: "",
   });
+  const [smartStartText, setSmartStartText] = useState("");
+  const [smartStartSummary, setSmartStartSummary] = useState("");
   // Task #169 — worker-mode-only fields. Captured here and folded into the
   // notes payload + source field so they reach the lead/booking record
   // without requiring a schema migration. The dispatch task (#172) will
@@ -1191,6 +1331,132 @@ export default function MultiServiceBookPage() {
   function addService(svc: CatalogService) {
     setItems(prev => prev.some(i => i.serviceCode === svc.code) ? prev : [...prev, makeItem(svc)]);
   }
+
+  function applySmartStart() {
+    const raw = smartStartText.trim();
+    if (!raw) {
+      toast({
+        title: "Add a job sentence first",
+        description: "Example: unload a 26 ft U-Haul in 49938 on 7/4, 2 movers for 3 hours.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const inferred = inferSmartBookingText(raw);
+    const serviceCode = serviceCodeFromSmartInference(inferred) || "moving";
+    const svc = services.find((entry) => entry.code === serviceCode)
+      || services.find((entry) => entry.code === "moving");
+
+    if (!svc) {
+      toast({
+        title: "Catalog still loading",
+        description: "Try again in a second.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const requestedDate = normalizeSmartDate(inferred.moveDate);
+    const zip = inferred.fromZip?.slice(0, 5) || "";
+    const movingPath = serviceCode === "moving" ? smartMovingPath(inferred) : undefined;
+    const loadType = serviceCode === "moving" ? smartLoadType(inferred) : undefined;
+    const truckNeeded = serviceCode === "moving" ? smartTruckNeeded(inferred) : undefined;
+    const truckSize = serviceCode === "moving" ? smartTruckSize(inferred, movingPath) : undefined;
+    const jobSize = serviceCode === "moving" ? smartJobSize(inferred) : undefined;
+    const explicitCrew = Number(inferred.selectedMovingRecCrew);
+    const explicitHours = Number(inferred.selectedMovingRecHours);
+    const movingPlan = serviceCode === "moving"
+      ? estimateMovingCrewHours({
+          serviceType: "Moving",
+          jobSize,
+          homeSize: inferred.homeSize,
+          truckSize: inferred.truckSize,
+          selectedMovingRecLabel: inferred.selectedMovingRecLabel,
+        })
+      : null;
+    const crew = serviceCode === "moving"
+      ? (Number.isFinite(explicitCrew) && explicitCrew > 0 ? explicitCrew : movingPlan?.crew || 2)
+      : undefined;
+    const hours = serviceCode === "moving"
+      ? (Number.isFinite(explicitHours) && explicitHours > 0 ? explicitHours : movingPlan?.hours || 3)
+      : undefined;
+    const baseEstimate = crew && hours ? crew * hours * 85 : 0;
+
+    setItems((prev) => {
+      const existing = prev.find((item) => item.serviceCode === svc.code);
+      const baseItem = existing || makeItem(svc);
+      const nextDetails: SelectedItem["details"] = serviceCode === "moving"
+        ? {
+            ...baseItem.details,
+            movingPath: movingPath || baseItem.details.movingPath,
+            ...(loadType ? { loadType } : {}),
+            ...(truckNeeded != null ? { truckNeeded } : {}),
+            ...(truckSize ? { truckSize } : {}),
+            ...(jobSize ? { jobSize } : {}),
+            ...(requestedDate ? { requestedDate } : {}),
+            ...(crew && hours
+              ? {
+                  packageId: "visual_inventory_estimate",
+                  packageLabel: "Smart start crew estimate",
+                  packageTier: undefined,
+                  crew,
+                  hours,
+                  minPrice: Math.round(baseEstimate * 0.8),
+                  maxPrice: Math.round(baseEstimate * 1.15),
+                  inventoryCrewRecommendation: crew,
+                  inventoryLaborHours: hours,
+                  inventoryPriceMin: Math.round(baseEstimate * 0.8),
+                  inventoryPriceMax: Math.round(baseEstimate * 1.15),
+                  quoteConfidence: "medium" as const,
+                }
+              : {}),
+          }
+        : {
+            ...baseItem.details,
+            ...(requestedDate ? { requestedDate } : {}),
+            notes: appendSmartNote(baseItem.details.notes || "", raw),
+          };
+
+      const nextItem: SelectedItem = {
+        ...baseItem,
+        quantity: 1,
+        unitPrice: serviceCode === "moving" && baseEstimate ? Math.round(baseEstimate * 0.8) : baseItem.unitPrice,
+        priceMode: serviceCode === "moving" ? "quote" : baseItem.priceMode,
+        details: nextDetails,
+      };
+
+      return existing
+        ? prev.map((item) => item.serviceCode === svc.code ? nextItem : item)
+        : [...prev, nextItem];
+    });
+
+    if (zip) {
+      setAddressZip(zip);
+      if (!serviceAddress.trim()) setServiceAddress(zip);
+    }
+    setContact((current) => ({
+      ...current,
+      notes: appendSmartNote(current.notes, raw),
+    }));
+    setBookingMode("builder");
+    setStep(zip || serviceAddress.trim() ? "configure" : "address");
+    setSmartStartSummary(smartStartSummaryParts({
+      serviceCode: svc.code,
+      zip,
+      date: requestedDate,
+      loadType,
+      truckSize,
+      crew,
+      hours,
+    }));
+    trackBookingFunnel("smart_start_applied");
+    toast({
+      title: "Smart start applied",
+      description: "Review the details before you lock it in.",
+    });
+  }
+
   function startBuilder() {
     setBookingMode("builder");
     if (items.length === 0) {
@@ -1826,6 +2092,47 @@ export default function MultiServiceBookPage() {
 
       <div className="max-w-6xl mx-auto px-4 pt-6 flex gap-6">
         <div className="flex-1 min-w-0 space-y-6">
+          {step !== "review" && (
+            <section className="rounded-2xl border border-blue-500/25 bg-blue-500/10 p-4" data-testid="smart-start-card">
+              <div className="flex flex-col gap-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-black flex items-center gap-2">
+                      <ClipboardList className="h-4 w-4 text-blue-400" /> Smart start
+                    </h2>
+                    <p className="text-xs text-muted-foreground">One sentence can fill the first pass.</p>
+                  </div>
+                  {smartStartSummary && (
+                    <span className="hidden sm:inline rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold text-emerald-300">
+                      Applied
+                    </span>
+                  )}
+                </div>
+                <Textarea
+                  value={smartStartText}
+                  onChange={(event) => setSmartStartText(event.target.value)}
+                  placeholder="Example: unload a 26 ft U-Haul in 49938 on 7/4, 2 movers for 3 hours"
+                  className="min-h-[76px]"
+                  data-testid="smart-start-input"
+                />
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <Button
+                    type="button"
+                    onClick={applySmartStart}
+                    disabled={services.length === 0}
+                    data-testid="smart-start-apply"
+                  >
+                    Apply Smart Start
+                  </Button>
+                  {smartStartSummary && (
+                    <p className="text-[11px] text-muted-foreground break-words [overflow-wrap:anywhere]" data-testid="smart-start-summary">
+                      {smartStartSummary}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
 
           {/* Step 1 — Services */}
           {step === "services" && (
