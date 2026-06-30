@@ -1,5 +1,6 @@
 import {
   getMarketplaceFunctionalIdeasForShape,
+  getMarketplaceSourceFlowsForContext,
   type MarketplaceRequestShape,
 } from "@shared/marketplaceShapes";
 import { resolveMarketplaceShape } from "@/components/MarketplaceShapeBadge";
@@ -8,8 +9,10 @@ type MarketplaceShapeContextProps = {
   shapeId?: string | null;
   serviceCode?: string | null;
   serviceLabel?: string | null;
+  source?: string | null;
   audience?: "customer" | "worker" | "company";
   maxIdeas?: number;
+  maxFlows?: number;
   className?: string;
 };
 
@@ -29,17 +32,35 @@ function statusLabel(status: keyof typeof statusClass) {
   return status.replace(/_/g, " ");
 }
 
+function audienceFlowReality(
+  flow: ReturnType<typeof getMarketplaceSourceFlowsForContext>[number],
+  audience: MarketplaceShapeContextProps["audience"],
+) {
+  if (audience === "customer") return { label: "Customer move", value: flow.customerMove };
+  if (audience === "worker") return { label: "Worker move", value: flow.workerMove };
+  return { label: "Company control", value: flow.companyControl };
+}
+
 export default function MarketplaceShapeContext({
   shapeId,
   serviceCode,
   serviceLabel,
+  source,
   audience = "company",
   maxIdeas = 2,
+  maxFlows = 2,
   className = "",
 }: MarketplaceShapeContextProps) {
   const shape = resolveMarketplaceShape({ shapeId, serviceCode, serviceLabel });
   const reality = primaryReality(shape, audience);
   const ideas = getMarketplaceFunctionalIdeasForShape(shape.id).slice(0, Math.max(0, maxIdeas));
+  const flows = getMarketplaceSourceFlowsForContext({
+    source,
+    shapeId,
+    serviceCode,
+    serviceLabel,
+    limit: maxFlows,
+  });
 
   return (
     <div className={`rounded-xl border border-blue-500/20 bg-blue-500/10 p-4 ${className}`}>
@@ -82,6 +103,59 @@ export default function MarketplaceShapeContext({
               <p className="mt-1 text-xs leading-5 text-slate-300">{idea.jcMove}</p>
             </div>
           ))}
+        </div>
+      )}
+
+      {flows.length > 0 && (
+        <div className="mt-3 space-y-2">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-300">Source Flow</p>
+          {flows.map((flow) => {
+            const flowReality = audienceFlowReality(flow, audience);
+            return (
+              <div key={flow.id} className="rounded-lg border border-cyan-400/20 bg-cyan-500/10 p-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-black text-slate-100">{flow.source}</p>
+                    <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-200">
+                      {flow.category}
+                    </p>
+                  </div>
+                  <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${statusClass[flow.status]}`}>
+                    {statusLabel(flow.status)}
+                  </span>
+                </div>
+
+                <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                  {[
+                    ["Start", flow.start],
+                    ["Progress", flow.progress],
+                    ["Finish", flow.finish],
+                  ].map(([label, detail]) => (
+                    <div key={label} className="rounded-md border border-slate-800 bg-slate-950/50 p-2">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500">{label}</p>
+                      <p className="mt-1 text-[11px] leading-4 text-slate-300">{detail}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-2 rounded-md border border-blue-400/20 bg-blue-500/10 p-2">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-blue-200">{flowReality.label}</p>
+                  <p className="mt-1 text-[11px] leading-4 text-slate-300">{flowReality.value}</p>
+                </div>
+
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-md border border-slate-800 bg-slate-950/50 p-2">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500">Automation</p>
+                    <p className="mt-1 text-[11px] leading-4 text-slate-300">{flow.automationHook}</p>
+                  </div>
+                  <div className="rounded-md border border-amber-400/20 bg-amber-500/10 p-2">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-amber-200">Reward</p>
+                    <p className="mt-1 text-[11px] leading-4 text-slate-300">{flow.rewardTrigger}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

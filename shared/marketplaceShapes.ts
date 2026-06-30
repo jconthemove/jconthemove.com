@@ -867,6 +867,122 @@ export function getMarketplaceFunctionalIdeasForShape(id: MarketplaceRequestShap
   return MARKETPLACE_FUNCTIONAL_IDEAS.filter((idea) => idea.shapeIds.includes(id));
 }
 
+function normalizeMarketplaceText(value: string | null | undefined): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function sourceTokens(flow: MarketplaceSourceFlow): string[] {
+  const base = [
+    flow.id,
+    flow.source,
+    flow.category,
+    flow.surfaces,
+    ...flow.shapeIds,
+    ...flow.flywheelStages,
+  ];
+  return base.flatMap((value) => normalizeMarketplaceText(value).split("_")).filter(Boolean);
+}
+
+export function getMarketplaceSourceFlowForSource(source: string | null | undefined) {
+  const normalized = normalizeMarketplaceText(source);
+  if (!normalized) return null;
+
+  const directAliases: Record<string, string> = {
+    target: "target_walmart_catalog",
+    walmart: "target_walmart_catalog",
+    retail: "target_walmart_catalog",
+    catalog: "target_walmart_catalog",
+    goodwill: "goodwill_reuse",
+    donation: "goodwill_reuse",
+    donate: "goodwill_reuse",
+    reuse: "goodwill_reuse",
+    mcdonalds: "mcdonalds_menu",
+    menu: "mcdonalds_menu",
+    package: "mcdonalds_menu",
+    package_quote: "mcdonalds_menu",
+    two_men: "two_men_ops",
+    two_men_and_a_truck: "two_men_ops",
+    uhaul: "uhaul_movinghelp",
+    u_haul: "uhaul_movinghelp",
+    movinghelp: "uhaul_movinghelp",
+    movinghelper: "uhaul_movinghelp",
+    moving_helper: "uhaul_movinghelp",
+    porch: "porch_hireahelper_consensus",
+    porch_moving_group: "porch_hireahelper_consensus",
+    hireahelper: "porch_hireahelper_consensus",
+    hire_a_helper: "porch_hireahelper_consensus",
+    google: "google_yelp_trust",
+    yelp: "google_yelp_trust",
+    search: "google_yelp_trust",
+    quick_request: "google_yelp_trust",
+    chatbot: "google_yelp_trust",
+    booking_funnel: "google_yelp_trust",
+    facebook: "facebook_craigslist_ads",
+    craigslist: "facebook_craigslist_ads",
+    classified: "facebook_craigslist_ads",
+    ad: "facebook_craigslist_ads",
+    ads: "facebook_craigslist_ads",
+    pods: "pods_ubox_containers",
+    pod: "pods_ubox_containers",
+    ubox: "pods_ubox_containers",
+    u_box: "pods_ubox_containers",
+    square: "square_collect",
+    invoice: "square_collect",
+    payment: "square_collect",
+    discord: "discord_webhooks",
+    solbot: "discord_webhooks",
+    webhook: "discord_webhooks",
+    webhooks: "discord_webhooks",
+    jcmoves: "jcmoves_rewards",
+    rewards: "jcmoves_rewards",
+    crypto: "jcmoves_rewards",
+  };
+
+  const exactId = directAliases[normalized];
+  if (exactId) return MARKETPLACE_SOURCE_FLOW_MATRIX.find((flow) => flow.id === exactId) || null;
+
+  const parts = normalized.split("_").filter(Boolean);
+  return MARKETPLACE_SOURCE_FLOW_MATRIX.find((flow) => {
+    const tokens = new Set(sourceTokens(flow));
+    return parts.some((part) => tokens.has(part));
+  }) || null;
+}
+
+export function getMarketplaceSourceFlowsForShape(id: MarketplaceRequestShapeId) {
+  return MARKETPLACE_SOURCE_FLOW_MATRIX.filter((flow) => flow.shapeIds.includes(id));
+}
+
+export function getMarketplaceSourceFlowsForContext({
+  source,
+  shapeId,
+  serviceCode,
+  serviceLabel,
+  limit = 2,
+}: {
+  source?: string | null;
+  shapeId?: string | null;
+  serviceCode?: string | null;
+  serviceLabel?: string | null;
+  limit?: number;
+}) {
+  const shape = shapeId
+    ? getMarketplaceRequestShape(shapeId as MarketplaceRequestShapeId) || getMarketplaceShapeForServiceCode(serviceCode || serviceLabel)
+    : getMarketplaceShapeForServiceCode(serviceCode || serviceLabel);
+  const fromSource = getMarketplaceSourceFlowForSource(source);
+  const fromShape = getMarketplaceSourceFlowsForShape(shape.id);
+  const unique = new Map<string, MarketplaceSourceFlow>();
+
+  if (fromSource) unique.set(fromSource.id, fromSource);
+  for (const flow of fromShape) unique.set(flow.id, flow);
+
+  return Array.from(unique.values()).slice(0, Math.max(0, limit));
+}
+
 export function getMarketplaceShapeForServiceCode(serviceCode: string | null | undefined) {
   const normalized = String(serviceCode || "")
     .trim()

@@ -793,8 +793,10 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
           <MarketplaceShapeContext
             shapeId={marketplaceShapeId}
             serviceCode={lead.serviceType}
+            source={sourceLabel || lead.source}
             audience="company"
             maxIdeas={3}
+            maxFlows={2}
           />
 
           {/* Customer Info — POS Receipt Style */}

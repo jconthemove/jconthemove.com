@@ -732,6 +732,7 @@ function JobDetailSheet({
             serviceCode={lead.serviceType}
             audience="worker"
             maxIdeas={2}
+            maxFlows={1}
           />
 
           {/* Date & Time */}
