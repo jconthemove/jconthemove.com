@@ -40,10 +40,14 @@ If `https://jc-on-the-move.onrender.com/api/health` reports missing env vars, fi
 - Click `Save Changes`
 - Trigger a manual deploy from Render once the env vars are saved
 
+`SESSION_SECRET` is startup-critical. The current app will not boot a new production release without it. Square variables do not block boot, but Square invoice links and the launch checklist will stay red until `SQUARE_ACCESS_TOKEN` and `SQUARE_ENVIRONMENT` are set.
+
 Then add one explicit GitHub deploy trigger so future pushes do not rely on Render auto-deploy guessing:
 
 - Preferred: GitHub Actions secret `RENDER_DEPLOY_HOOK_URL`
 - Fallback: GitHub Actions secrets `RENDER_API_KEY` and `RENDER_SERVICE_ID`
+
+The GitHub workflow now fails fast if no explicit trigger is configured. That is intentional: the live `jc-on-the-move.onrender.com` service has already shown that Git auto-deploy is not updating production. If Render Git auto-deploy is fixed later and you want the workflow to wait for it instead, add repository variable `ALLOW_RENDER_AUTO_DEPLOY_WAIT=true`.
 
 ## Strongly recommended variables
 
