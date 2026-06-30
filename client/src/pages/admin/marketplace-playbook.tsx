@@ -25,6 +25,7 @@ import {
   type MarketplaceFunctionalIdeaStatus,
 } from "@shared/marketplaceShapes";
 import AuthorityTasksCard from "@/components/AuthorityTasksCard";
+import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 
 const steps = [
   {
@@ -166,6 +167,17 @@ export default function AdminMarketplacePlaybookPage() {
               <p className="mt-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Reference patterns</p>
               <p className="mt-1 text-sm text-slate-400">{inspiration}</p>
             </div>
+          ))}
+        </section>
+
+        <section className="mt-5 grid gap-4 xl:grid-cols-3">
+          {(["customer", "worker", "company"] as const).map((audience) => (
+            <MarketplaceProcessGuide
+              key={audience}
+              source="jcmoves"
+              audience={audience}
+              compact
+            />
           ))}
         </section>
 
