@@ -1,13 +1,6 @@
 name: Verify Render Deployment
 
 on:
-  workflow_run:
-    workflows:
-      - Trigger Render Deploy
-    types:
-      - completed
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       health_url:
@@ -19,16 +12,15 @@ on:
         required: false
 
 concurrency:
-  group: render-verify-${{ github.event.workflow_run.head_sha || github.sha }}
+  group: render-verify-${{ github.sha }}
   cancel-in-progress: true
 
 jobs:
   verify:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     env:
       PUBLIC_HEALTH_URL: ${{ github.event.inputs.health_url || vars.PUBLIC_HEALTH_URL || 'https://jc-on-the-move.onrender.com/health' }}
-      EXPECTED_COMMIT: ${{ github.event.inputs.expected_commit || github.event.workflow_run.head_sha || github.sha }}
+      EXPECTED_COMMIT: ${{ github.event.inputs.expected_commit || github.sha }}
       DEPLOY_WAIT_ATTEMPTS: ${{ vars.DEPLOY_WAIT_ATTEMPTS || '50' }}
       DEPLOY_WAIT_SECONDS: ${{ vars.DEPLOY_WAIT_SECONDS || '30' }}
       DEPLOY_CHECK_TIMEOUT_MS: ${{ vars.DEPLOY_CHECK_TIMEOUT_MS || '15000' }}
@@ -36,8 +28,6 @@ jobs:
     steps:
       - name: Checkout deploy verifier
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Use Node 20
         uses: actions/setup-node@v4

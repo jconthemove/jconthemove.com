@@ -56,7 +56,7 @@ jobs:
           echo "::warning::No explicit Render deploy trigger is configured."
           echo "The workflow will finish after the build because REQUIRE_RENDER_TRIGGER=false."
           echo "That lets Render services configured with checksPass start deploying after GitHub checks pass."
-          echo "The follow-up 'Verify Render Deployment' workflow will wait for the public commit."
+          echo "Run the manual 'Verify Render Deployment' workflow after Render starts deploying."
           echo "For forced deploys, add either:"
           echo "  1. GitHub secret RENDER_DEPLOY_HOOK_URL"
           echo "  2. GitHub secrets RENDER_API_KEY and RENDER_SERVICE_ID"
@@ -94,4 +94,5 @@ jobs:
         if: env.RENDER_DEPLOY_HOOK_URL == '' && (env.RENDER_API_KEY == '' || env.RENDER_SERVICE_ID == '') && env.REQUIRE_RENDER_TRIGGER != 'true'
         run: |
           echo "Build passed. Inline deploy wait skipped to avoid a Render checksPass deadlock."
-          echo "Render can now deploy after GitHub checks pass; the Verify Render Deployment workflow will validate the live commit."
+          echo "Render can now deploy after GitHub checks pass."
+          echo "After Render starts, run the manual Verify Render Deployment workflow to validate the live commit."

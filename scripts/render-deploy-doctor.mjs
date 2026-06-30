@@ -178,6 +178,8 @@ async function checkLatestWorkflow() {
     line(`- conclusion: ${latest.conclusion || "none"}`);
     line(`- url: ${latest.html_url}`);
 
+    const latestSha = (latest.head_sha || "").slice(0, 8);
+
     if (latest.conclusion !== "success") {
       problems.push(`latest deploy workflow concluded ${latest.conclusion || latest.status}`);
     }
@@ -213,7 +215,12 @@ async function checkLatestWorkflow() {
       line(`- verify conclusion: ${latestVerify.conclusion || "none"}`);
       line(`- verify url: ${latestVerify.html_url}`);
 
-      if (latestVerify.status === "in_progress") {
+      const verifySha = (latestVerify.head_sha || "").slice(0, 8);
+      const verifyMatchesLatestDeploy = latestSha && verifySha === latestSha;
+
+      if (!verifyMatchesLatestDeploy) {
+        line("- verify note: latest verify run is stale for this deploy and is not counted as a blocker");
+      } else if (latestVerify.status === "in_progress") {
         problems.push("Render verification is still waiting for the live service to report the pushed commit");
       } else if (latest.conclusion === "success" && latestVerify.conclusion && latestVerify.conclusion !== "success") {
         problems.push(`Render verification workflow concluded ${latestVerify.conclusion}`);
