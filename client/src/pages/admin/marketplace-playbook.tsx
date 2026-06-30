@@ -32,6 +32,7 @@ import MarketplaceNextStepFlow from "@/components/MarketplaceNextStepFlow";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 import MarketplaceSmartBookingEngine from "@/components/MarketplaceSmartBookingEngine";
 import MarketplaceSourceActionDeck from "@/components/MarketplaceSourceActionDeck";
+import MarketplaceSourceLookup from "@/components/MarketplaceSourceLookup";
 import MarketplaceTaskSplit from "@/components/MarketplaceTaskSplit";
 
 const steps = [
@@ -199,6 +200,8 @@ export default function AdminMarketplacePlaybookPage() {
         </section>
 
         <MarketplaceFocusRouter className="mt-5" />
+
+        <MarketplaceSourceLookup className="mt-5" />
 
         <section className="mt-5 rounded-lg border border-amber-400/25 bg-amber-500/10 p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
