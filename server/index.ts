@@ -24,18 +24,37 @@ function log(message: string) {
   console.log(`${formattedTime} [express] ${message}`);
 }
 
+function readBuildInfo() {
+  const filePath = path.resolve(process.cwd(), "dist/build-info.json");
+  try {
+    if (!fs.existsSync(filePath)) return {};
+    return JSON.parse(fs.readFileSync(filePath, "utf8")) as {
+      commit?: string | null;
+      shortCommit?: string | null;
+      branch?: string | null;
+      generatedAt?: string | null;
+    };
+  } catch (error) {
+    console.warn("[build-info] unable to read dist/build-info.json:", error instanceof Error ? error.message : error);
+    return {};
+  }
+}
+
 function getDeployVersion() {
+  const buildInfo = readBuildInfo();
   const commit =
     process.env.RAILWAY_GIT_COMMIT_SHA
     || process.env.RENDER_GIT_COMMIT
     || process.env.VERCEL_GIT_COMMIT_SHA
     || process.env.GITHUB_SHA
+    || buildInfo.commit
     || null;
   const branch =
     process.env.RAILWAY_GIT_BRANCH
     || process.env.RENDER_GIT_BRANCH
     || process.env.VERCEL_GIT_COMMIT_REF
     || process.env.GITHUB_REF_NAME
+    || buildInfo.branch
     || null;
   const deployId =
     process.env.RAILWAY_DEPLOYMENT_ID
@@ -49,6 +68,7 @@ function getDeployVersion() {
     shortCommit: commit ? commit.slice(0, 8) : null,
     branch,
     deployId,
+    buildGeneratedAt: buildInfo.generatedAt || null,
   };
 }
 

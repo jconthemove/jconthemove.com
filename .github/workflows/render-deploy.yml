@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
-      PUBLIC_HEALTH_URL: ${{ vars.PUBLIC_HEALTH_URL || 'https://www.jconthemove.com/api/health' }}
+      PUBLIC_HEALTH_URL: ${{ vars.PUBLIC_HEALTH_URL || 'https://jc-on-the-move.onrender.com/health' }}
       EXPECTED_COMMIT: ${{ github.sha }}
     steps:
       - name: Checkout deploy verifier
