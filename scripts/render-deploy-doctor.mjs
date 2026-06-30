@@ -190,7 +190,7 @@ async function checkLatestWorkflow() {
           .find((step) => step.conclusion === "failure");
         if (failedStep) {
           line(`- failed step: ${failedStep.name}`);
-          if (failedStep.name === "Stop if Render trigger is missing") {
+          if (failedStep.name === "Stop if Render trigger is missing" || failedStep.name === "Stop if strict Render trigger is missing") {
             problems.push("GitHub has no RENDER_DEPLOY_HOOK_URL or RENDER_API_KEY + RENDER_SERVICE_ID configured");
           }
         } else if (latest.status === "in_progress") {
@@ -292,10 +292,9 @@ for (const problem of problems) line(`- ${problem}`);
 line();
 line("Fix, in order:");
 line("1. Render -> jc-on-the-move -> Environment: set DATABASE_URL, SESSION_SECRET, SQUARE_ACCESS_TOKEN, SQUARE_ENVIRONMENT, APP_URL=https://www.jconthemove.com.");
-line("2. Render -> jc-on-the-move -> Settings/Deploy Hooks: create a main-branch deploy hook.");
-line("3. GitHub -> JCONTHEMOVE.COM -> Settings -> Secrets and variables -> Actions: add secret RENDER_DEPLOY_HOOK_URL with the full hook URL.");
-line("4. GitHub -> Actions -> Trigger Render Deploy: re-run the failed workflow, or push a new commit.");
-line("5. Cloudflare/DNS: point www.jconthemove.com at the Render custom-domain target, not Railway.");
-line("6. Confirm npm run render:doctor passes and /health shows version.shortCommit.");
+line("2. Push a new commit or re-run GitHub Actions so Render Git auto-deploy can update the service.");
+line("3. If Render still does not deploy, create a main-branch deploy hook in Render and add it to GitHub Actions as RENDER_DEPLOY_HOOK_URL.");
+line("4. Cloudflare/DNS: point www.jconthemove.com at the Render custom-domain target, not Railway.");
+line("5. Confirm npm run render:doctor passes and /health shows version.shortCommit.");
 
 process.exit(1);

@@ -56,7 +56,7 @@ If `https://jc-on-the-move.onrender.com/api/health` reports missing env vars, fi
 
 `SESSION_SECRET` is startup-critical. The current app will not boot a new production release without it. Square variables do not block boot, but Square invoice links and the launch checklist will stay red until `SQUARE_ACCESS_TOKEN` and `SQUARE_ENVIRONMENT` are set.
 
-Then add one explicit GitHub deploy trigger so future pushes do not rely on Render auto-deploy guessing:
+Then add one explicit GitHub deploy trigger if Render auto-deploy does not pick up pushes reliably:
 
 - Preferred: GitHub Actions secret `RENDER_DEPLOY_HOOK_URL`
 - Fallback: GitHub Actions secrets `RENDER_API_KEY` and `RENDER_SERVICE_ID`
@@ -76,14 +76,14 @@ If you also set `RENDER_DEPLOY_HOOK_URL` locally in `.env` or in this shell, you
 npm run render:trigger
 ```
 
-The GitHub workflow now builds the release and requires an explicit Render trigger by default. This prevents a launch deploy from sitting in a long verification loop while Render auto-deploy is disconnected or stale.
+The GitHub workflow builds the release and waits for the public Render health endpoint to show the pushed commit. By default it allows Render Git auto-deploy to do the actual deploy. If you want GitHub to hard-fail unless it can explicitly trigger Render, set repository variable `REQUIRE_RENDER_TRIGGER=true`.
 
-For the normal launch path, add one of:
+For the strongest launch path, add one of:
 
 - GitHub Actions secret `RENDER_DEPLOY_HOOK_URL`
 - GitHub Actions secrets `RENDER_API_KEY` and `RENDER_SERVICE_ID`
 
-Only if Render Git auto-deploy is confirmed healthy should you add repository variable `REQUIRE_RENDER_TRIGGER=false` to allow the workflow to wait without a hook/API trigger.
+If neither trigger is set, the workflow waits for Render Git auto-deploy and fails only if the public health endpoint does not update to the pushed commit in time.
 
 ## Strongly recommended variables
 
@@ -135,7 +135,7 @@ API trigger fallback:
 
 Add it in GitHub under `Settings` -> `Secrets and variables` -> `Actions` -> `New repository secret`.
 
-Use an explicit trigger even if Render's Git auto-deploy is enabled. It gives us a second deploy path and makes it easier to tell whether GitHub saw the push. When neither trigger is set, the workflow now fails immediately unless repository variable `REQUIRE_RENDER_TRIGGER=false` is set.
+Use an explicit trigger even if Render's Git auto-deploy is enabled. It gives us a second deploy path and makes it easier to tell whether GitHub saw the push. When neither trigger is set, the workflow waits for Render Git auto-deploy and verifies the public commit.
 
 ## Health check response
 

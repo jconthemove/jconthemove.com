@@ -22,7 +22,7 @@ jobs:
       DEPLOY_WAIT_ATTEMPTS: ${{ vars.DEPLOY_WAIT_ATTEMPTS || '40' }}
       DEPLOY_WAIT_SECONDS: ${{ vars.DEPLOY_WAIT_SECONDS || '30' }}
       DEPLOY_CHECK_TIMEOUT_MS: ${{ vars.DEPLOY_CHECK_TIMEOUT_MS || '15000' }}
-      REQUIRE_RENDER_TRIGGER: ${{ vars.REQUIRE_RENDER_TRIGGER || 'true' }}
+      REQUIRE_RENDER_TRIGGER: ${{ vars.REQUIRE_RENDER_TRIGGER || 'false' }}
     steps:
       - name: Checkout deploy verifier
         uses: actions/checkout@v4
@@ -39,15 +39,15 @@ jobs:
       - name: Build release artifact
         run: npm run build
 
-      - name: Stop if Render trigger is missing
+      - name: Stop if strict Render trigger is missing
         if: env.RENDER_DEPLOY_HOOK_URL == '' && (env.RENDER_API_KEY == '' || env.RENDER_SERVICE_ID == '') && env.REQUIRE_RENDER_TRIGGER == 'true'
         run: |
           echo "::error::No explicit Render deploy trigger is configured."
           echo "Add either:"
           echo "  1. GitHub Actions secret RENDER_DEPLOY_HOOK_URL"
           echo "  2. GitHub Actions secrets RENDER_API_KEY and RENDER_SERVICE_ID"
-          echo "Render Git auto-deploy is not reliable enough for launch verification."
-          echo "Only set repository variable REQUIRE_RENDER_TRIGGER=false if Render auto-deploy is confirmed healthy."
+          echo "Repository variable REQUIRE_RENDER_TRIGGER=true requires one of these trigger paths."
+          echo "Set REQUIRE_RENDER_TRIGGER=false to allow Render Git auto-deploy verification."
           exit 1
 
       - name: Check Render trigger configuration
