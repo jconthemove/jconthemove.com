@@ -34,6 +34,9 @@ test("infers a moving quote shape from one customer sentence", () => {
   assert.equal(inferred.selectedMovingRecCrew, "3");
   assert.equal(inferred.selectedMovingRecHours, "2");
   assert.equal(inferred.selectedMovingRecLabel, "3 movers / 2 hours");
+  assert.equal(inferred.selectedMovingRec, "moving_3m_2h");
+  assert.equal(inferred.selectedMovingRecTotalMin, "400");
+  assert.equal(inferred.selectedMovingRecTotalMax, "550");
 });
 
 test("applies smart answers without overwriting explicit crew choices", () => {
@@ -70,7 +73,7 @@ test("infers JC truck and common 2 mover / 3 hour package", () => {
   const patch = applySmartBookingAnswer(
     {},
     "serviceType",
-    "Need moving help next weekend 2 bedroom, load and unload, bring JC truck, 2 movers 3 hours",
+    "Need moving help in 49938 next weekend 2 bedroom, load and unload, bring JC truck, 2 movers 3 hours",
   );
 
   assert.equal(patch.answers.serviceType, "Moving");
@@ -79,6 +82,28 @@ test("infers JC truck and common 2 mover / 3 hour package", () => {
   assert.equal(patch.answers.loadType, "Both - load AND unload");
   assert.equal(patch.answers.truckSituation, "JC ON THE MOVE provides truck");
   assert.equal(patch.answers.selectedMovingRecLabel, "2 movers / 3 hours");
+  assert.equal(patch.answers.selectedMovingRec, "moving_2m_3h");
+  assert.equal(patch.answers.selectedMovingRecTotalMin, "400");
+  assert.equal(patch.answers.selectedMovingRecTotalMax, "500");
+});
+
+test("understands compact crew/hour shorthand for fast booking", () => {
+  const patch = applySmartBookingAnswer(
+    {},
+    "notes",
+    "Moving 54534 tomorrow unload uhaul 26ft 3m/2h",
+  );
+
+  assert.equal(patch.answers.serviceType, "Moving");
+  assert.equal(patch.answers.fromZip, "54534");
+  assert.equal(patch.answers.moveDate, "tomorrow");
+  assert.equal(patch.answers.loadType, "Unload only");
+  assert.equal(patch.answers.truckSize, "26' truck");
+  assert.equal(patch.answers.selectedMovingRecCrew, "3");
+  assert.equal(patch.answers.selectedMovingRecHours, "2");
+  assert.equal(patch.answers.selectedMovingRec, "moving_3m_2h");
+  assert.equal(patch.answers.selectedMovingRecTotalMin, "400");
+  assert.equal(patch.answers.selectedMovingRecTotalMax, "550");
 });
 
 console.log(`smartBookingEngine tests passed: ${passed}`);

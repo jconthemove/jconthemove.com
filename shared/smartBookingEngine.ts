@@ -17,8 +17,82 @@ export type SmartBookingTextInference = {
   selectedMovingRecCrew?: string;
   selectedMovingRecHours?: string;
   selectedMovingRecLabel?: string;
+  selectedMovingRec?: string;
+  selectedMovingRecNotes?: string;
+  selectedMovingRecTotalMin?: string;
+  selectedMovingRecTotalMax?: string;
   notes?: string;
 };
+
+export type SmartMovingPackage = {
+  id: string;
+  label: string;
+  crew: number;
+  hours: number;
+  localMin: number;
+  localMax: number;
+  outsideMin: number;
+  outsideMax: number;
+  notes: string;
+};
+
+export const SMART_MOVING_PACKAGES: SmartMovingPackage[] = [
+  {
+    id: "moving_2m_2h",
+    label: "2 movers / 2 hours",
+    crew: 2,
+    hours: 2,
+    localMin: 300,
+    localMax: 425,
+    outsideMin: 450,
+    outsideMax: 650,
+    notes: "Small load, unload, apartment, or quick truck help.",
+  },
+  {
+    id: "moving_2m_3h",
+    label: "2 movers / 3 hours",
+    crew: 2,
+    hours: 3,
+    localMin: 400,
+    localMax: 500,
+    outsideMin: 500,
+    outsideMax: 750,
+    notes: "Common local moving-help package.",
+  },
+  {
+    id: "moving_3m_2h",
+    label: "3 movers / 2 hours",
+    crew: 3,
+    hours: 2,
+    localMin: 400,
+    localMax: 550,
+    outsideMin: 550,
+    outsideMax: 775,
+    notes: "Fast unload/load path when speed matters more than total hours.",
+  },
+  {
+    id: "moving_3m_3h",
+    label: "3 movers / 3 hours",
+    crew: 3,
+    hours: 3,
+    localMin: 525,
+    localMax: 725,
+    outsideMin: 725,
+    outsideMax: 950,
+    notes: "Medium move or heavier access path.",
+  },
+  {
+    id: "moving_4m_4h",
+    label: "4 movers / 4 hours",
+    crew: 4,
+    hours: 4,
+    localMin: 900,
+    localMax: 1200,
+    outsideMin: 1200,
+    outsideMax: 1700,
+    notes: "Large move, heavy access, or full-house quote-review path.",
+  },
+];
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -40,12 +114,22 @@ function firstNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function toNumber(value: unknown): number | null {
+  const parsed = Number(text(value).replace(/[^\d.]/g, ""));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 function numberText(value: number): string {
   return Number.isInteger(value) ? String(value) : String(value).replace(/\.0+$/, "");
 }
 
 function inferZip(raw: string): string | undefined {
   return raw.match(/\b\d{5}(?:-\d{4})?\b/)?.[0];
+}
+
+function isLocalZip(zip: unknown): boolean {
+  const normalized = text(zip).slice(0, 5);
+  return ["49938", "54534", "54525", "54550"].includes(normalized);
 }
 
 function inferDateHint(raw: string): string | undefined {
@@ -96,8 +180,12 @@ function inferHomeSize(raw: string): string | undefined {
 }
 
 function inferCrewHours(raw: string): Pick<SmartBookingTextInference, "selectedMovingRecCrew" | "selectedMovingRecHours" | "selectedMovingRecLabel"> {
-  const crewMatch = raw.match(/\b([1-4])\s*(?:movers?|helpers?|crew)\b/i);
-  const hoursMatch = raw.match(/\b([1-9](?:\.\d+)?)\s*(?:hours?|hrs?|hr)\b/i);
+  const crewMatch =
+    raw.match(/\b([1-4])\s*(?:movers?|helpers?|crew|person|people|guys|man|men|m)\b/i)
+    || raw.match(/\b([1-4])\s*(?:x|×|\/|\+)\s*[1-9](?:\.\d+)?\s*(?:hours?|hrs?|hr|h)\b/i);
+  const hoursMatch =
+    raw.match(/\b([1-9](?:\.\d+)?)\s*(?:hours?|hrs?|hr|h)\b/i)
+    || raw.match(/\b[1-4]\s*(?:x|×|\/|\+)\s*([1-9](?:\.\d+)?)\s*(?:hours?|hrs?|hr|h)\b/i);
   const crew = crewMatch ? Number(crewMatch[1]) : null;
   const hours = hoursMatch ? Number(hoursMatch[1]) : null;
   const result: Pick<SmartBookingTextInference, "selectedMovingRecCrew" | "selectedMovingRecHours" | "selectedMovingRecLabel"> = {};
@@ -108,6 +196,60 @@ function inferCrewHours(raw: string): Pick<SmartBookingTextInference, "selectedM
     result.selectedMovingRecLabel = `${result.selectedMovingRecCrew} movers / ${result.selectedMovingRecHours} hours`;
   }
   return result;
+}
+
+export function getSmartMovingPackage(crew: unknown, hours: unknown): SmartMovingPackage {
+  const normalizedCrew = Math.max(1, Math.min(4, Math.round(toNumber(crew) || 2)));
+  const normalizedHours = Math.max(1, Math.round((toNumber(hours) || 3) * 2) / 2);
+  const exact = SMART_MOVING_PACKAGES.find((pkg) => pkg.crew === normalizedCrew && pkg.hours === normalizedHours);
+  if (exact) return exact;
+
+  const laborBase = normalizedCrew * normalizedHours * 85;
+  const safeHours = String(normalizedHours).replace(".", "p");
+  return {
+    id: `moving_${normalizedCrew}m_${safeHours}h`,
+    label: `${normalizedCrew} movers / ${numberText(normalizedHours)} hours`,
+    crew: normalizedCrew,
+    hours: normalizedHours,
+    localMin: Math.round(laborBase * 0.95),
+    localMax: Math.round(laborBase * 1.2),
+    outsideMin: Math.round(laborBase * 1.15 + 125),
+    outsideMax: Math.round(laborBase * 1.45 + 250),
+    notes: "Custom smart moving-help package.",
+  };
+}
+
+function applyPackageDetails(
+  target: SmartBookingAnswers | SmartBookingTextInference,
+  inferred: Record<string, unknown> | SmartBookingTextInference,
+  packageSource: SmartMovingPackage,
+  zip?: unknown,
+) {
+  const local = isLocalZip(zip);
+  const min = local ? packageSource.localMin : packageSource.outsideMin;
+  const max = local ? packageSource.localMax : packageSource.outsideMax;
+  const rangeLabel = local ? "local estimate range" : "outside-area estimate range";
+
+  if (!target.selectedMovingRec) {
+    target.selectedMovingRec = packageSource.id;
+    inferred.selectedMovingRec = packageSource.id;
+  }
+  if (!target.selectedMovingRecLabel) {
+    target.selectedMovingRecLabel = packageSource.label;
+    inferred.selectedMovingRecLabel = packageSource.label;
+  }
+  if (!target.selectedMovingRecNotes) {
+    target.selectedMovingRecNotes = `${packageSource.notes} ${rangeLabel}. Staff confirms final price.`;
+    inferred.selectedMovingRecNotes = target.selectedMovingRecNotes;
+  }
+  if (!target.selectedMovingRecTotalMin) {
+    target.selectedMovingRecTotalMin = String(min);
+    inferred.selectedMovingRecTotalMin = target.selectedMovingRecTotalMin;
+  }
+  if (!target.selectedMovingRecTotalMax) {
+    target.selectedMovingRecTotalMax = String(max);
+    inferred.selectedMovingRecTotalMax = target.selectedMovingRecTotalMax;
+  }
 }
 
 export function inferSmartBookingText(value: unknown): SmartBookingTextInference {
@@ -140,6 +282,14 @@ export function inferSmartBookingText(value: unknown): SmartBookingTextInference
   }
 
   Object.assign(inferred, inferCrewHours(raw));
+  if (inferred.selectedMovingRecCrew && inferred.selectedMovingRecHours) {
+    applyPackageDetails(
+      inferred,
+      inferred,
+      getSmartMovingPackage(inferred.selectedMovingRecCrew, inferred.selectedMovingRecHours),
+      inferred.fromZip,
+    );
+  }
   inferred.notes = raw;
   return inferred;
 }
@@ -218,6 +368,10 @@ export function applySmartBookingAnswer(
   applyMissing(answers, inferred, "selectedMovingRecCrew", textInference.selectedMovingRecCrew);
   applyMissing(answers, inferred, "selectedMovingRecHours", textInference.selectedMovingRecHours);
   applyMissing(answers, inferred, "selectedMovingRecLabel", textInference.selectedMovingRecLabel);
+  applyMissing(answers, inferred, "selectedMovingRec", textInference.selectedMovingRec);
+  applyMissing(answers, inferred, "selectedMovingRecNotes", textInference.selectedMovingRecNotes);
+  applyMissing(answers, inferred, "selectedMovingRecTotalMin", textInference.selectedMovingRecTotalMin);
+  applyMissing(answers, inferred, "selectedMovingRecTotalMax", textInference.selectedMovingRecTotalMax);
 
   if (stepId === "serviceType") {
     const serviceType = inferServiceTypeFromSingleAnswer(value);
@@ -269,6 +423,14 @@ export function applySmartBookingAnswer(
     if (!answers.selectedMovingRecLabel && answers.selectedMovingRecCrew && answers.selectedMovingRecHours) {
       answers.selectedMovingRecLabel = `${answers.selectedMovingRecCrew} movers / ${answers.selectedMovingRecHours} hours`;
       inferred.selectedMovingRecLabel = answers.selectedMovingRecLabel;
+    }
+    if (answers.selectedMovingRecCrew && answers.selectedMovingRecHours) {
+      applyPackageDetails(
+        answers,
+        inferred,
+        getSmartMovingPackage(answers.selectedMovingRecCrew, answers.selectedMovingRecHours),
+        answers.fromZip,
+      );
     }
     inferred.smartSizingReason = crewPlan.reason;
   }
