@@ -21,6 +21,7 @@ import { useState } from "react";
 import { format } from "date-fns";
 import { EmployeeReviews } from "@/components/employee-reviews";
 import AuthorityTasksCard from "@/components/AuthorityTasksCard";
+import MarketplaceNextStepFlow from "@/components/MarketplaceNextStepFlow";
 import MarketplaceTaskSplit from "@/components/MarketplaceTaskSplit";
 
 interface GamificationStats {
@@ -180,6 +181,7 @@ export default function EmployeeDashboard() {
         </Card>
 
         <AuthorityTasksCard />
+        <MarketplaceNextStepFlow side="worker" rails={["bronze", "silver", "gold"]} compact />
         <MarketplaceTaskSplit rails={["bronze", "silver", "gold"]} compact />
 
         {/* Token Balance Section */}

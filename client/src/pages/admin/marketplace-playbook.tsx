@@ -26,6 +26,7 @@ import {
 } from "@shared/marketplaceShapes";
 import AuthorityTasksCard from "@/components/AuthorityTasksCard";
 import MarketplaceActionMatrix from "@/components/MarketplaceActionMatrix";
+import MarketplaceNextStepFlow from "@/components/MarketplaceNextStepFlow";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 import MarketplaceTaskSplit from "@/components/MarketplaceTaskSplit";
 
@@ -171,6 +172,8 @@ export default function AdminMarketplacePlaybookPage() {
             </div>
           ))}
         </section>
+
+        <MarketplaceNextStepFlow className="mt-5" />
 
         <section className="mt-5 grid gap-4 xl:grid-cols-3">
           {(["customer", "worker", "company"] as const).map((audience) => (

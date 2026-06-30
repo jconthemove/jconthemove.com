@@ -25,6 +25,7 @@ import MarketplaceActionMatrix from "@/components/MarketplaceActionMatrix";
 import MarketplaceShapeBadge from "@/components/MarketplaceShapeBadge";
 import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
+import MarketplaceNextStepFlow from "@/components/MarketplaceNextStepFlow";
 import MarketplaceTaskSplit from "@/components/MarketplaceTaskSplit";
 
 const SERVICE_ICONS: Record<string, string> = {
@@ -1176,6 +1177,7 @@ export default function CrewJobsPage() {
       </div>
 
       <AuthorityTasksCard className="mb-5" />
+      <MarketplaceNextStepFlow side="worker" rails={["bronze", "silver", "gold"]} compact className="mb-5" />
       <MarketplaceTaskSplit rails={["bronze", "silver", "gold"]} compact className="mb-5" />
 
       <Tabs defaultValue="board">
