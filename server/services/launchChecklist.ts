@@ -68,6 +68,26 @@ interface Scenario {
   run: () => Promise<{ ok: boolean; detail: string }>;
 }
 
+function describeUnknownError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    const parts = [
+      typeof record.message === "string" ? record.message : "",
+      typeof record.code === "string" ? `code=${record.code}` : "",
+      typeof record.cause === "string" ? `cause=${record.cause}` : "",
+      error.constructor?.name && error.constructor.name !== "Object" ? `type=${error.constructor.name}` : "",
+    ].filter(Boolean);
+    if (parts.length > 0) return parts.join(" ");
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
 type HealthBody = {
   status?: string;
   service?: string;
@@ -715,9 +735,58 @@ const SCENARIOS: Scenario[] = [
       if (!row.auto_approve_threshold) {
         return { ok: false, detail: "redemption_auto_approve_threshold is missing or inactive" };
       }
+
+      const walletSurfaceChecks = [
+        {
+          name: "customer wallet",
+          path: "client/src/pages/customer/wallet.tsx",
+          required: [
+            "button-jcmoves-receive",
+            "button-add-credit",
+            "Redeem Rewards",
+            "JCMOVES USD",
+          ],
+        },
+        {
+          name: "crew earnings",
+          path: "client/src/pages/crew/earnings.tsx",
+          required: [
+            "crew-jcmoves-actions",
+            "button-crew-jcmoves-receive",
+            "button-crew-jcmoves-redeem",
+            "Wallet setup",
+          ],
+        },
+      ];
+      const missingSourceFiles = walletSurfaceChecks.filter((surface) => !existsSync(path.resolve(process.cwd(), surface.path)));
+      if (missingSourceFiles.length === 0) {
+        const missingSurfaceSnippets = walletSurfaceChecks.flatMap((surface) => {
+          const text = readFileSync(path.resolve(process.cwd(), surface.path), "utf8");
+          return surface.required
+            .filter((snippet) => !text.includes(snippet))
+            .map((snippet) => `${surface.name}: ${snippet}`);
+        });
+        if (missingSurfaceSnippets.length > 0) {
+          return { ok: false, detail: `missing receive/redeem UI wiring: ${missingSurfaceSnippets.join(", ")}` };
+        }
+      } else {
+        const builtClientText = readBuiltClientText();
+        if (!builtClientText) {
+          return {
+            ok: false,
+            detail: `source unavailable (${missingSourceFiles.map((surface) => surface.path).join(", ")}) and no built client bundle found`,
+          };
+        }
+        const requiredBundleText = ["Receive JCMOVES", "Redeem Rewards", "Wallet setup", "Rewards shop"];
+        const missingBundleText = requiredBundleText.filter((snippet) => !builtClientText.includes(snippet));
+        if (missingBundleText.length > 0) {
+          return { ok: false, detail: `production bundle missing receive/redeem text: ${missingBundleText.join(", ")}` };
+        }
+      }
+
       return {
         ok: true,
-        detail: `${row.wallet_count} wallets; ${row.active_reward_items} active rewards; approval threshold ${Number(row.auto_approve_threshold).toLocaleString()} JCMOVES`,
+        detail: `${row.wallet_count} wallets; ${row.active_reward_items} active rewards; approval threshold ${Number(row.auto_approve_threshold).toLocaleString()} JCMOVES; customer + crew receive/redeem UI mounted`,
       };
     },
   },
@@ -1211,7 +1280,7 @@ export async function runScenario(id: ScenarioId): Promise<ScenarioResult> {
       id,
       label: s.label,
       ok: false,
-      detail: e instanceof Error ? e.message : String(e),
+      detail: describeUnknownError(e),
       ranAt: new Date().toISOString(),
       ms: Date.now() - t0,
     };

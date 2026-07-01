@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Textarea } from "@/components/ui/textarea";
 import {
   Coins, Zap, Clock, TrendingUp, Loader2, Lock, Link as LinkIcon, Share2, MessageCircle,
-  Dumbbell, Truck, KeyRound, Wrench, Copy, Image as ImageIcon, Sparkles, Upload
+  Dumbbell, Truck, KeyRound, Wrench, Copy, Image as ImageIcon, Sparkles, Upload, Wallet, Gift, ArrowRight
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Link, useLocation } from "wouter";
@@ -19,6 +19,7 @@ import { notificationService } from "@/lib/notifications";
 import ProcessFlowCard, { type ProcessFlowStep } from "@/components/ProcessFlowCard";
 import MarketplaceActionMatrix from "@/components/MarketplaceActionMatrix";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
+import { WalletChoiceModal } from "@/components/WalletChoiceModal";
 import {
   IRONWOOD_DAILY_DISCOUNT,
   ROUTE_DAY_CAMPAIGN_NOTE,
@@ -271,6 +272,7 @@ export default function CrewEarningsPage({ marketingOnly = false }: { marketingO
   const [adPhotoDataUrl, setAdPhotoDataUrl] = useState("");
   const [adDraft, setAdDraft] = useState<MarketingAdDraft | null>(null);
   const [adReward, setAdReward] = useState<MarketingAdReward | null>(null);
+  const [walletChoiceOpen, setWalletChoiceOpen] = useState(false);
 
   const { data: wallet } = useQuery<{ balance: string; tokenBalance?: string; totalEarned?: string }>({ queryKey: ["/api/rewards/wallet"] });
   const { data: miningStatus } = useQuery<MiningStatus>({ queryKey: ["/api/mining/status"], refetchInterval: 15000, refetchIntervalInBackground: false, retry: 1 });
@@ -930,6 +932,59 @@ export default function CrewEarningsPage({ marketingOnly = false }: { marketingO
         </div>
       )}
 
+      <div
+        className="grid grid-cols-1 gap-2 rounded-2xl border border-purple-500/25 bg-purple-500/10 p-3 sm:grid-cols-3"
+        data-testid="crew-jcmoves-actions"
+      >
+        <button
+          type="button"
+          onClick={() => setWalletChoiceOpen(true)}
+          className="flex items-center justify-between rounded-xl border border-purple-500/30 bg-slate-950/45 p-3 text-left hover:border-purple-400/60"
+          data-testid="button-crew-jcmoves-receive"
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            <Wallet className="h-4 w-4 shrink-0 text-purple-300" />
+            <span>
+              <span className="block text-xs font-black text-white">Receive</span>
+              <span className="block text-[10px] text-slate-400">Wallet setup</span>
+            </span>
+          </span>
+          <ArrowRight className="h-3.5 w-3.5 text-slate-500" />
+        </button>
+        <Link href="/rewards">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between rounded-xl border border-emerald-500/25 bg-slate-950/45 p-3 text-left hover:border-emerald-400/60"
+            data-testid="button-crew-jcmoves-redeem"
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <Gift className="h-4 w-4 shrink-0 text-emerald-300" />
+              <span>
+                <span className="block text-xs font-black text-white">Redeem</span>
+                <span className="block text-[10px] text-slate-400">Rewards shop</span>
+              </span>
+            </span>
+            <ArrowRight className="h-3.5 w-3.5 text-slate-500" />
+          </button>
+        </Link>
+        <a href="#history">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between rounded-xl border border-blue-500/25 bg-slate-950/45 p-3 text-left hover:border-blue-400/60"
+            data-testid="button-crew-jcmoves-earn"
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <Zap className="h-4 w-4 shrink-0 text-blue-300" />
+              <span>
+                <span className="block text-xs font-black text-white">Earn</span>
+                <span className="block text-[10px] text-slate-400">Tasks & history</span>
+              </span>
+            </span>
+            <ArrowRight className="h-3.5 w-3.5 text-slate-500" />
+          </button>
+        </a>
+      </div>
+
       {/* Balance Summary — clickable tiles */}
       <div className="grid grid-cols-3 gap-3">
         <Link href="/rewards">
@@ -1209,6 +1264,15 @@ export default function CrewEarningsPage({ marketingOnly = false }: { marketingO
       <div className="h-2" />
         </>
       )}
+      <WalletChoiceModal
+        open={walletChoiceOpen}
+        onClose={() => setWalletChoiceOpen(false)}
+        onComplete={() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/user/wallet-preference"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/rewards/history"] });
+        }}
+      />
     </div>
   );
 }
