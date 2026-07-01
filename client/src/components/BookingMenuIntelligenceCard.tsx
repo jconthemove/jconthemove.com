@@ -1,4 +1,4 @@
-import { Megaphone } from "lucide-react";
+import { Clock3, DollarSign, Megaphone, PackageCheck, Truck, Users } from "lucide-react";
 import { extractBookingMenuIntelligence } from "@/lib/booking-menu-intelligence";
 
 type BookingMenuIntelligenceCardProps = {
@@ -24,7 +24,11 @@ export function BookingMenuIntelligenceCard({
   if (!snapshot) return null;
 
   const estimateLabel = [snapshot.range, snapshot.unit].filter(Boolean).join(" / ");
-  const menuLabel = [snapshot.category, snapshot.taskId].filter(Boolean).join(" - ");
+  const menuLabel = [snapshot.category, snapshot.taskId].filter(Boolean).join(" - ") || snapshot.packageId || "";
+  const crewHours = [
+    snapshot.crew ? `${snapshot.crew} crew` : null,
+    snapshot.hours ? `${snapshot.hours} hr` : null,
+  ].filter(Boolean).join(" / ");
 
   return (
     <div className={`scroll-mt-4 rounded-xl border border-cyan-500/25 bg-cyan-950/15 p-4 ${className}`}>
@@ -43,9 +47,31 @@ export function BookingMenuIntelligenceCard({
       </div>
 
       <div className="mt-3 space-y-3 text-sm">
+        {(snapshot.packageLabel || crewHours || snapshot.loadType || snapshot.truckSize || snapshot.zoneName || snapshot.quoteReviewRequired) && (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {snapshot.packageLabel && (
+              <MiniFact icon={PackageCheck} label="Package" value={snapshot.packageLabel} />
+            )}
+            {crewHours && (
+              <MiniFact icon={Users} label="Crew / hours" value={crewHours} />
+            )}
+            {(snapshot.loadType || snapshot.movingPath) && (
+              <MiniFact icon={Truck} label="Job shape" value={snapshot.loadType || snapshot.movingPath || ""} />
+            )}
+            {snapshot.truckSize && (
+              <MiniFact icon={Truck} label="Truck / access" value={snapshot.truckSize} />
+            )}
+            {snapshot.zoneName && (
+              <MiniFact icon={DollarSign} label="Zone" value={snapshot.zoneName} />
+            )}
+            {snapshot.quoteReviewRequired && (
+              <MiniFact icon={Clock3} label="Approval" value="Quote review before final price" tone="amber" />
+            )}
+          </div>
+        )}
         {estimateLabel && (
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Estimate row</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Estimate range</p>
             <p className="mt-0.5 font-semibold text-cyan-100">{estimateLabel}</p>
           </div>
         )}
@@ -74,6 +100,30 @@ export function BookingMenuIntelligenceCard({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function MiniFact({
+  icon: Icon,
+  label,
+  value,
+  tone = "cyan",
+}: {
+  icon: typeof PackageCheck;
+  label: string;
+  value: string;
+  tone?: "cyan" | "amber";
+}) {
+  return (
+    <div className={`rounded-lg border p-2 ${tone === "amber" ? "border-amber-400/25 bg-amber-500/10" : "border-slate-800 bg-slate-950/60"}`}>
+      <p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">
+        <Icon className={`h-3 w-3 ${tone === "amber" ? "text-amber-300" : "text-cyan-300"}`} />
+        {label}
+      </p>
+      <p className={`mt-1 text-[11px] font-semibold leading-4 ${tone === "amber" ? "text-amber-100" : "text-slate-200"}`}>
+        {value}
+      </p>
     </div>
   );
 }
