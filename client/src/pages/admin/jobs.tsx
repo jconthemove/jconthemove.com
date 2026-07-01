@@ -41,7 +41,7 @@ import ProcessFlowCard, { type ProcessFlowStep, type ProcessStepState } from "@/
 import SmartBookingGuidanceCard from "@/components/SmartBookingGuidanceCard";
 import { BookingMenuIntelligenceCard } from "@/components/BookingMenuIntelligenceCard";
 import { extractCustomerMediaLink } from "@/lib/lead-details";
-import { extractBookingMenuIntelligence } from "@/lib/booking-menu-intelligence";
+import { extractBookingMenuIntelligence, extractSmartBookingAnswersFromQuoteSnapshot } from "@/lib/booking-menu-intelligence";
 import type { SmartBookingAnswers } from "@shared/smartBookingEngine";
 
 const SERVICE_ICONS: Record<string, string> = {
@@ -289,8 +289,10 @@ function smartBookingAnswersForLead(lead: Lead): SmartBookingAnswers {
   const firstItem = leadFirstRequestedItem(lead);
   const marketplaceShapeId = leadMarketplaceShapeId(lead);
   const photos = Array.isArray(lead.photos) ? lead.photos : [];
+  const snapshotAnswers = extractSmartBookingAnswersFromQuoteSnapshot(lead.quoteSnapshot);
 
   return {
+    ...snapshotAnswers,
     marketplaceShapeId,
     serviceType: lead.serviceType,
     serviceCode: firstItem?.serviceCode || lead.serviceType,

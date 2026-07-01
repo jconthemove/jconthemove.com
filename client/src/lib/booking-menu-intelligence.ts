@@ -1,3 +1,5 @@
+import type { SmartBookingAnswers } from "@shared/smartBookingEngine";
+
 export type BookingMenuIntelligence = {
   serviceLabel: string;
   sourceSignal: string | null;
@@ -38,6 +40,23 @@ function itemStringArrayValue(item: RequestedQuoteItem, key: string): string[] {
     .map((value) => value.trim());
 }
 
+function numberValue(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return undefined;
+  const parsed = Number(value.replace(/[^\d.]/g, ""));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function assignString(target: SmartBookingAnswers, key: string, value: unknown) {
+  const normalized = stringValue(value);
+  if (normalized) target[key] = normalized;
+}
+
+function assignNumber(target: SmartBookingAnswers, key: string, value: unknown) {
+  const normalized = numberValue(value);
+  if (normalized !== undefined) target[key] = normalized;
+}
+
 export function extractBookingMenuIntelligence(
   quoteSnapshot: unknown,
   fallbackServiceLabel = "Selected service",
@@ -72,4 +91,56 @@ export function extractBookingMenuIntelligence(
   }
 
   return null;
+}
+
+export function extractSmartBookingAnswersFromQuoteSnapshot(quoteSnapshot: unknown): SmartBookingAnswers {
+  const snapshot = plainRecord(quoteSnapshot);
+  const requestedItems = Array.isArray(snapshot.requestedItems) ? snapshot.requestedItems : [];
+  const answers: SmartBookingAnswers = {};
+
+  assignString(answers, "marketplaceShapeId", snapshot.marketplaceShapeId);
+  assignString(answers, "jobShapeId", snapshot.marketplaceShapeId);
+
+  const firstRawItem = requestedItems[0];
+  const firstItem = firstRawItem ? plainRecord(firstRawItem) as RequestedQuoteItem : null;
+  if (!firstItem) return answers;
+
+  const details = plainRecord(firstItem.details);
+  const detailMarketplaceShapeId = stringValue(details.marketplaceShapeId);
+
+  assignString(answers, "marketplaceShapeId", detailMarketplaceShapeId || snapshot.marketplaceShapeId);
+  assignString(answers, "jobShapeId", detailMarketplaceShapeId || snapshot.marketplaceShapeId);
+  assignString(answers, "serviceCode", firstItem.serviceCode);
+  assignString(answers, "serviceType", firstItem.serviceCode);
+  assignString(answers, "serviceLabel", firstItem.serviceLabel);
+  assignString(answers, "loadType", details.loadType);
+  assignString(answers, "movingPath", details.movingPath);
+  assignString(answers, "truckSize", details.truckSize);
+  assignString(answers, "truckProvider", details.truckProvider);
+  assignString(answers, "truckSituation", details.truckSituation || details.truckSize || details.truckProvider);
+  assignString(answers, "accessNotes", details.accessNotes || details.scope);
+  assignString(answers, "selectedPackage", details.selectedPackage || details.packageLabel);
+  assignString(answers, "packageId", details.packageId);
+  assignString(answers, "selectedMovingRec", details.packageId);
+  assignString(answers, "selectedMovingRecLabel", details.packageLabel || details.priceMenuRange);
+  assignString(answers, "priceMenuTaskId", details.priceMenuTaskId);
+  assignString(answers, "priceMenuCategory", details.priceMenuCategory);
+  assignString(answers, "priceMenuSourceSignal", details.priceMenuSourceSignal);
+  assignString(answers, "priceMenuOperationsSignal", details.priceMenuOperationsSignal);
+
+  assignNumber(answers, "crewSize", details.crew || details.crewSize || details.inventoryCrewRecommendation);
+  assignNumber(answers, "selectedMovingRecCrew", details.crew || details.crewSize || details.inventoryCrewRecommendation);
+  assignNumber(answers, "confirmedHours", details.hours || details.confirmedHours || details.inventoryLaborHours);
+  assignNumber(answers, "laborHours", details.hours || details.confirmedHours || details.inventoryLaborHours);
+  assignNumber(answers, "selectedMovingRecHours", details.hours || details.confirmedHours || details.inventoryLaborHours);
+  assignNumber(answers, "containerCount", details.containerCount || details.boxCount);
+  assignNumber(answers, "boxCount", details.boxCount || details.containerCount);
+
+  const scope = stringValue(details.scope);
+  if (scope) {
+    answers.items = scope;
+    answers.notes = scope;
+  }
+
+  return answers;
 }

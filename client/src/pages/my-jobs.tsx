@@ -17,7 +17,7 @@ import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 import MarketplaceSourceFlowStrip from "@/components/MarketplaceSourceFlowStrip";
 import SmartBookingGuidanceCard from "@/components/SmartBookingGuidanceCard";
 import { BookingMenuIntelligenceCard } from "@/components/BookingMenuIntelligenceCard";
-import { extractBookingMenuIntelligence } from "@/lib/booking-menu-intelligence";
+import { extractBookingMenuIntelligence, extractSmartBookingAnswersFromQuoteSnapshot } from "@/lib/booking-menu-intelligence";
 import type { LucideIcon } from "lucide-react";
 import type { SmartBookingAnswers } from "@shared/smartBookingEngine";
 
@@ -347,11 +347,13 @@ function inferCustomerTruckContext(value: string | null | undefined): string | u
 function smartBookingAnswersForCustomerJob(job: CustomerJob): SmartBookingAnswers {
   const rawNotes = [job.details, job.notes].filter(Boolean).join("\n");
   const chatbotAnswers = readChatbotAnswers(job.details || "") || readChatbotAnswers(job.notes || "") || {};
+  const snapshotAnswers = extractSmartBookingAnswersFromQuoteSnapshot(job.quoteSnapshot);
   const chatbotFromZip = typeof chatbotAnswers.fromZip === "string" ? chatbotAnswers.fromZip : undefined;
   const parsedCrew = typeof chatbotAnswers.selectedMovingRecCrew === "string" ? Number(chatbotAnswers.selectedMovingRecCrew) : null;
   const crewSize = job.crewSize || (Number.isFinite(parsedCrew) && parsedCrew ? parsedCrew : undefined);
 
   return {
+    ...snapshotAnswers,
     ...chatbotAnswers,
     serviceType: job.serviceType,
     serviceCode: job.serviceType,

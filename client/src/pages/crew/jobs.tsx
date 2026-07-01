@@ -30,7 +30,7 @@ import MarketplaceSourceFlowStrip from "@/components/MarketplaceSourceFlowStrip"
 import MarketplaceTaskSplit from "@/components/MarketplaceTaskSplit";
 import SmartBookingGuidanceCard from "@/components/SmartBookingGuidanceCard";
 import { BookingMenuIntelligenceCard } from "@/components/BookingMenuIntelligenceCard";
-import { extractBookingMenuIntelligence } from "@/lib/booking-menu-intelligence";
+import { extractBookingMenuIntelligence, extractSmartBookingAnswersFromQuoteSnapshot } from "@/lib/booking-menu-intelligence";
 import type { SmartBookingAnswers } from "@shared/smartBookingEngine";
 
 const SERVICE_ICONS: Record<string, string> = {
@@ -111,8 +111,10 @@ function inferTruckContext(value: string | null | undefined): string | undefined
 
 function smartBookingAnswersForCrewLead(lead: JobBoardLead | EnrichedLead): SmartBookingAnswers {
   const notes = [lead.details, "dispatchNotes" in lead ? lead.dispatchNotes : null].filter(Boolean).join("\n");
+  const snapshotAnswers = extractSmartBookingAnswersFromQuoteSnapshot(lead.quoteSnapshot);
 
   return {
+    ...snapshotAnswers,
     serviceType: lead.serviceType,
     serviceCode: lead.serviceType,
     serviceLabel: SERVICE_LABELS[lead.serviceType] || lead.serviceType,
