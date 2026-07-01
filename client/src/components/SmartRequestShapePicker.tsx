@@ -18,7 +18,7 @@ const shapeIcon = {
   repeat_loop: Repeat2,
 } satisfies Record<MarketplaceRequestShapeId, typeof Zap>;
 
-const PUBLIC_SHAPE_ORDER: MarketplaceRequestShapeId[] = ["delivery_reuse", "moving_help", "repeat_loop"];
+const PUBLIC_SHAPE_ORDER: MarketplaceRequestShapeId[] = ["fast_quote", "delivery_reuse", "moving_help", "repeat_loop"];
 
 const PUBLIC_SHAPES: MarketplaceRequestShape[] = PUBLIC_SHAPE_ORDER.flatMap((shapeId) => {
   const shape = MARKETPLACE_REQUEST_SHAPES.find((item) => item.id === shapeId);
@@ -69,7 +69,7 @@ export default function SmartRequestShapePicker({
         </span>
       </div>
 
-      <div className="mt-3 grid gap-2 md:grid-cols-3">
+      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
         {PUBLIC_SHAPES.map((shape) => {
           const copy = shapeCopy[shape.id];
           const selected = shape.id === selectedShapeId;

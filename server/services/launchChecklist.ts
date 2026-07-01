@@ -1004,9 +1004,31 @@ const SCENARIOS: Scenario[] = [
   },
   {
     id: "marketplace_surface_mounts",
-    label: "Marketplace process is mounted on customer, worker, and company job surfaces",
+    label: "Marketplace process is mounted on booking, customer, worker, and company surfaces",
     run: async () => {
       const surfaces = [
+        {
+          name: "public booking flow",
+          path: "client/src/pages/book.tsx",
+          required: [
+            "smart-start-card",
+            "SmartRequestShapePicker",
+            "ServicePriceMenu",
+            "SmartBookingGuidanceCard",
+            "MarketplaceShapeContext",
+            "booking-marketplace-flow",
+          ],
+        },
+        {
+          name: "public shape picker",
+          path: "client/src/components/SmartRequestShapePicker.tsx",
+          required: [
+            "PUBLIC_SHAPE_ORDER",
+            "fast_quote",
+            "Quick Quote",
+            "Start here",
+          ],
+        },
         {
           name: "customer my-jobs",
           path: "client/src/pages/my-jobs.tsx",
@@ -1076,7 +1098,7 @@ const SCENARIOS: Scenario[] = [
       const requiredBundleText = ["1, 2, 3 Process", "Customer path", "Worker path", "Company path"];
       const missingBundleText = requiredBundleText.filter((snippet) => !builtClientText.includes(snippet));
       return missingBundleText.length === 0
-        ? { ok: true, detail: "production bundle includes customer, worker, and company marketplace process labels" }
+        ? { ok: true, detail: "production bundle includes booking, customer, worker, and company marketplace process labels" }
         : { ok: false, detail: `production bundle missing marketplace process text: ${missingBundleText.join(", ")}` };
     },
   },
