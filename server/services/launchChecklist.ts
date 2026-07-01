@@ -1041,6 +1041,16 @@ const SCENARIOS: Scenario[] = [
           ],
         },
         {
+          name: "smart booking next action card",
+          path: "client/src/components/SmartBookingGuidanceCard.tsx",
+          required: [
+            "guidance.nextAction",
+            "smart-guidance-next-option",
+            "sourcePatterns",
+            "missingLabels",
+          ],
+        },
+        {
           name: "source lookup",
           path: "client/src/components/MarketplaceSourceLookup.tsx",
           required: [

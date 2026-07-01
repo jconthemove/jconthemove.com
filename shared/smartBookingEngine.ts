@@ -53,10 +53,27 @@ export type SmartBookingGuidanceStep = MarketplaceSmartBookingStep & {
   missingSignals: string[];
 };
 
+export type SmartBookingNextActionStage = "start" | "progress" | "finish";
+
+export type SmartBookingNextAction = {
+  stage: SmartBookingNextActionStage;
+  label: string;
+  prompt: string;
+  answerOptions: string[];
+  sourcePatterns: string;
+  captures: string[];
+  missingLabels: string[];
+  proofTarget: string;
+  customerNext: string;
+  workerSignal: string;
+  companyControl: string;
+};
+
 export type SmartBookingGuidance = {
   shapeId: MarketplaceRequestShapeId;
   shapeLabel: string;
   nextStep: SmartBookingGuidanceStep | null;
+  nextAction: SmartBookingNextAction;
   steps: SmartBookingGuidanceStep[];
   completedRequired: number;
   totalRequired: number;
@@ -559,10 +576,84 @@ function signalIsPresent(signal: string, answers: SmartBookingAnswers): boolean 
   }
 }
 
+function friendlySignalLabel(signal: string): string {
+  const labels: Record<string, string> = {
+    location_or_zip: "ZIP or address",
+    date_or_window: "date or window",
+    service_type: "service type",
+    load_type: "load/unload choice",
+    truck_context: "truck, container, or access",
+    crew_package: "crew and hours",
+    pickup_or_dropoff: "pickup/drop-off",
+    item_detail: "photos or item details",
+    contact_method: "name, phone, or email",
+  };
+  return labels[signal] || signal.replace(/_/g, " ");
+}
+
 function guidanceShapeId(answers: SmartBookingAnswers, serviceLabel?: string): MarketplaceRequestShapeId {
   const shapeId = text(answers.marketplaceShapeId || answers.jobShapeId) as MarketplaceRequestShapeId;
   if (["fast_quote", "moving_help", "delivery_reuse", "repeat_loop"].includes(shapeId)) return shapeId;
   return getMarketplaceShapeForServiceCode(text(answers.serviceCode || answers.serviceType || serviceLabel)).id;
+}
+
+function buildSmartBookingNextAction({
+  shapeLabel,
+  nextStep,
+  missingRequired,
+  fastPathReady,
+}: {
+  shapeLabel: string;
+  nextStep: SmartBookingGuidanceStep | null;
+  missingRequired: SmartBookingGuidanceStep[];
+  fastPathReady: boolean;
+}): SmartBookingNextAction {
+  if (!nextStep) {
+    return {
+      stage: "finish",
+      label: "Ready to close",
+      prompt: "Confirm the quote, payment path, completion proof, review, and JCMOVES closeout.",
+      answerOptions: ["Confirm quote", "Send payment link", "Complete job", "Ask for review"],
+      sourcePatterns: "Square, Two Men and a Truck, Google/Yelp reviews, JCMOVES",
+      captures: ["quote", "payment", "completion proof", "review", "reward ledger"],
+      missingLabels: [],
+      proofTarget: "The lead has quote/payment/completion evidence tied to one card.",
+      customerNext: "Confirm service and payment path.",
+      workerSignal: "Close the job with proof and any issue notes.",
+      companyControl: "Verify payment, payout, rewards, and review loop before closing.",
+    };
+  }
+
+  const missingSignals = nextStep.missingSignals.length > 0
+    ? nextStep.missingSignals
+    : missingRequired.flatMap((step) => step.missingSignals);
+  const missingLabels = Array.from(new Set(missingSignals.map(friendlySignalLabel)));
+  const optionalReady = fastPathReady && nextStep.status === "optional";
+  const stage: SmartBookingNextActionStage = !fastPathReady ? "start" : optionalReady ? "progress" : "start";
+  const label = !fastPathReady
+    ? "Ask this next"
+    : optionalReady
+      ? "Ready - optional detail"
+      : "Next answer";
+  const prompt = optionalReady
+    ? `${shapeLabel} is ready for quote review. Optional: ${nextStep.prompt}`
+    : nextStep.prompt;
+
+  return {
+    stage,
+    label,
+    prompt,
+    answerOptions: nextStep.quickOptions.slice(0, 6),
+    sourcePatterns: nextStep.sourcePatterns,
+    captures: nextStep.captures,
+    missingLabels,
+    proofTarget: nextStep.captures.length > 0
+      ? `Capture ${nextStep.captures.slice(0, 4).join(", ")}${nextStep.captures.length > 4 ? ", ..." : ""}.`
+      : "Keep the lead card moving without adding form clutter.",
+    customerNext: optionalReady ? "Add photos/details if useful, or continue to quote review." : nextStep.customerPromise,
+    workerSignal: nextStep.workerSignal,
+    companyControl: nextStep.companyControl,
+  };
 }
 
 export function getSmartBookingGuidance(
@@ -589,18 +680,26 @@ export function getSmartBookingGuidance(
   const requiredSteps = steps.filter((step) => step.status !== "optional");
   const missingRequired = requiredSteps.filter((step) => step.status === "missing");
   const nextStep = missingRequired[0] || steps.find((step) => step.status === "optional") || null;
+  const fastPathReady = missingRequired.length === 0;
+  const nextAction = buildSmartBookingNextAction({
+    shapeLabel: shape.shape,
+    nextStep,
+    missingRequired,
+    fastPathReady,
+  });
 
   return {
     shapeId: shape.id,
     shapeLabel: shape.shape,
     nextStep,
+    nextAction,
     steps,
     completedRequired: requiredSteps.length - missingRequired.length,
     totalRequired: requiredSteps.length,
     missingSignals: missingRequired.flatMap((step) => step.missingSignals),
-    fastPathReady: missingRequired.length === 0,
-    customerNext: nextStep?.prompt || "Confirm estimate range and preferred contact path.",
-    workerSignal: nextStep?.workerSignal || shape.worker,
-    companyControl: nextStep?.companyControl || shape.company,
+    fastPathReady,
+    customerNext: nextAction.customerNext,
+    workerSignal: nextAction.workerSignal || shape.worker,
+    companyControl: nextAction.companyControl || shape.company,
   };
 }

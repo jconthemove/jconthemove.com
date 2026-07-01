@@ -120,6 +120,11 @@ test("guides a partial moving card to the next missing smart-booking step", () =
   assert.equal(guidance.completedRequired, 2);
   assert.equal(guidance.nextStep?.id, "truck_context");
   assert.deepEqual(guidance.nextStep?.missingSignals, ["truck_context"]);
+  assert.equal(guidance.nextAction.stage, "start");
+  assert.equal(guidance.nextAction.label, "Ask this next");
+  assert.equal(guidance.nextAction.missingLabels.includes("truck, container, or access"), true);
+  assert.equal(guidance.nextAction.answerOptions.includes("Customer truck"), true);
+  assert.match(guidance.nextAction.sourcePatterns, /U-Haul/);
 });
 
 test("marks a fully-sized moving request ready for quote review", () => {
@@ -137,6 +142,10 @@ test("marks a fully-sized moving request ready for quote review", () => {
   assert.equal(guidance.fastPathReady, true);
   assert.equal(guidance.completedRequired, guidance.totalRequired);
   assert.equal(guidance.nextStep?.id, "detail_capture");
+  assert.equal(guidance.nextAction.stage, "progress");
+  assert.equal(guidance.nextAction.label, "Ready - optional detail");
+  assert.match(guidance.nextAction.prompt, /ready for quote review/i);
+  assert.equal(guidance.nextAction.answerOptions.includes("Add photos"), true);
 });
 
 console.log(`smartBookingEngine tests passed: ${passed}`);
