@@ -156,8 +156,32 @@ type LeadQuoteSnapshot = {
   requestedItems?: Array<{
     serviceCode?: string;
     serviceLabel?: string;
+    quantity?: number;
+    priceMode?: string;
+    unitPrice?: number | string;
+    details?: Record<string, unknown> | null;
+    priceMenuTaskId?: string | null;
+    priceMenuCategory?: string | null;
+    priceMenuRange?: string | null;
+    priceMenuUnit?: string | null;
+    priceMenuCustomerNeeds?: string[] | null;
+    priceMenuOperationsSignal?: string | null;
+    priceMenuSourceSignal?: string | null;
   }>;
 };
+
+type RequestedQuoteItem = NonNullable<LeadQuoteSnapshot["requestedItems"]>[number];
+
+type PriceMenuSnapshot = {
+  serviceLabel: string;
+  sourceSignal: string | null;
+  operationsSignal: string | null;
+  customerNeeds: string[];
+  range: string | null;
+  unit: string | null;
+  category: string | null;
+  taskId: string | null;
+} | null;
 
 type EnrichedTradeRequest = {
   id: string;
@@ -265,6 +289,66 @@ function leadFirstRequestedItem(lead: Lead): NonNullable<LeadQuoteSnapshot["requ
     ? lead.quoteSnapshot
     : null;
   return Array.isArray(snapshot?.requestedItems) ? snapshot.requestedItems[0] || null : null;
+}
+
+function leadRequestedItems(lead: Lead): RequestedQuoteItem[] {
+  const snapshot = lead.quoteSnapshot && typeof lead.quoteSnapshot === "object" && !Array.isArray(lead.quoteSnapshot)
+    ? lead.quoteSnapshot
+    : null;
+  return Array.isArray(snapshot?.requestedItems) ? snapshot.requestedItems : [];
+}
+
+function plainRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function itemStringValue(item: RequestedQuoteItem, key: string): string | null {
+  const itemRecord = item as Record<string, unknown>;
+  const details = plainRecord(item.details);
+  return stringValue(itemRecord[key]) || stringValue(details[key]);
+}
+
+function itemStringArrayValue(item: RequestedQuoteItem, key: string): string[] {
+  const itemRecord = item as Record<string, unknown>;
+  const details = plainRecord(item.details);
+  const raw = Array.isArray(itemRecord[key]) ? itemRecord[key] : details[key];
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map((value) => value.trim());
+}
+
+function leadPriceMenuSnapshot(lead: Lead): PriceMenuSnapshot {
+  for (const item of leadRequestedItems(lead)) {
+    const sourceSignal = itemStringValue(item, "priceMenuSourceSignal");
+    const operationsSignal = itemStringValue(item, "priceMenuOperationsSignal");
+    const customerNeeds = itemStringArrayValue(item, "priceMenuCustomerNeeds");
+    const range = itemStringValue(item, "priceMenuRange");
+    const unit = itemStringValue(item, "priceMenuUnit");
+    const category = itemStringValue(item, "priceMenuCategory");
+    const taskId = itemStringValue(item, "priceMenuTaskId");
+
+    if (!sourceSignal && !operationsSignal && customerNeeds.length === 0 && !range && !unit && !category && !taskId) {
+      continue;
+    }
+
+    return {
+      serviceLabel: item.serviceLabel || item.serviceCode || "Selected service",
+      sourceSignal,
+      operationsSignal,
+      customerNeeds,
+      range,
+      unit,
+      category,
+      taskId,
+    };
+  }
+
+  return null;
 }
 
 function extractZipFromText(value: string | null | undefined): string | undefined {
@@ -511,6 +595,64 @@ function POSRow({ label, value, accent }: { label: string; value: React.ReactNod
     <div className="flex items-center justify-between py-2 border-b border-slate-800/60 last:border-0">
       <span className="text-xs text-slate-500 uppercase tracking-wide">{label}</span>
       <span className={`text-sm font-semibold ${accent ? "text-green-400" : "text-white"}`}>{value}</span>
+    </div>
+  );
+}
+
+function PriceMenuSnapshotCard({ snapshot }: { snapshot: PriceMenuSnapshot }) {
+  if (!snapshot) return null;
+
+  const estimateLabel = [snapshot.range, snapshot.unit].filter(Boolean).join(" / ");
+  const menuLabel = [snapshot.category, snapshot.taskId].filter(Boolean).join(" - ");
+
+  return (
+    <div className="scroll-mt-4 rounded-xl border border-cyan-500/25 bg-cyan-950/15 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-cyan-200">
+            <Megaphone className="h-3.5 w-3.5" /> Menu intelligence
+          </p>
+          <p className="mt-1 text-sm font-bold text-white">{snapshot.serviceLabel}</p>
+        </div>
+        {menuLabel && (
+          <span className="rounded-full border border-cyan-400/25 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-cyan-100">
+            {menuLabel}
+          </span>
+        )}
+      </div>
+
+      <div className="mt-3 space-y-3 text-sm">
+        {estimateLabel && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Estimate row</p>
+            <p className="mt-0.5 font-semibold text-cyan-100">{estimateLabel}</p>
+          </div>
+        )}
+        {snapshot.sourceSignal && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Source pattern</p>
+            <p className="mt-0.5 leading-5 text-slate-200">{snapshot.sourceSignal}</p>
+          </div>
+        )}
+        {snapshot.operationsSignal && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Ops check</p>
+            <p className="mt-0.5 leading-5 text-slate-200">{snapshot.operationsSignal}</p>
+          </div>
+        )}
+        {snapshot.customerNeeds.length > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Customer asks</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {snapshot.customerNeeds.map((need) => (
+                <span key={need} className="rounded-full border border-slate-700 bg-slate-900/80 px-2.5 py-1 text-[11px] font-semibold text-slate-200">
+                  {need}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -846,6 +988,7 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
   const customerMediaLink = extractCustomerMediaLink(lead.details);
   const marketplaceShape = leadMarketplaceShape(lead);
   const marketplaceShapeId = leadMarketplaceShapeId(lead);
+  const priceMenuSnapshot = leadPriceMenuSnapshot(lead);
   const priceReady = Math.max(numericPrice(displayPrice), numericPrice(displayBasePrice)) > 0;
   const scheduleReady = Boolean(effectiveDate || lead.arrivalWindow);
   const contactReady = Boolean((lead.phone || lead.email) && (lead.fromAddress || lead.details || photos.length > 0));
@@ -1044,6 +1187,7 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
             maxIdeas={3}
             maxFlows={2}
           />
+          <PriceMenuSnapshotCard snapshot={priceMenuSnapshot} />
 
           {/* Customer Info — POS Receipt Style */}
           <div id="admin-job-customer" className="scroll-mt-4 bg-slate-800/60 rounded-xl p-4">
