@@ -11,13 +11,47 @@ import {
   AlertTriangle,
   CheckCircle2,
   ClipboardCopy,
+  CreditCard,
+  Globe2,
   Loader2,
   Rocket,
+  Server,
   XCircle,
 } from "lucide-react";
 
 interface Scenario { id: string; label: string }
 interface Result   { id: string; label: string; ok: boolean; detail: string; ranAt: string; ms: number }
+
+const publishBlockers = [
+  {
+    title: "Render environment",
+    icon: Server,
+    probeIds: ["env_required", "public_deploy_freshness"],
+    action: "In Render, set DATABASE_URL, SESSION_SECRET, SQUARE_ACCESS_TOKEN, SQUARE_ENVIRONMENT=production, and APP_URL=https://www.jconthemove.com.",
+    note: "Missing env vars make /api/health return not_ready even when /health is alive.",
+  },
+  {
+    title: "Square payment links",
+    icon: CreditCard,
+    probeIds: ["square_configured"],
+    action: "Refresh the Square access token and keep SQUARE_ENVIRONMENT=production before relying on invoice links.",
+    note: "Cash payouts can stay manual, but Square links need a live token to collect customer payment.",
+  },
+  {
+    title: "Forced deploy trigger",
+    icon: Rocket,
+    probeIds: ["public_deploy_freshness"],
+    action: "Add RENDER_DEPLOY_HOOK_URL, or RENDER_API_KEY plus RENDER_SERVICE_ID, to GitHub Actions so main can force Render to pull the newest commit.",
+    note: "Without this, Render can stay behind GitHub even after the code is pushed.",
+  },
+  {
+    title: "Cloudflare DNS",
+    icon: Globe2,
+    probeIds: ["public_deploy_freshness", "public_app_url"],
+    action: "Point www.jconthemove.com at the Render custom-domain target and keep the bare domain redirecting to www.",
+    note: "The public launch domain should serve the same Render build that passes the checklist.",
+  },
+];
 
 export default function AdminLaunchChecklistPage() {
   const { data, isLoading } = useQuery<{ scenarios: Scenario[] }>({
@@ -85,6 +119,13 @@ export default function AdminLaunchChecklistPage() {
     }
   }
 
+  function publishBlockerState(probeIds: string[]) {
+    const matched = probeIds.map((id) => results[id]).filter(Boolean) as Result[];
+    if (matched.length === 0) return { label: "Not checked", className: "border-slate-700 bg-slate-950/70 text-slate-300" };
+    if (matched.some((r) => !r.ok)) return { label: "Needs action", className: "border-amber-500/40 bg-amber-950/30 text-amber-100" };
+    return { label: "Looks good", className: "border-emerald-500/35 bg-emerald-950/25 text-emerald-100" };
+  }
+
   return (
     <div className="p-6 max-w-6xl">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between mb-2">
@@ -124,6 +165,42 @@ export default function AdminLaunchChecklistPage() {
                 : "Run every probe and clear failed items before pushing paid traffic, worker links, or customer announcements."}
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="mb-5 rounded-2xl border border-blue-500/20 bg-blue-950/15 p-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="text-xs font-bold uppercase tracking-[0.18em] text-blue-300">Publish blockers</div>
+            <p className="mt-1 max-w-3xl text-sm text-slate-300">
+              Clear these four items when the checklist says not ready. This keeps Square, Render, GitHub deploys, and DNS lined up before paid traffic goes live.
+            </p>
+          </div>
+          <code className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs text-slate-300">
+            npm run render:doctor
+          </code>
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          {publishBlockers.map((item) => {
+            const state = publishBlockerState(item.probeIds);
+            const Icon = item.icon;
+            return (
+              <div key={item.title} className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Icon className="h-4 w-4 text-blue-300" />
+                    <h2 className="text-sm font-bold text-white">{item.title}</h2>
+                  </div>
+                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${state.className}`}>
+                    {state.label}
+                  </span>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-slate-200">{item.action}</p>
+                <p className="mt-2 text-xs leading-5 text-slate-500">{item.note}</p>
+              </div>
+            );
+          })}
         </div>
       </div>
 
