@@ -71,6 +71,7 @@ import { ensureBookingCatalogSeeded } from "./services/bookingCatalogSeed";
 import { getWeeklyCrewRuleForDate, normalizeCrewName } from "@shared/weeklyCrewSchedule";
 import { getAppUrl } from "./appUrl";
 import { smsService } from "./services/sms";
+import { MARKETPLACE_ACTION_TASKS } from "@shared/marketplaceShapes";
 
 const STAKING_TREASURY_USER_ID = "staking-treasury-system";
 const CHATBOT_DRIVE_BASE_LAT = 46.4539;
@@ -5848,36 +5849,54 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     }
   });
 
+  const marketplaceActionById = new Map(MARKETPLACE_ACTION_TASKS.map((task) => [task.id, task]));
+  const getMarketplaceActionTask = (taskId: string) => {
+    const task = marketplaceActionById.get(taskId);
+    if (!task) throw new Error(`Missing marketplace action task: ${taskId}`);
+    return task;
+  };
+
+  const quoteSamplePlaybook = getMarketplaceActionTask("silver_sample_quote");
+  const quoteBuildPlaybook = getMarketplaceActionTask("silver_build_quote_card");
+  const quoteApprovePlaybook = getMarketplaceActionTask("gold_approve_quote");
+  const dispatchReadyPlaybook = getMarketplaceActionTask("platinum_dispatch_ready");
+  const payoutClosePlaybook = getMarketplaceActionTask("platinum_payout_close");
+
   const OPS_TASK_DEFS = {
     quote_sample: {
-      title: "Pick quote option",
+      title: quoteSamplePlaybook.title,
       minTier: "bronze",
-      bonusTokens: 125,
-      instructions: "Choose the closest guided quote so matching marketer picks can surface the safest next move.",
+      bonusTokens: quoteSamplePlaybook.bonusJcMoves,
+      instructions: quoteSamplePlaybook.action,
+      playbook: quoteSamplePlaybook,
     },
     quote_build: {
-      title: "Build quote card",
+      title: quoteBuildPlaybook.title,
       minTier: "silver",
-      bonusTokens: 250,
-      instructions: "Add price, date/window, crew size, hours, and quote notes.",
+      bonusTokens: quoteBuildPlaybook.bonusJcMoves,
+      instructions: quoteBuildPlaybook.action,
+      playbook: quoteBuildPlaybook,
     },
     quote_approve: {
-      title: "Approve quote",
+      title: quoteApprovePlaybook.title,
       minTier: "gold",
-      bonusTokens: 500,
-      instructions: "Review customer details, price, crew math, and approve the quote card.",
+      bonusTokens: quoteApprovePlaybook.bonusJcMoves,
+      instructions: quoteApprovePlaybook.action,
+      playbook: quoteApprovePlaybook,
     },
     dispatch_ready: {
-      title: "Ready for dispatch",
+      title: dispatchReadyPlaybook.title,
       minTier: "platinum",
-      bonusTokens: 750,
-      instructions: "Confirm schedule, assigned crew, and job card readiness.",
+      bonusTokens: dispatchReadyPlaybook.bonusJcMoves,
+      instructions: dispatchReadyPlaybook.action,
+      playbook: dispatchReadyPlaybook,
     },
     payout_review: {
-      title: "Review payout paperwork",
+      title: payoutClosePlaybook.title,
       minTier: "platinum",
-      bonusTokens: 1000,
-      instructions: "Confirm completion and payout calculation before cash payout.",
+      bonusTokens: payoutClosePlaybook.bonusJcMoves,
+      instructions: payoutClosePlaybook.action,
+      playbook: payoutClosePlaybook,
     },
   } as const;
 

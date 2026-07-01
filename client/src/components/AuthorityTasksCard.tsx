@@ -29,6 +29,7 @@ type AuthorityTask = {
   quoteChoices?: QuoteConsensusChoice[];
   quoteConsensus?: QuoteConsensus;
   myQuoteChoice?: string | null;
+  playbook?: AuthorityPlaybookTask;
 };
 
 type AuthorityOption = {
@@ -44,6 +45,19 @@ type AuthorityStage = {
   minTier: AuthorityTask["minTier"];
   bonusTokens: number;
   instructions: string;
+  playbook?: AuthorityPlaybookTask;
+};
+
+type AuthorityPlaybookTask = {
+  id: string;
+  phase: "start" | "progress" | "finish";
+  rail: "customer" | "bronze" | "silver" | "gold" | "platinum";
+  side: "customer" | "worker" | "company";
+  action: string;
+  proof: string;
+  customerImpact: string;
+  companyGuardrail: string;
+  sourcePatterns: string;
 };
 
 type QuoteConsensusChoice = {
@@ -466,6 +480,28 @@ function TaskRow({
           </Button>
         </div>
       )}
+      {task.playbook && <TaskPlaybookSignal playbook={task.playbook} />}
+    </div>
+  );
+}
+
+function TaskPlaybookSignal({ playbook }: { playbook: AuthorityPlaybookTask }) {
+  return (
+    <div className="mt-3 rounded-md border border-blue-500/20 bg-blue-500/5 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded-full border border-slate-700 bg-slate-950/70 px-2 py-0.5 text-[10px] font-black uppercase text-blue-200">
+          {playbook.phase}
+        </span>
+        <span className="rounded-full border border-slate-700 bg-slate-950/70 px-2 py-0.5 text-[10px] font-black uppercase text-slate-300">
+          {playbook.sourcePatterns}
+        </span>
+      </div>
+      <p className="mt-2 text-xs font-semibold leading-relaxed text-slate-200">
+        {playbook.customerImpact}
+      </p>
+      <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+        Guardrail: {playbook.companyGuardrail}
+      </p>
     </div>
   );
 }
