@@ -156,11 +156,11 @@ export type MarketplaceSmartBookingStep = {
 export const MARKETPLACE_REQUEST_SHAPES: MarketplaceRequestShape[] = [
   {
     id: "fast_quote",
-    shape: "Fast Quote",
-    references: "Google, Yelp, Facebook, Craigslist",
+    shape: "Quick Quote",
+    references: "Website, Google, Facebook, local posts",
     customer: "ZIP/date, service, contact, notes, optional photos.",
-    worker: "Bronze marketers can pick guided quote options; matching picks raise confidence.",
-    company: "Owner alert, funnel tracking, quote_requested lead card, consensus quote safety net.",
+    worker: "Crew sees enough context to help size the request or route it to quote review.",
+    company: "Owner alert, funnel tracking, quote_requested lead card, and quote safety checks.",
     pricingServices: [],
   },
   {
@@ -174,20 +174,20 @@ export const MARKETPLACE_REQUEST_SHAPES: MarketplaceRequestShape[] = [
   },
   {
     id: "delivery_reuse",
-    shape: "Delivery / Reuse",
-    references: "Target, Walmart, Goodwill, PODS",
-    customer: "Pickup, drop-off, item size, photos, timing window.",
-    worker: "Driver/helper task with route, access notes, and completion proof.",
-    company: "Travel variables, item handling, route bundling, reuse leads.",
+    shape: "Delivery / Small Project",
+    references: "Single items, store pickups, furniture, appliances",
+    customer: "Pickup, drop-off, item size, photos, timing window, and small-project notes.",
+    worker: "Driver/helper task with route, item details, access notes, and completion proof.",
+    company: "Travel variables, item handling, route bundling, and small-project lead tracking.",
     pricingServices: ["delivery"],
   },
   {
     id: "repeat_loop",
-    shape: "Repeat Loop",
-    references: "McDonald's, JCMOVES, reviews, rep links",
-    customer: "Simple offer, review, reward credit, next-service shortcut.",
-    worker: "Advertise, sample quote, accept, complete, earn task and job bonuses.",
-    company: "Webhook ads, payout safety, referral attribution, quote consensus, review follow-up.",
+    shape: "Repeat Loop Jobs",
+    references: "Lawn, snow, junk, handyman",
+    customer: "Choose repeatable work like lawn care, snow, junk removal, handyman, cleaning, or seasonal help.",
+    worker: "Crew sees a route-ready repeat job with service type, address, timing, and proof expectations.",
+    company: "Track recurring demand, route density, job counts, margins, and rebooking performance.",
     pricingServices: [],
   },
 ];
@@ -918,7 +918,7 @@ export const MARKETPLACE_ACTION_TASKS: MarketplaceActionTask[] = [
     companyGuardrail: "No final price is promised until staff confirms the quote.",
     sourcePatterns: "Google, Yelp, MovingHelp, Walmart catalog flow",
     flowIds: ["google_yelp_trust", "uhaul_movinghelp", "target_walmart_catalog"],
-    shapeIds: ["fast_quote", "moving_help", "delivery_reuse"],
+    shapeIds: ["fast_quote", "moving_help", "delivery_reuse", "repeat_loop"],
   },
   {
     id: "customer_confirm_path",
@@ -1122,7 +1122,7 @@ export const MARKETPLACE_SMART_BOOKING_STEPS: MarketplaceSmartBookingStep[] = [
     id: "where_when",
     order: 1,
     label: "Where and when",
-    prompt: "Ask for ZIP or address and estimated date first.",
+    prompt: "Add the service ZIP or address and the best date or route day.",
     quickOptions: ["Use current ZIP", "I know the address", "Date flexible"],
     captures: ["zip", "address", "estimated date", "time window"],
     autoInterpretation: "Resolve address/ZIP, match pricing zone, estimate travel, and create a recoverable funnel event.",
@@ -1136,23 +1136,23 @@ export const MARKETPLACE_SMART_BOOKING_STEPS: MarketplaceSmartBookingStep[] = [
     id: "job_shape",
     order: 2,
     label: "Choose the job shape",
-    prompt: "Ask load, unload, both, delivery, removal, packing, or other help.",
-    quickOptions: ["Load", "Unload", "Load + unload", "Delivery", "Junk/reuse", "Not sure"],
-    captures: ["service shape", "load/unload choice", "pickup/drop-off intent", "uncertainty flag"],
+    prompt: "Choose delivery/small project, moving help, or repeat work like lawn, snow, junk, or handyman.",
+    quickOptions: ["Delivery / small project", "Load", "Unload", "Load + unload", "Repeat work", "Not sure"],
+    captures: ["service shape", "load/unload choice", "pickup/drop-off intent", "repeat-service intent", "uncertainty flag"],
     autoInterpretation: "Map the answer to a marketplace request shape and the matching source play.",
     customerPromise: "One tap gets them into the right lane without learning internal service codes.",
-    workerSignal: "The card shows whether this is moving labor, delivery/reuse, or a quick quote.",
+    workerSignal: "The card shows whether this is moving labor, delivery/small project, or repeat route work.",
     companyControl: "The lead card can route to the right quote rules, zone rates, and approval rail.",
     sourcePatterns: "MovingHelp service picker, Target/Walmart category cards, Goodwill item flow",
-    shapeIds: ["fast_quote", "moving_help", "delivery_reuse"],
+    shapeIds: ["fast_quote", "moving_help", "delivery_reuse", "repeat_loop"],
   },
   {
     id: "truck_context",
     order: 3,
     label: "Truck and access",
-    prompt: "Ask who supplies the truck, truck size, stairs, elevator, and access notes.",
+    prompt: "For moving or delivery, add pickup/drop-off, truck/container, stairs, elevator, and access notes.",
     quickOptions: ["Customer truck", "Need JC truck", "U-Haul", "Trailer", "Storage/container", "Stairs"],
-    captures: ["truck provider", "truck size", "stairs", "elevator", "access notes", "container count"],
+    captures: ["pickup/drop-off", "truck provider", "truck size", "stairs", "elevator", "access notes", "container count"],
     autoInterpretation: "Suggest crew/hours and flag travel, truck, stairs, or container risk before quote approval.",
     customerPromise: "The quote feels simple, but the system still catches the details that change price.",
     workerSignal: "Workers know if they are loading a customer truck, using JC equipment, or handling containers.",
@@ -1164,7 +1164,7 @@ export const MARKETPLACE_SMART_BOOKING_STEPS: MarketplaceSmartBookingStep[] = [
     id: "smart_package",
     order: 4,
     label: "Smart package",
-    prompt: "Suggest the most common crew/hour package before asking for custom details.",
+    prompt: "Pick a common crew/hour package or keep the request in quote review.",
     quickOptions: ["2 movers / 3 hours", "3 movers / 2 hours", "2 movers / 2 hours", "Need quote review"],
     captures: ["crew size", "estimated hours", "package choice", "quote review flag"],
     autoInterpretation: "Use zone rates, minimum hours, discounts, travel, and padding to show an estimate range.",
@@ -1178,9 +1178,9 @@ export const MARKETPLACE_SMART_BOOKING_STEPS: MarketplaceSmartBookingStep[] = [
     id: "detail_capture",
     order: 5,
     label: "Details and proof",
-    prompt: "Offer optional item selector, photos, notes, and special handling only after the package.",
-    quickOptions: ["Add photos", "Heavy item", "Fragile item", "Donation/reuse", "No extra details"],
-    captures: ["photos", "item list", "heavy items", "fragile items", "donate/dispose/deliver/store tags", "notes"],
+    prompt: "Add photos, item list, or repeat-work notes where they help price the job.",
+    quickOptions: ["Add photos", "Heavy item", "Fragile item", "Lawn/snow/junk/handyman notes", "No extra details"],
+    captures: ["photos", "item list", "repeat-work notes", "heavy items", "fragile items", "donate/dispose/deliver/store tags", "notes"],
     autoInterpretation: "Attach media and item tags to the lead so pricing and completion proof stay connected.",
     customerPromise: "Customers can be detailed without being forced through a long form.",
     workerSignal: "Workers see photos, special items, and item destiny before arrival.",
@@ -1192,7 +1192,7 @@ export const MARKETPLACE_SMART_BOOKING_STEPS: MarketplaceSmartBookingStep[] = [
     id: "contact_recovery",
     order: 6,
     label: "Contact and recovery",
-    prompt: "Collect name, phone, and email last, then save the request as a quote_requested lead.",
+    prompt: "Add name, phone, and email so the request can be saved and followed up.",
     quickOptions: ["Text me", "Email me", "Call me", "I need help now"],
     captures: ["name", "phone", "email", "preferred contact", "urgency", "lead source"],
     autoInterpretation: "Create/link the lead, notify owner/admin, and keep partial info recoverable if they leave.",
@@ -1401,7 +1401,7 @@ export function getMarketplaceShapeForServiceCode(serviceCode: string | null | u
     .toLowerCase()
     .replace(/[\s-]+/g, "_");
 
-  if (!normalized) return getMarketplaceRequestShape("fast_quote")!;
+  if (!normalized) return getMarketplaceRequestShape("delivery_reuse")!;
 
   if (
     normalized.includes("rebook") ||
@@ -1425,7 +1425,7 @@ export function getMarketplaceShapeForServiceCode(serviceCode: string | null | u
     normalized.includes("handyman") ||
     normalized.includes("demo")
   ) {
-    return getMarketplaceRequestShape("fast_quote")!;
+    return getMarketplaceRequestShape("repeat_loop")!;
   }
 
   if (
@@ -1455,5 +1455,17 @@ export function getMarketplaceShapeForServiceCode(serviceCode: string | null | u
     return getMarketplaceRequestShape("delivery_reuse")!;
   }
 
-  return getMarketplaceRequestShape("fast_quote")!;
+  if (
+    normalized.includes("custom") ||
+    normalized.includes("other") ||
+    normalized.includes("something_else") ||
+    normalized.includes("justask") ||
+    normalized.includes("just_ask") ||
+    normalized.includes("small_project") ||
+    normalized.includes("single_item")
+  ) {
+    return getMarketplaceRequestShape("delivery_reuse")!;
+  }
+
+  return getMarketplaceRequestShape("delivery_reuse")!;
 }

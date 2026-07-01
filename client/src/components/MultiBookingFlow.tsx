@@ -76,6 +76,14 @@ export interface SelectedItem {
     scope?: string;
     marketplaceShapeId?: string;
     marketplaceShape?: string;
+    priceMenuTaskId?: string;
+    priceMenuCategory?: string;
+    priceMenuRange?: string;
+    priceMenuUnit?: string;
+    priceMenuCustomerNeeds?: string[];
+    priceMenuOperationsSignal?: string;
+    priceReviewRequired?: boolean;
+    priceMenuStatus?: "estimate" | "menu_price";
     // Task #141: Moving / Junk Removal package picker snapshot — mirrors the
     // data the booking chatbot captures so the cart line carries the chosen
     // crew size, hours, tier, and JC222 promo when applicable.

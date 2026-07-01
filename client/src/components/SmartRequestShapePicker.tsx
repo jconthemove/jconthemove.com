@@ -1,7 +1,6 @@
 import { PackageCheck, Recycle, Repeat2, Truck, Zap } from "lucide-react";
 import {
   MARKETPLACE_REQUEST_SHAPES,
-  MARKETPLACE_ZONE_SERVICE_OPTIONS,
   type MarketplaceRequestShape,
   type MarketplaceRequestShapeId,
 } from "@shared/marketplaceShapes";
@@ -19,21 +18,39 @@ const shapeIcon = {
   repeat_loop: Repeat2,
 } satisfies Record<MarketplaceRequestShapeId, typeof Zap>;
 
-function defaultLine(shape: MarketplaceRequestShape) {
-  const option = MARKETPLACE_ZONE_SERVICE_OPTIONS.find((entry) => entry.shapeId === shape.id);
-  if (!option) {
-    if (shape.id === "fast_quote") return "60-second request";
-    return "Review, reward, repeat";
-  }
-  return `${option.defaultCrewSize} crew / ${option.defaultHours} hr`;
-}
+const PUBLIC_SHAPE_ORDER: MarketplaceRequestShapeId[] = ["delivery_reuse", "moving_help", "repeat_loop"];
 
-function customerLine(shape: MarketplaceRequestShape) {
-  if (shape.id === "fast_quote") return "ZIP, date, service, contact.";
-  if (shape.id === "moving_help") return "Load, unload, truck, crew.";
-  if (shape.id === "delivery_reuse") return "Pickup, drop-off, item photo.";
-  return "Review, rep link, next offer.";
-}
+const PUBLIC_SHAPES: MarketplaceRequestShape[] = PUBLIC_SHAPE_ORDER.flatMap((shapeId) => {
+  const shape = MARKETPLACE_REQUEST_SHAPES.find((item) => item.id === shapeId);
+  return shape ? [shape] : [];
+});
+
+const shapeCopy = {
+  fast_quote: {
+    label: "Quick Quote",
+    eyebrow: "Fast request",
+    line: "ZIP, date, service, contact.",
+    examples: "Moving, delivery, junk, handyman",
+  },
+  delivery_reuse: {
+    label: "Delivery / Small Project",
+    eyebrow: "Single item or short job",
+    line: "Pickup, drop-off, item photo, or one quick project.",
+    examples: "Furniture, appliance, store pickup, small project",
+  },
+  moving_help: {
+    label: "Moving Help",
+    eyebrow: "Load / unload / both",
+    line: "Tell us truck, crew, stairs, and heavy items.",
+    examples: "U-Haul, PODS, storage, apartment, home",
+  },
+  repeat_loop: {
+    label: "Repeat Loop Jobs",
+    eyebrow: "Lawn, snow, junk, handyman",
+    line: "Jobs we can keep doing on a route or repeat schedule.",
+    examples: "Weekly, monthly, seasonal, route work",
+  },
+} satisfies Record<MarketplaceRequestShapeId, { label: string; eyebrow: string; line: string; examples: string }>;
 
 export default function SmartRequestShapePicker({
   selectedShapeId,
@@ -45,15 +62,16 @@ export default function SmartRequestShapePicker({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <PackageCheck className="h-4 w-4 text-cyan-300" />
-          <h2 className="text-sm font-black text-white">Pick the job shape</h2>
+          <h2 className="text-sm font-black text-white">Choose the work</h2>
         </div>
         <span className="rounded-full border border-cyan-400/30 bg-slate-950/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-cyan-200">
-          1, 2, 3
+          Start here
         </span>
       </div>
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        {MARKETPLACE_REQUEST_SHAPES.map((shape) => {
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        {PUBLIC_SHAPES.map((shape) => {
+          const copy = shapeCopy[shape.id];
           const selected = shape.id === selectedShapeId;
           const Icon = shapeIcon[shape.id];
           return (
@@ -74,13 +92,13 @@ export default function SmartRequestShapePicker({
                     <Icon className="h-4 w-4" />
                   </span>
                   <div>
-                    <p className="text-xs font-black">{shape.shape}</p>
-                    <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">{defaultLine(shape)}</p>
+                    <p className="text-xs font-black">{copy.label}</p>
+                    <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">{copy.eyebrow}</p>
                   </div>
                 </div>
               </div>
-              <p className="mt-3 text-[11px] leading-4 text-slate-300">{customerLine(shape)}</p>
-              <p className="mt-2 line-clamp-1 text-[10px] font-semibold text-slate-500">{shape.references}</p>
+              <p className="mt-3 text-[11px] leading-4 text-slate-300">{copy.line}</p>
+              <p className="mt-2 line-clamp-1 text-[10px] font-semibold text-slate-500">{copy.examples}</p>
             </button>
           );
         })}

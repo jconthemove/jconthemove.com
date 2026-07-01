@@ -514,11 +514,11 @@ const requiredSignalsByShape: Record<MarketplaceRequestShapeId, Record<Marketpla
     contact_recovery: ["contact_method"],
   },
   repeat_loop: {
-    where_when: [],
+    where_when: ["location_or_zip", "date_or_window"],
     job_shape: ["service_type"],
     truck_context: [],
     smart_package: [],
-    detail_capture: [],
+    detail_capture: ["item_detail"],
     contact_recovery: ["contact_method"],
   },
 };

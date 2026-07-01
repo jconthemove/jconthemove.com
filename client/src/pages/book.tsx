@@ -31,6 +31,7 @@ import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 import MarketplaceSourceFlowStrip from "@/components/MarketplaceSourceFlowStrip";
 import SmartRequestShapePicker from "@/components/SmartRequestShapePicker";
 import SmartBookingGuidanceCard from "@/components/SmartBookingGuidanceCard";
+import ServicePriceMenu from "@/components/ServicePriceMenu";
 import {
   marketplaceEstimateLabel,
   marketplacePreviewBillableHours,
@@ -41,9 +42,14 @@ import {
 import type { User } from "@shared/schema";
 import {
   getMarketplaceRequestShape,
+  getMarketplaceShapeForServiceCode,
   type MarketplaceActionPhase,
   type MarketplaceRequestShapeId,
 } from "@shared/marketplaceShapes";
+import {
+  formatServicePriceRange,
+  type ServicePriceMenuTask,
+} from "@shared/servicePriceMenu";
 import {
   estimateMovingCrewHours,
   inferSmartBookingText,
@@ -65,6 +71,217 @@ interface BundleSlots {
   fast_addon: FeaturedBundle[];
 }
 
+const FALLBACK_SERVICE_CATALOG: CatalogService[] = [
+  {
+    id: "fallback-moving",
+    code: "moving",
+    name: "Moving",
+    category: "core",
+    defaultPriceMode: "quote",
+    defaultPrice: null,
+    suggestedMin: "300",
+    suggestedMax: "2500",
+    discountEligible: true,
+    isAddon: false,
+    description: "Local and route-day moving help.",
+  },
+  {
+    id: "fallback-junk-removal",
+    code: "junk_removal",
+    name: "Junk Removal",
+    category: "core",
+    defaultPriceMode: "quote",
+    defaultPrice: null,
+    suggestedMin: "170",
+    suggestedMax: "600",
+    discountEligible: true,
+    isAddon: false,
+    description: "Single-item pickups through cleanouts and dump runs.",
+  },
+  {
+    id: "fallback-delivery",
+    code: "delivery",
+    name: "Delivery",
+    category: "core",
+    defaultPriceMode: "fixed",
+    defaultPrice: "150",
+    suggestedMin: "125",
+    suggestedMax: "450",
+    discountEligible: true,
+    isAddon: false,
+    description: "Single item, store pickup, appliance, and small delivery work.",
+  },
+  {
+    id: "fallback-labor",
+    code: "labor",
+    name: "Labor",
+    category: "core",
+    defaultPriceMode: "hourly",
+    defaultPrice: "85",
+    suggestedMin: "170",
+    suggestedMax: "1000",
+    discountEligible: true,
+    isAddon: false,
+    description: "General labor, lifting, carrying, staging, and setup.",
+  },
+  {
+    id: "fallback-lawn-care",
+    code: "lawn_care",
+    name: "Lawn Care",
+    category: "core",
+    defaultPriceMode: "quote",
+    defaultPrice: null,
+    suggestedMin: "45",
+    suggestedMax: "250",
+    discountEligible: true,
+    isAddon: false,
+    description: "Mowing, trimming, cleanup, and repeat yard work.",
+  },
+  {
+    id: "fallback-snow-removal",
+    code: "snow_removal",
+    name: "Snow Removal",
+    category: "core",
+    defaultPriceMode: "quote",
+    defaultPrice: null,
+    suggestedMin: "50",
+    suggestedMax: "400",
+    discountEligible: true,
+    isAddon: false,
+    description: "Per-event and seasonal snow removal.",
+  },
+  {
+    id: "fallback-handyman",
+    code: "handyman",
+    name: "Handyman",
+    category: "core",
+    defaultPriceMode: "hourly",
+    defaultPrice: "75",
+    suggestedMin: "150",
+    suggestedMax: "750",
+    discountEligible: true,
+    isAddon: false,
+    description: "Small repairs, installs, punch lists, and property tasks.",
+  },
+  {
+    id: "fallback-demolition",
+    code: "demolition",
+    name: "Light Demolition",
+    category: "core",
+    defaultPriceMode: "quote",
+    defaultPrice: null,
+    suggestedMin: "300",
+    suggestedMax: "1500",
+    discountEligible: true,
+    isAddon: false,
+    description: "Tear-out, small demo, cleanout, and debris haul-off.",
+  },
+  {
+    id: "fallback-flooring",
+    code: "flooring",
+    name: "Flooring",
+    category: "core",
+    defaultPriceMode: "quote",
+    defaultPrice: null,
+    suggestedMin: "400",
+    suggestedMax: "5000",
+    discountEligible: true,
+    isAddon: false,
+    description: "Flooring repair, removal, prep, and installation.",
+  },
+  {
+    id: "fallback-roofing",
+    code: "roofing",
+    name: "Roofing",
+    category: "core",
+    defaultPriceMode: "quote",
+    defaultPrice: null,
+    suggestedMin: "500",
+    suggestedMax: "8000",
+    discountEligible: true,
+    isAddon: false,
+    description: "Roof repair, shingle work, tear-off, and replacement review.",
+  },
+  {
+    id: "fallback-painting",
+    code: "painting",
+    name: "Painting",
+    category: "core",
+    defaultPriceMode: "quote",
+    defaultPrice: null,
+    suggestedMin: "300",
+    suggestedMax: "3500",
+    discountEligible: true,
+    isAddon: false,
+    description: "Interior, exterior, trim, prep, and repaint work.",
+  },
+  {
+    id: "fallback-cleaning",
+    code: "cleaning",
+    name: "Cleaning",
+    category: "core",
+    defaultPriceMode: "quote",
+    defaultPrice: null,
+    suggestedMin: "150",
+    suggestedMax: "600",
+    discountEligible: true,
+    isAddon: false,
+    description: "Standard, deep, and turnover cleaning.",
+  },
+  {
+    id: "fallback-move-cleaning",
+    code: "move_cleaning",
+    name: "Move-In/Out Cleaning",
+    category: "core",
+    defaultPriceMode: "fixed",
+    defaultPrice: "300",
+    suggestedMin: "300",
+    suggestedMax: "1200",
+    discountEligible: true,
+    isAddon: false,
+    description: "Turnover cleaning before or after a move.",
+  },
+  {
+    id: "fallback-window-cleaning",
+    code: "window_cleaning",
+    name: "Window Cleaning",
+    category: "core",
+    defaultPriceMode: "quote",
+    defaultPrice: null,
+    suggestedMin: "75",
+    suggestedMax: "500",
+    discountEligible: true,
+    isAddon: false,
+    description: "Inside and outside window cleaning by pane count.",
+  },
+  {
+    id: "fallback-trash-valet",
+    code: "trash_valet",
+    name: "Trash Valet",
+    category: "core",
+    defaultPriceMode: "fixed",
+    defaultPrice: "30",
+    suggestedMin: "30",
+    suggestedMax: "129",
+    discountEligible: true,
+    isAddon: false,
+    description: "Curbside trash and recycling subscription.",
+  },
+  {
+    id: "fallback-custom",
+    code: "custom",
+    name: "Something Else",
+    category: "core",
+    defaultPriceMode: "quote",
+    defaultPrice: null,
+    suggestedMin: "0",
+    suggestedMax: null,
+    discountEligible: true,
+    isAddon: false,
+    description: "Use this when the job needs staff review before pricing.",
+  },
+];
+
 function defaultUnitPrice(svc: CatalogService): number {
   if (svc.defaultPrice) return parseFloat(svc.defaultPrice);
   if (svc.suggestedMin) return parseFloat(svc.suggestedMin);
@@ -73,6 +290,38 @@ function defaultUnitPrice(svc: CatalogService): number {
 
 function defaultPriceMode(svc: CatalogService): SelectedItem["priceMode"] {
   return (svc.defaultPriceMode as SelectedItem["priceMode"]) || "fixed";
+}
+
+function fallbackServiceName(code: string, label?: string | null) {
+  if (label?.trim()) return label.trim();
+  return code
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function fallbackCatalogService(code: string, label?: string | null): CatalogService {
+  const existing = FALLBACK_SERVICE_CATALOG.find((entry) => entry.code === code);
+  if (existing) {
+    return label?.trim() ? { ...existing, name: label.trim() } : existing;
+  }
+
+  return {
+    id: `fallback_${code}`,
+    code,
+    name: fallbackServiceName(code, label),
+    category: "core",
+    defaultPriceMode: "quote",
+    defaultPrice: null,
+    suggestedMin: null,
+    suggestedMax: null,
+    discountEligible: true,
+    isAddon: false,
+    description: "Quote-review service path.",
+  };
+}
+
+function resolveCatalogService(services: CatalogService[], code: string, label?: string | null): CatalogService {
+  return services.find((entry) => entry.code === code) || fallbackCatalogService(code, label);
 }
 
 function makeItem(svc: CatalogService): SelectedItem {
@@ -245,7 +494,11 @@ function serviceCodeFromAdFocus(value?: string): string {
   if (/\b(handyman|repair|assembly|assemble)\b/.test(focus)) return "handyman";
   if (/\b(window|windows)\b/.test(focus)) return "window_cleaning";
   if (/\b(snow|shovel|plow)\b/.test(focus)) return "snow_removal";
+  if (/\b(lawn|mow|yard)\b/.test(focus)) return "lawn_care";
   if (/\b(demo|demolition)\b/.test(focus)) return "demolition";
+  if (/\b(floor|flooring|vinyl|laminate)\b/.test(focus)) return "flooring";
+  if (/\b(roof|roofing|shingle|leak)\b/.test(focus)) return "roofing";
+  if (/\b(paint|painting)\b/.test(focus)) return "painting";
   if (/\b(labor|helper|extra hands|last-minute)\b/.test(focus)) return "labor";
   return "";
 }
@@ -429,15 +682,24 @@ function normalizeMarketplaceShapeId(value?: string | null): MarketplaceRequestS
 }
 
 function marketplaceShapeForServiceCode(serviceCode?: string | null): MarketplaceRequestShapeId {
-  if (serviceCode === "delivery") return "delivery_reuse";
-  if (serviceCode === "moving" || serviceCode === "junk_removal") return "moving_help";
-  return "fast_quote";
+  return getMarketplaceShapeForServiceCode(serviceCode).id;
 }
 
 function serviceCodeForMarketplaceShape(shapeId: MarketplaceRequestShapeId) {
   if (shapeId === "delivery_reuse") return "delivery";
   if (shapeId === "moving_help") return "moving";
   return null;
+}
+
+function defaultMarketplaceShapeId(codes: string[], explicit?: MarketplaceRequestShapeId | null): MarketplaceRequestShapeId {
+  if (explicit) return explicit;
+  const firstCode = codes.find(Boolean);
+  return firstCode ? marketplaceShapeForServiceCode(firstCode) : "delivery_reuse";
+}
+
+function priceMenuScope(task: ServicePriceMenuTask) {
+  const needs = task.customerNeeds.join(", ");
+  return `${task.label}: ${task.description} Typical range ${formatServicePriceRange(task)} (${task.priceUnit}). Need: ${needs}.`;
 }
 
 const STEPS = ["services", "address", "configure", "contact", "safety", "review"] as const;
@@ -570,23 +832,9 @@ function QuickRequestForm({
   initialServiceCode?: string;
 }) {
   const { toast } = useToast();
-  const fallbackServices = [
-    { code: "moving", name: "Moving" },
-    { code: "junk_removal", name: "Junk Removal" },
-    { code: "delivery", name: "Delivery" },
-    { code: "cleaning", name: "Cleaning" },
-    { code: "labor", name: "Labor" },
-    { code: "handyman", name: "Handyman" },
-    { code: "window_cleaning", name: "Window Cleaning" },
-    { code: "snow_removal", name: "Snow Removal" },
-    { code: "demolition", name: "Demolition" },
-    { code: "roofing", name: "Roofing" },
-    { code: "painting", name: "Painting" },
-    { code: "custom", name: "Something Else" },
-  ];
   const serviceOptions = services.length > 0
     ? services.filter((svc) => !svc.isAddon).map((svc) => ({ code: svc.code, name: svc.name }))
-    : fallbackServices;
+    : FALLBACK_SERVICE_CATALOG.filter((svc) => !svc.isAddon).map((svc) => ({ code: svc.code, name: svc.name }));
   const initialFromAdFocus = serviceCodeFromAdFocus(attribution.marketingTracking.jcFocus);
   const normalizedInitialServiceCode = normalizeServiceCodeParam(initialServiceCode || initialFromAdFocus || "");
   const serviceSuggestedFromAd = !initialServiceCode && !!initialFromAdFocus && serviceOptions.some((svc) => svc.code === normalizedInitialServiceCode);
@@ -1034,8 +1282,9 @@ export default function MultiServiceBookPage() {
   const [step, setStep] = useState<Step>("services");
   const [items, setItems] = useState<SelectedItem[]>([]);
   const [selectedMarketplaceShapeId, setSelectedMarketplaceShapeId] = useState<MarketplaceRequestShapeId>(
-    () => urlPrefill.marketplaceShapeId || "moving_help",
+    () => defaultMarketplaceShapeId(urlPrefill.codes, urlPrefill.marketplaceShapeId),
   );
+  const [selectedPriceMenuTaskId, setSelectedPriceMenuTaskId] = useState<string | null>(null);
   const [serviceAddress, setServiceAddress] = useState("");
   // Task #164 — captured by AddressField so the green confirmation pill
   // can render after a Places click, geocode-on-blur, or autofill resolve.
@@ -1219,7 +1468,9 @@ export default function MultiServiceBookPage() {
   const { data: catalogData } = useQuery<{ services: CatalogService[] }>({
     queryKey: ["/api/service-catalog"],
   });
-  const services: CatalogService[] = catalogData?.services || [];
+  const services: CatalogService[] = catalogData?.services?.length
+    ? catalogData.services
+    : FALLBACK_SERVICE_CATALOG;
 
   const { data: bundlesData } = useQuery<{ slots: BundleSlots; bundles: FeaturedBundle[] }>({
     queryKey: ["/api/bundles/featured"],
@@ -1510,6 +1761,7 @@ export default function MultiServiceBookPage() {
     const shapeId = selectedMarketplaceShapeId === "fast_quote" || selectedMarketplaceShapeId === "repeat_loop"
       ? selectedMarketplaceShapeId
       : marketplaceShapeForServiceCode(svc.code);
+    setSelectedPriceMenuTaskId(null);
     setSelectedMarketplaceShapeId(shapeId);
     setItems(prev => {
       const existing = prev.find(i => i.serviceCode === svc.code);
@@ -1525,6 +1777,7 @@ export default function MultiServiceBookPage() {
   }
 
   function applyMarketplaceShape(shapeId: MarketplaceRequestShapeId) {
+    setSelectedPriceMenuTaskId(null);
     setSelectedMarketplaceShapeId(shapeId);
     const targetCode = serviceCodeForMarketplaceShape(shapeId);
     const svc = targetCode ? services.find((entry) => entry.code === targetCode) : null;
@@ -1571,6 +1824,74 @@ export default function MultiServiceBookPage() {
     setBookingMode("builder");
   }
 
+  function applyPriceMenuTask(task: ServicePriceMenuTask) {
+    const svc = resolveCatalogService(services, task.serviceCode, task.label);
+    const shape = getMarketplaceRequestShape(task.shapeId);
+    const menuRange = formatServicePriceRange(task);
+    const taskScope = priceMenuScope(task);
+    const reviewNote = `Menu estimate only. Review before sold. Ops check: ${task.operationsSignal}`;
+    const shapedDetails: SelectedItem["details"] = {
+      marketplaceShapeId: task.shapeId,
+      marketplaceShape: shape?.shape || task.shapeId,
+      priceMenuTaskId: task.id,
+      priceMenuCategory: task.categoryId,
+      priceMenuRange: menuRange,
+      priceMenuUnit: task.priceUnit,
+      priceMenuCustomerNeeds: task.customerNeeds,
+      priceMenuOperationsSignal: task.operationsSignal,
+      priceReviewRequired: true,
+      priceMenuStatus: "estimate",
+      scope: taskScope,
+      notes: reviewNote,
+      crew: task.defaultCrew,
+      hours: task.defaultHours,
+      minPrice: task.priceMin,
+      maxPrice: task.priceMax,
+      inventoryCrewRecommendation: task.defaultCrew,
+      inventoryLaborHours: task.defaultHours,
+      inventoryPriceMin: task.priceMin,
+      inventoryPriceMax: task.priceMax,
+      quoteConfidence: task.jobSize === "quote_review" ? "low" : "medium",
+      jobSize: task.jobSize === "quote_review" ? "Quote review" : task.jobSize,
+      ...(task.movingPath ? { movingPath: task.movingPath } : {}),
+      ...(task.loadType ? { loadType: task.loadType } : {}),
+      ...(task.serviceCode === "moving"
+        ? {
+            truckNeeded: false,
+            truckSize: "Customer truck or container",
+            packageId: `price_menu_${task.id}`,
+            packageLabel: `${task.label} estimate (${menuRange})`,
+          }
+        : {}),
+    };
+
+    setSelectedPriceMenuTaskId(task.id);
+    setSelectedMarketplaceShapeId(task.shapeId);
+    setItems((prev) => {
+      const existing = prev.find((item) => item.serviceCode === svc.code);
+      const baseItem = existing || makeItem(svc);
+      const nextItem: SelectedItem = {
+        ...baseItem,
+        label: task.label,
+        unitPrice: task.priceMin,
+        priceMode: "quote",
+        details: {
+          ...baseItem.details,
+          ...shapedDetails,
+        },
+      };
+      return existing
+        ? prev.map((item) => item.serviceCode === svc.code ? nextItem : item)
+        : [...prev, nextItem];
+    });
+    setBookingMode("builder");
+    setStep(serviceAddress.trim() || addressZip ? "configure" : "address");
+    toast({
+      title: "Estimate path added",
+      description: `${task.label} added as ${menuRange}. Staff reviews before final price.`,
+    });
+  }
+
   function applySmartStart() {
     const raw = smartStartText.trim();
     if (!raw) {
@@ -1585,17 +1906,7 @@ export default function MultiServiceBookPage() {
     const inferred = inferSmartBookingText(raw);
     const serviceCode = serviceCodeFromSmartInference(inferred) || "moving";
     const inferredShapeId = marketplaceShapeForServiceCode(serviceCode);
-    const svc = services.find((entry) => entry.code === serviceCode)
-      || services.find((entry) => entry.code === "moving");
-
-    if (!svc) {
-      toast({
-        title: "Catalog still loading",
-        description: "Try again in a second.",
-        variant: "destructive",
-      });
-      return;
-    }
+    const svc = resolveCatalogService(services, serviceCode);
 
     setSelectedMarketplaceShapeId(inferredShapeId);
     const requestedDate = normalizeSmartDate(inferred.moveDate);
@@ -2428,6 +2739,12 @@ export default function MultiServiceBookPage() {
               <SmartRequestShapePicker
                 selectedShapeId={selectedMarketplaceShapeId}
                 onSelect={applyMarketplaceShape}
+                className="mb-3"
+              />
+              <ServicePriceMenu
+                activeShapeId={selectedMarketplaceShape.id}
+                selectedTaskId={selectedPriceMenuTaskId}
+                onSelectTask={applyPriceMenuTask}
                 className="mb-3"
               />
               <SmartBookingGuidanceCard
