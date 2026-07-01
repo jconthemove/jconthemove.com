@@ -25,6 +25,7 @@ import { JobOrderBuilder } from "@/components/JobOrderBuilder";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import MarketplaceSourceFlowStrip from "@/components/MarketplaceSourceFlowStrip";
+import { BookingMenuIntelligenceCard } from "@/components/BookingMenuIntelligenceCard";
 import type { MarketplaceActionPhase } from "@shared/marketplaceShapes";
 
 interface SquareInvoice {
@@ -1023,6 +1024,12 @@ export default function LeadDetailPage() {
             serviceLabel={marketplaceServiceLabel}
             audience={marketplaceAudience}
             phase={marketplacePhase}
+            className="mt-3"
+          />
+          <BookingMenuIntelligenceCard
+            quoteSnapshot={lead.quoteSnapshot}
+            fallbackServiceLabel={marketplaceServiceLabel}
+            audience={marketplaceAudience}
             className="mt-3"
           />
         </div>

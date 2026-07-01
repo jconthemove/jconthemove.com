@@ -8480,6 +8480,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         hasPoolTable: leads.hasPoolTable,
         details: leads.details,
         dispatchNotes: leads.dispatchNotes,
+        quoteSnapshot: leads.quoteSnapshot,
         crewMembers: leads.crewMembers,
         createdAt: leads.createdAt,
         urgency: leads.urgency,

@@ -29,6 +29,7 @@ import MarketplaceNextStepFlow from "@/components/MarketplaceNextStepFlow";
 import MarketplaceSourceFlowStrip from "@/components/MarketplaceSourceFlowStrip";
 import MarketplaceTaskSplit from "@/components/MarketplaceTaskSplit";
 import SmartBookingGuidanceCard from "@/components/SmartBookingGuidanceCard";
+import { BookingMenuIntelligenceCard } from "@/components/BookingMenuIntelligenceCard";
 import type { SmartBookingAnswers } from "@shared/smartBookingEngine";
 
 const SERVICE_ICONS: Record<string, string> = {
@@ -153,6 +154,7 @@ type JobBoardLead = {
   firstName?: string;
   lastName?: string;
   dispatchNotes?: string | null;
+  quoteSnapshot?: unknown;
   bonus?: { amount: number; reasons: string[] } | null;
 };
 
@@ -182,6 +184,7 @@ type EnrichedLead = {
   dispatchState?: string | null;
   dispatchOfferedTo?: string | null;
   dispatchOfferExpiresAt?: string | null;
+  quoteSnapshot?: unknown;
   enRouteAt?: string | null;
   onSiteAt?: string | null;
   completedAt?: string | null;
@@ -812,6 +815,11 @@ function JobDetailSheet({
             audience="worker"
             maxIdeas={2}
             maxFlows={1}
+          />
+          <BookingMenuIntelligenceCard
+            quoteSnapshot={lead.quoteSnapshot}
+            fallbackServiceLabel={SERVICE_LABELS[lead.serviceType] || lead.serviceType}
+            audience="worker"
           />
 
           {/* Date & Time */}
