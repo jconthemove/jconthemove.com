@@ -5,6 +5,8 @@ import RewardsMarketplacePage from "@/pages/rewards-marketplace";
 import MarketplaceZonePricingPage from "@/pages/admin/marketplace-zone-pricing";
 import AuthorityTasksCard from "@/components/AuthorityTasksCard";
 import MarketplaceActionMatrix from "@/components/MarketplaceActionMatrix";
+import MarketplaceCoverageAudit from "@/components/MarketplaceCoverageAudit";
+import MarketplaceFocusRouter from "@/components/MarketplaceFocusRouter";
 import MarketplaceNextStepFlow from "@/components/MarketplaceNextStepFlow";
 import MarketplaceSmartBookingEngine from "@/components/MarketplaceSmartBookingEngine";
 import MarketplaceSourceLookup from "@/components/MarketplaceSourceLookup";
@@ -243,14 +245,16 @@ export default function AdminMarketplacePage() {
                 </div>
               ))}
             </section>
+            <MarketplaceFocusRouter />
             <AuthorityTasksCard />
             <MarketplaceNextStepFlow compact />
             <MarketplaceTaskSplit compact />
             <MarketplaceActionMatrix compact rail="all" limit={9} />
             <MarketplaceSmartBookingEngine />
           </TabsContent>
-          <TabsContent value="sources">
+          <TabsContent value="sources" className="space-y-5">
             <MarketplaceSourceLookup />
+            <MarketplaceCoverageAudit />
           </TabsContent>
           <TabsContent value="zones">
             <MarketplaceZonePricingPage />
