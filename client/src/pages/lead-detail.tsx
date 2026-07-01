@@ -26,6 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DatePicker } from "@/components/ui/date-picker";
 import MarketplaceSourceFlowStrip from "@/components/MarketplaceSourceFlowStrip";
 import { BookingMenuIntelligenceCard } from "@/components/BookingMenuIntelligenceCard";
+import { extractBookingMenuIntelligence } from "@/lib/booking-menu-intelligence";
 import type { MarketplaceActionPhase } from "@shared/marketplaceShapes";
 
 interface SquareInvoice {
@@ -867,12 +868,14 @@ export default function LeadDetailPage() {
   const currentStep = getCurrentStep();
   const marketplaceFirstItem = leadFirstRequestedItem(lead);
   const marketplaceShapeId = leadMarketplaceShapeId(lead);
-  const marketplaceSource = leadMarketplaceSource(lead);
   const marketplaceAudience: "customer" | "worker" | "company" = hasAdminAccess ? "company" : isEmployee ? "worker" : "customer";
   const marketplacePhase = marketplacePhaseForLeadDetail(lead.status);
   const marketplaceServiceCode = marketplaceFirstItem?.serviceCode || lead.serviceType;
-  const marketplaceServiceLabel =
+  const fallbackMarketplaceServiceLabel =
     marketplaceFirstItem?.serviceLabel || lead.serviceType?.replace(/_/g, " ") || "Service";
+  const menuIntelligence = extractBookingMenuIntelligence(lead.quoteSnapshot, fallbackMarketplaceServiceLabel);
+  const marketplaceSource = menuIntelligence?.sourceSignal || leadMarketplaceSource(lead);
+  const marketplaceServiceLabel = menuIntelligence?.serviceLabel || fallbackMarketplaceServiceLabel;
 
   const handlePhotoUpload = async (files: FileList) => {
     if (!files.length) return;

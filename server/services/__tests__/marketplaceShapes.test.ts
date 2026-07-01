@@ -9,6 +9,7 @@ import {
   MARKETPLACE_SMART_BOOKING_STEPS,
   getMarketplaceShapeForServiceCode,
   getMarketplaceSourceFlowForSource,
+  getMarketplaceSourceFlowsForContext,
   type MarketplaceActionPhase,
   type MarketplaceActionRail,
   type MarketplaceRequestShapeId,
@@ -253,6 +254,24 @@ test("keeps each service menu category tied to the intended outside-source patte
     for (const reference of references) {
       assert.ok(signal.includes(reference), `${taskId} source signal should include ${reference}`);
     }
+  }
+});
+
+test("routes every service menu source signal into an operational source flow", () => {
+  for (const task of SERVICE_PRICE_MENU) {
+    const signal = sourceSignalForServicePriceMenuTask(task);
+    const [flow] = getMarketplaceSourceFlowsForContext({
+      source: signal,
+      serviceCode: task.serviceCode,
+      serviceLabel: task.label,
+      limit: 1,
+    });
+
+    assert.ok(flow, `${task.id} source signal should resolve to an operational flow`);
+    assert.ok(
+      task.shapeId === flow.shapeIds[0] || flow.shapeIds.includes(task.shapeId),
+      `${task.id} source signal should keep ${task.shapeId} in scope`,
+    );
   }
 });
 

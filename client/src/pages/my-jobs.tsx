@@ -17,6 +17,7 @@ import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 import MarketplaceSourceFlowStrip from "@/components/MarketplaceSourceFlowStrip";
 import SmartBookingGuidanceCard from "@/components/SmartBookingGuidanceCard";
 import { BookingMenuIntelligenceCard } from "@/components/BookingMenuIntelligenceCard";
+import { extractBookingMenuIntelligence } from "@/lib/booking-menu-intelligence";
 import type { LucideIcon } from "lucide-react";
 import type { SmartBookingAnswers } from "@shared/smartBookingEngine";
 
@@ -436,6 +437,9 @@ function JobSheet({ job, open, onClose, onNewJob }: {
   const isActive = ["available", "confirmed", "in_progress", "accepted"].includes(job.status);
   const isDone = ["completed", "paid"].includes(job.status);
   const guidanceAnswers = smartBookingAnswersForCustomerJob(job);
+  const menuIntelligence = extractBookingMenuIntelligence(job.quoteSnapshot, svc.label);
+  const marketplaceSourceContext = menuIntelligence?.sourceSignal || null;
+  const marketplaceServiceLabel = menuIntelligence?.serviceLabel || svc.label;
 
   return (
     <Sheet open={open} onOpenChange={onClose}>
@@ -469,31 +473,37 @@ function JobSheet({ job, open, onClose, onNewJob }: {
             compact
           />
           <MarketplaceProcessGuide
+            source={marketplaceSourceContext}
             serviceCode={job.serviceType}
+            serviceLabel={marketplaceServiceLabel}
             audience="customer"
             compact
           />
           <MarketplaceActionMatrix
             rail="customer"
             phase={customerActionPhaseForJob(job)}
+            source={marketplaceSourceContext}
             serviceCode={job.serviceType}
+            serviceLabel={marketplaceServiceLabel}
             compact
             limit={2}
           />
           <MarketplaceSourceFlowStrip
+            source={marketplaceSourceContext}
             serviceCode={job.serviceType}
-            serviceLabel={svc.label}
+            serviceLabel={marketplaceServiceLabel}
             audience="customer"
             phase={customerActionPhaseForJob(job)}
           />
           <MarketplaceShapeContext
             serviceCode={job.serviceType}
+            source={marketplaceSourceContext}
             audience="customer"
             maxIdeas={2}
           />
           <BookingMenuIntelligenceCard
             quoteSnapshot={job.quoteSnapshot}
-            fallbackServiceLabel={svc.label}
+            fallbackServiceLabel={marketplaceServiceLabel}
             audience="customer"
           />
 

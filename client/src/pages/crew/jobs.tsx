@@ -30,6 +30,7 @@ import MarketplaceSourceFlowStrip from "@/components/MarketplaceSourceFlowStrip"
 import MarketplaceTaskSplit from "@/components/MarketplaceTaskSplit";
 import SmartBookingGuidanceCard from "@/components/SmartBookingGuidanceCard";
 import { BookingMenuIntelligenceCard } from "@/components/BookingMenuIntelligenceCard";
+import { extractBookingMenuIntelligence } from "@/lib/booking-menu-intelligence";
 import type { SmartBookingAnswers } from "@shared/smartBookingEngine";
 
 const SERVICE_ICONS: Record<string, string> = {
@@ -749,6 +750,10 @@ function JobDetailSheet({
   const hrPay = 25;
   const crewMembersArr: string[] = Array.isArray(lead.crewMembers) ? lead.crewMembers : [];
   const guidanceAnswers = smartBookingAnswersForCrewLead(lead);
+  const fallbackServiceLabel = SERVICE_LABELS[lead.serviceType] || lead.serviceType;
+  const menuIntelligence = extractBookingMenuIntelligence(lead.quoteSnapshot, fallbackServiceLabel);
+  const marketplaceSourceContext = menuIntelligence?.sourceSignal || null;
+  const marketplaceServiceLabel = menuIntelligence?.serviceLabel || fallbackServiceLabel;
 
   const crewEmployees = crewMembersArr
     .map(id => employees.find(e => e.id === id))
@@ -793,32 +798,38 @@ function JobDetailSheet({
             compact
           />
           <MarketplaceProcessGuide
+            source={marketplaceSourceContext}
             serviceCode={lead.serviceType}
+            serviceLabel={marketplaceServiceLabel}
             audience="worker"
             compact
           />
           <MarketplaceActionMatrix
             rail="worker"
             phase={workerActionPhaseForLead(lead)}
+            source={marketplaceSourceContext}
             serviceCode={lead.serviceType}
+            serviceLabel={marketplaceServiceLabel}
             compact
             limit={3}
           />
           <MarketplaceSourceFlowStrip
+            source={marketplaceSourceContext}
             serviceCode={lead.serviceType}
-            serviceLabel={SERVICE_LABELS[lead.serviceType] || lead.serviceType}
+            serviceLabel={marketplaceServiceLabel}
             audience="worker"
             phase={workerActionPhaseForLead(lead)}
           />
           <MarketplaceShapeContext
             serviceCode={lead.serviceType}
+            source={marketplaceSourceContext}
             audience="worker"
             maxIdeas={2}
             maxFlows={1}
           />
           <BookingMenuIntelligenceCard
             quoteSnapshot={lead.quoteSnapshot}
-            fallbackServiceLabel={SERVICE_LABELS[lead.serviceType] || lead.serviceType}
+            fallbackServiceLabel={marketplaceServiceLabel}
             audience="worker"
           />
 

@@ -41,6 +41,7 @@ import ProcessFlowCard, { type ProcessFlowStep, type ProcessStepState } from "@/
 import SmartBookingGuidanceCard from "@/components/SmartBookingGuidanceCard";
 import { BookingMenuIntelligenceCard } from "@/components/BookingMenuIntelligenceCard";
 import { extractCustomerMediaLink } from "@/lib/lead-details";
+import { extractBookingMenuIntelligence } from "@/lib/booking-menu-intelligence";
 import type { SmartBookingAnswers } from "@shared/smartBookingEngine";
 
 const SERVICE_ICONS: Record<string, string> = {
@@ -858,6 +859,12 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
   const customerMediaLink = extractCustomerMediaLink(lead.details);
   const marketplaceShape = leadMarketplaceShape(lead);
   const marketplaceShapeId = leadMarketplaceShapeId(lead);
+  const marketplaceFirstItem = leadFirstRequestedItem(lead);
+  const fallbackServiceLabel = marketplaceFirstItem?.serviceLabel || SERVICE_LABELS[lead.serviceType] || lead.serviceType;
+  const menuIntelligence = extractBookingMenuIntelligence(lead.quoteSnapshot, fallbackServiceLabel);
+  const marketplaceSourceContext = menuIntelligence?.sourceSignal || sourceLabel || lead.source;
+  const marketplaceServiceCode = marketplaceFirstItem?.serviceCode || lead.serviceType;
+  const marketplaceServiceLabel = menuIntelligence?.serviceLabel || fallbackServiceLabel;
   const priceReady = Math.max(numericPrice(displayPrice), numericPrice(displayBasePrice)) > 0;
   const scheduleReady = Boolean(effectiveDate || lead.arrivalWindow);
   const contactReady = Boolean((lead.phone || lead.email) && (lead.fromAddress || lead.details || photos.length > 0));
@@ -1025,40 +1032,41 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
             </p>
           </div>
           <MarketplaceProcessGuide
-            source={sourceLabel || lead.source}
+            source={marketplaceSourceContext}
             shapeId={marketplaceShapeId}
-            serviceCode={lead.serviceType}
+            serviceCode={marketplaceServiceCode}
             audience="company"
             compact
           />
           <MarketplaceActionMatrix
             rail="platinum"
             phase={marketplaceActionPhaseForLead(lead)}
-            source={sourceLabel || lead.source}
+            source={marketplaceSourceContext}
             shapeId={marketplaceShapeId}
-            serviceCode={lead.serviceType}
+            serviceCode={marketplaceServiceCode}
+            serviceLabel={marketplaceServiceLabel}
             compact
             limit={3}
           />
           <MarketplaceSourceFlowStrip
-            source={sourceLabel || lead.source}
+            source={marketplaceSourceContext}
             shapeId={marketplaceShapeId}
-            serviceCode={lead.serviceType}
-            serviceLabel={SERVICE_LABELS[lead.serviceType] || lead.serviceType}
+            serviceCode={marketplaceServiceCode}
+            serviceLabel={marketplaceServiceLabel}
             audience="company"
             phase={marketplaceActionPhaseForLead(lead)}
           />
           <MarketplaceShapeContext
             shapeId={marketplaceShapeId}
-            serviceCode={lead.serviceType}
-            source={sourceLabel || lead.source}
+            serviceCode={marketplaceServiceCode}
+            source={marketplaceSourceContext}
             audience="company"
             maxIdeas={3}
             maxFlows={2}
           />
           <BookingMenuIntelligenceCard
             quoteSnapshot={lead.quoteSnapshot}
-            fallbackServiceLabel={SERVICE_LABELS[lead.serviceType] || lead.serviceType}
+            fallbackServiceLabel={marketplaceServiceLabel}
             audience="company"
           />
 

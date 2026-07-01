@@ -257,7 +257,7 @@ export const MARKETPLACE_FUNCTIONAL_IDEAS: MarketplaceFunctionalIdea[] = [
     companyReality: "Gold/Platinum approval protects pricing while speeding up response time.",
     surface: "Authority Tasks, Pending Quotes, Ops Board",
     status: "live",
-    shapeIds: ["fast_quote", "moving_help"],
+    shapeIds: ["fast_quote", "moving_help", "delivery_reuse", "repeat_loop"],
   },
   {
     reference: "Yelp + Google",
@@ -634,7 +634,7 @@ export const MARKETPLACE_SOURCE_FLOW_MATRIX: MarketplaceSourceFlow[] = [
     surfaces: "Authority Tasks, Pending Quotes, Ops Board",
     rewardTrigger: "Bonus JCMOVES when quote task contributes to approved card.",
     status: "live",
-    shapeIds: ["fast_quote", "moving_help"],
+    shapeIds: ["fast_quote", "moving_help", "delivery_reuse", "repeat_loop"],
     flywheelStages: ["quote", "dispatch"],
   },
   {
@@ -1359,6 +1359,9 @@ export function getMarketplaceSourceFlowForSource(source: string | null | undefi
   if (exactId) return MARKETPLACE_SOURCE_FLOW_MATRIX.find((flow) => flow.id === exactId) || null;
 
   const parts = normalized.split("_").filter(Boolean);
+  const partAlias = parts.map((part) => directAliases[part]).find(Boolean);
+  if (partAlias) return MARKETPLACE_SOURCE_FLOW_MATRIX.find((flow) => flow.id === partAlias) || null;
+
   return MARKETPLACE_SOURCE_FLOW_MATRIX.find((flow) => {
     const tokens = new Set(sourceTokens(flow));
     return parts.some((part) => tokens.has(part));
