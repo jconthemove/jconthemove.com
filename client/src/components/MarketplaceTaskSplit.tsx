@@ -11,6 +11,7 @@ import {
 import {
   MARKETPLACE_ACTION_TASKS,
   getMarketplaceSourceFlowsForContext,
+  getMarketplaceSourceFlowsForActionTask,
   type MarketplaceActionPhase,
   type MarketplaceActionRail,
   type MarketplaceActionTask,
@@ -272,6 +273,8 @@ function RailLane({
 
 function SplitTask({ task, compact }: { task: MarketplaceActionTask; compact: boolean }) {
   const Icon = phaseIcons[task.phase];
+  const sourceFlows = getMarketplaceSourceFlowsForActionTask(task, compact ? 2 : 4);
+
   return (
     <div className="rounded-md border border-slate-800 bg-slate-900/70 p-2.5">
       <div className="flex items-start justify-between gap-2">
@@ -288,6 +291,18 @@ function SplitTask({ task, compact }: { task: MarketplaceActionTask; compact: bo
           </span>
         )}
       </div>
+      {sourceFlows.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {sourceFlows.map((flow) => (
+            <span
+              key={flow.id}
+              className="rounded-full border border-cyan-400/25 bg-cyan-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-cyan-200"
+            >
+              {flow.source}
+            </span>
+          ))}
+        </div>
+      )}
       {!compact && (
         <>
           <p className="mt-2 text-[11px] leading-4 text-slate-300">{task.action}</p>

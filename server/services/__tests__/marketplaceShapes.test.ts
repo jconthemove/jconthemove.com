@@ -10,6 +10,7 @@ import {
   getMarketplaceShapeForServiceCode,
   getMarketplaceReferenceBlueprintsForSource,
   getMarketplaceSourceFlowForSource,
+  getMarketplaceSourceFlowsForActionTask,
   getMarketplaceSourceFlowsForContext,
   type MarketplaceActionPhase,
   type MarketplaceActionRail,
@@ -238,6 +239,18 @@ test("links every source flow to at least one operational action task", () => {
 
   for (const flow of MARKETPLACE_SOURCE_FLOW_MATRIX) {
     assert.ok(linkedFlowIds.has(flow.id), `${flow.id} should be linked to at least one action task`);
+  }
+});
+
+test("resolves every action task into visible source play chips", () => {
+  for (const task of MARKETPLACE_ACTION_TASKS) {
+    const flows = getMarketplaceSourceFlowsForActionTask(task);
+    assert.equal(flows.length, task.flowIds.length, `${task.id} should resolve every flow id`);
+    assert.deepEqual(
+      flows.map((flow) => flow.id),
+      task.flowIds,
+      `${task.id} source chips should preserve configured flow order`,
+    );
   }
 });
 

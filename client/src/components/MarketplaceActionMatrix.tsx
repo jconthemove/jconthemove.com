@@ -11,6 +11,7 @@ import {
 import {
   MARKETPLACE_ACTION_TASKS,
   getMarketplaceSourceFlowsForContext,
+  getMarketplaceSourceFlowsForActionTask,
   type MarketplaceActionPhase,
   type MarketplaceActionRail,
   type MarketplaceActionTask,
@@ -192,6 +193,8 @@ export default function MarketplaceActionMatrix({
 }
 
 function ActionTaskCard({ task, compact }: { task: MarketplaceActionTask; compact: boolean }) {
+  const sourceFlows = getMarketplaceSourceFlowsForActionTask(task, compact ? 2 : 4);
+
   return (
     <div className="rounded-md border border-slate-800 bg-slate-900/70 p-3">
       <div className="flex items-start justify-between gap-3">
@@ -215,6 +218,19 @@ function ActionTaskCard({ task, compact }: { task: MarketplaceActionTask; compac
       </div>
 
       <p className="mt-2 text-xs leading-5 text-slate-300">{task.action}</p>
+
+      {sourceFlows.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {sourceFlows.map((flow) => (
+            <span
+              key={flow.id}
+              className="rounded-full border border-cyan-400/25 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-cyan-200"
+            >
+              {flow.source}
+            </span>
+          ))}
+        </div>
+      )}
 
       {!compact && (
         <div className="mt-3 grid gap-2">

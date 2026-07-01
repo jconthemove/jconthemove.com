@@ -1052,6 +1052,24 @@ const SCENARIOS: Scenario[] = [
           ],
         },
         {
+          name: "action matrix source chips",
+          path: "client/src/components/MarketplaceActionMatrix.tsx",
+          required: [
+            "getMarketplaceSourceFlowsForActionTask",
+            "sourceFlows.map",
+            "flow.source",
+          ],
+        },
+        {
+          name: "task split source chips",
+          path: "client/src/components/MarketplaceTaskSplit.tsx",
+          required: [
+            "getMarketplaceSourceFlowsForActionTask",
+            "sourceFlows.map",
+            "flow.source",
+          ],
+        },
+        {
           name: "customer my-jobs",
           path: "client/src/pages/my-jobs.tsx",
           required: [

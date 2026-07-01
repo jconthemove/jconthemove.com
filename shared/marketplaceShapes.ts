@@ -1274,6 +1274,14 @@ export function getMarketplaceActionTasksForPhase(phase: MarketplaceActionPhase)
   return MARKETPLACE_ACTION_TASKS.filter((task) => task.phase === phase);
 }
 
+export function getMarketplaceSourceFlowsForActionTask(task: Pick<MarketplaceActionTask, "flowIds">, limit = 4) {
+  const flowById = new Map(MARKETPLACE_SOURCE_FLOW_MATRIX.map((flow) => [flow.id, flow]));
+  return task.flowIds
+    .map((flowId) => flowById.get(flowId))
+    .filter((flow): flow is MarketplaceSourceFlow => Boolean(flow))
+    .slice(0, Math.max(0, limit));
+}
+
 export function getMarketplaceSmartBookingStepsForShape(id: MarketplaceRequestShapeId) {
   return MARKETPLACE_SMART_BOOKING_STEPS
     .filter((step) => step.shapeIds.includes(id))
