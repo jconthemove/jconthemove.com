@@ -4,6 +4,7 @@ import {
   SERVICE_PRICE_MENU,
   SERVICE_PRICE_MENU_CATEGORIES,
   formatServicePriceRange,
+  sourceSignalForServicePriceMenuTask,
   type ServicePriceMenuCategoryId,
   type ServicePriceMenuTask,
 } from "@shared/servicePriceMenu";
@@ -48,6 +49,7 @@ export default function ServicePriceMenu({
         task.priceUnit,
         ...task.tags,
         ...task.customerNeeds,
+        sourceSignalForServicePriceMenuTask(task),
       ].join(" ").toLowerCase();
       return haystack.includes(q);
     });
@@ -103,6 +105,7 @@ export default function ServicePriceMenu({
       <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
         {visibleTasks.map((task) => {
           const selected = task.id === selectedTaskId;
+          const sourceSignal = sourceSignalForServicePriceMenuTask(task);
           return (
             <button
               key={task.id}
@@ -146,6 +149,10 @@ export default function ServicePriceMenu({
                   Add
                 </span>
               </div>
+
+              <p className="mt-2 line-clamp-2 text-[10px] leading-4 text-cyan-200/85">
+                {sourceSignal}
+              </p>
             </button>
           );
         })}

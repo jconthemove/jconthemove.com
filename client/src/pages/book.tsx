@@ -48,6 +48,7 @@ import {
 } from "@shared/marketplaceShapes";
 import {
   formatServicePriceRange,
+  sourceSignalForServicePriceMenuTask,
   type ServicePriceMenuTask,
 } from "@shared/servicePriceMenu";
 import {
@@ -1828,6 +1829,7 @@ export default function MultiServiceBookPage() {
     const svc = resolveCatalogService(services, task.serviceCode, task.label);
     const shape = getMarketplaceRequestShape(task.shapeId);
     const menuRange = formatServicePriceRange(task);
+    const sourceSignal = sourceSignalForServicePriceMenuTask(task);
     const taskScope = priceMenuScope(task);
     const reviewNote = `Menu estimate only. Review before sold. Ops check: ${task.operationsSignal}`;
     const shapedDetails: SelectedItem["details"] = {
@@ -1839,6 +1841,7 @@ export default function MultiServiceBookPage() {
       priceMenuUnit: task.priceUnit,
       priceMenuCustomerNeeds: task.customerNeeds,
       priceMenuOperationsSignal: task.operationsSignal,
+      priceMenuSourceSignal: sourceSignal,
       priceReviewRequired: true,
       priceMenuStatus: "estimate",
       scope: taskScope,

@@ -82,6 +82,7 @@ export interface SelectedItem {
     priceMenuUnit?: string;
     priceMenuCustomerNeeds?: string[];
     priceMenuOperationsSignal?: string;
+    priceMenuSourceSignal?: string;
     priceReviewRequired?: boolean;
     priceMenuStatus?: "estimate" | "menu_price";
     // Task #141: Moving / Junk Removal package picker snapshot — mirrors the

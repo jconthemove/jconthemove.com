@@ -457,3 +457,31 @@ export const SERVICE_PRICE_MENU: ServicePriceMenuTask[] = [
 export function formatServicePriceRange(task: ServicePriceMenuTask): string {
   return `$${task.priceMin.toLocaleString()}-$${task.priceMax.toLocaleString()}`;
 }
+
+export function sourceSignalForServicePriceMenuTask(task: ServicePriceMenuTask): string {
+  if (task.categoryId === "moving") {
+    return "MovingHelp / MovingHelper rate rows + U-Haul / PODS container sizing";
+  }
+
+  if (task.categoryId === "repeat") {
+    return "McDonald's repeat habit + Google / Facebook local triggers + JCMOVES rewards";
+  }
+
+  if (task.categoryId === "projects") {
+    return "Porch / HireAHelper scope capture + Yelp / Google trust proof";
+  }
+
+  if (task.id === "donation_or_dump_run") {
+    return "Goodwill reuse path + Craigslist / Facebook pickup intent";
+  }
+
+  if (task.id === "small_project_block") {
+    return "Porch / HireAHelper small-job quote path + Yelp photo proof";
+  }
+
+  if (task.id === "store_pickup") {
+    return "Target / Walmart pickup flow + Google address intent";
+  }
+
+  return "Target / Walmart delivery cards + Yelp photo trust";
+}

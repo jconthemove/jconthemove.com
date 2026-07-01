@@ -18,6 +18,7 @@ import {
   SERVICE_PRICE_MENU,
   SERVICE_PRICE_MENU_CATEGORIES,
   formatServicePriceRange,
+  sourceSignalForServicePriceMenuTask,
 } from "../../../shared/servicePriceMenu";
 
 let passed = 0;
@@ -232,6 +233,26 @@ test("keeps the smart service price menu usable and tied to valid request shapes
     assert.ok(task.tags.length > 0, `${task.id} should have searchable tags`);
     assert.ok(task.customerNeeds.length > 0, `${task.id} should tell the intake what to ask for`);
     assert.match(formatServicePriceRange(task), /^\$[\d,]+-\$[\d,]+$/, `${task.id} should format a customer range`);
+    assertFilled(sourceSignalForServicePriceMenuTask(task), `${task.id}.sourceSignal`);
+  }
+});
+
+test("keeps each service menu category tied to the intended outside-source pattern", () => {
+  const expectedSignals: Array<[string, string[]]> = [
+    ["store_pickup", ["Target", "Walmart", "Google"]],
+    ["donation_or_dump_run", ["Goodwill", "Craigslist", "Facebook"]],
+    ["load_truck", ["MovingHelp", "MovingHelper", "U-Haul", "PODS"]],
+    ["lawn_one_time", ["McDonald's", "Google", "Facebook", "JCMOVES"]],
+    ["handyman_small_repair", ["Porch", "HireAHelper", "Yelp", "Google"]],
+  ];
+
+  for (const [taskId, references] of expectedSignals) {
+    const task = SERVICE_PRICE_MENU.find((entry) => entry.id === taskId);
+    assert.ok(task, `${taskId} should exist in the service price menu`);
+    const signal = sourceSignalForServicePriceMenuTask(task!);
+    for (const reference of references) {
+      assert.ok(signal.includes(reference), `${taskId} source signal should include ${reference}`);
+    }
   }
 });
 
