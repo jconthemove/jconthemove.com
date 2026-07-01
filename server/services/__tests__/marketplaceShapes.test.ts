@@ -195,6 +195,14 @@ test("covers every action rail and phase with proof, guardrails, source flow lin
   }
 });
 
+test("links every source flow to at least one operational action task", () => {
+  const linkedFlowIds = new Set(MARKETPLACE_ACTION_TASKS.flatMap((task) => task.flowIds));
+
+  for (const flow of MARKETPLACE_SOURCE_FLOW_MATRIX) {
+    assert.ok(linkedFlowIds.has(flow.id), `${flow.id} should be linked to at least one action task`);
+  }
+});
+
 if (process.exitCode && process.exitCode !== 0) {
   console.error(`marketplaceShapes(): ${passed} test(s) passed before failure`);
 } else {

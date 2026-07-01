@@ -16,6 +16,14 @@ import { computeBookingQuote } from "./bookingPricing";
 import { validateRedemption, tokensToDollars } from "../../shared/tokenRedemptionRules";
 import { isDispatchable } from "../dispatch/isDispatchable";
 import { getAppUrl } from "../appUrl";
+import {
+  MARKETPLACE_ACTION_TASKS,
+  MARKETPLACE_OPERATING_FLYWHEEL,
+  MARKETPLACE_REFERENCE_BLUEPRINTS,
+  MARKETPLACE_REQUEST_SHAPES,
+  MARKETPLACE_SOURCE_FLOW_MATRIX,
+  getMarketplaceSourceFlowForSource,
+} from "../../shared/marketplaceShapes";
 
 export type ScenarioId =
   | "env_required"
@@ -35,6 +43,7 @@ export type ScenarioId =
   | "public_conversion_routes"
   | "admin_access_ready"
   | "public_booking_catalog"
+  | "marketplace_source_model"
   | "quick_request_notifications"
   | "quick_request_storage"
   | "tracked_marketing_funnel"
@@ -797,6 +806,70 @@ const SCENARIOS: Scenario[] = [
       return missing.length === 0
         ? { ok: true, detail: `${rows.length} active services; core booking funnel present` }
         : { ok: false, detail: `missing active service codes: ${missing.join(", ")}` };
+    },
+  },
+  {
+    id: "marketplace_source_model",
+    label: "Marketplace source model covers customer, worker, company flows",
+    run: async () => {
+      const requiredAliases = [
+        "target",
+        "walmart",
+        "goodwill",
+        "mc donalds",
+        "2men and a truck",
+        "uhaul",
+        "movinghelp.com",
+        "movinghelper.com",
+        "porch moving group",
+        "hire-a-helper",
+        "yelp",
+        "facebook",
+        "google",
+        "pods",
+        "craigslist",
+        "square",
+        "discord",
+        "jcmoves",
+        "generosity",
+        "mom",
+      ];
+      const missingAliases = requiredAliases.filter((alias) => !getMarketplaceSourceFlowForSource(alias));
+      if (missingAliases.length > 0) {
+        return { ok: false, detail: `missing source aliases: ${missingAliases.join(", ")}` };
+      }
+
+      const requiredReferences = ["Target", "Walmart", "Goodwill", "McDonald's", "U-Haul", "MovingHelp", "JCMOVES Crypto", "Generosity Fund"];
+      const referenceText = MARKETPLACE_REFERENCE_BLUEPRINTS.map((blueprint) => blueprint.reference).join(" ").toLowerCase();
+      const missingReferences = requiredReferences.filter((reference) => !referenceText.includes(reference.toLowerCase()));
+      if (missingReferences.length > 0) {
+        return { ok: false, detail: `missing reference blueprints: ${missingReferences.join(", ")}` };
+      }
+
+      const linkedFlowIds = new Set(MARKETPLACE_ACTION_TASKS.flatMap((task) => task.flowIds));
+      const orphanFlows = MARKETPLACE_SOURCE_FLOW_MATRIX.filter((flow) => !linkedFlowIds.has(flow.id));
+      if (orphanFlows.length > 0) {
+        return { ok: false, detail: `source flow(s) without action tasks: ${orphanFlows.map((flow) => flow.id).join(", ")}` };
+      }
+
+      const incompleteFlows = MARKETPLACE_SOURCE_FLOW_MATRIX.filter((flow) => (
+        !flow.start.trim()
+        || !flow.progress.trim()
+        || !flow.finish.trim()
+        || !flow.customerMove.trim()
+        || !flow.workerMove.trim()
+        || !flow.companyControl.trim()
+        || !flow.automationHook.trim()
+        || !flow.rewardTrigger.trim()
+      ));
+      if (incompleteFlows.length > 0) {
+        return { ok: false, detail: `incomplete source flow(s): ${incompleteFlows.map((flow) => flow.id).join(", ")}` };
+      }
+
+      return {
+        ok: true,
+        detail: `${MARKETPLACE_SOURCE_FLOW_MATRIX.length} source flows, ${MARKETPLACE_REQUEST_SHAPES.length} request shapes, ${MARKETPLACE_OPERATING_FLYWHEEL.length} flywheel stages, ${MARKETPLACE_ACTION_TASKS.length} action tasks`,
+      };
     },
   },
   {
