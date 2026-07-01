@@ -40,6 +40,7 @@ export type ScenarioId =
   | "deposit_gating"
   | "wallet_table"
   | "jcmoves_receive_redeem"
+  | "giveback_fund_safety"
   | "btc_sweep_alive"
   | "public_app_url"
   | "public_conversion_routes"
@@ -788,6 +789,144 @@ const SCENARIOS: Scenario[] = [
       return {
         ok: true,
         detail: `${row.wallet_count} wallets; ${row.active_reward_items} active rewards; approval threshold ${Number(row.auto_approve_threshold).toLocaleString()} JCMOVES; customer + crew receive/redeem UI mounted`,
+      };
+    },
+  },
+  {
+    id: "giveback_fund_safety",
+    label: "Mom and platform generosity funds are live and separated",
+    run: async () => {
+      const { rows } = await pool.query<{
+        mom_wallet_count: number;
+        mom_balance: string | null;
+        mom_total_earned: string | null;
+        platform_wallet_count: number;
+        platform_balance: string | null;
+        platform_total_earned: string | null;
+        mom_hearts_count: number;
+        mom_hearts_total: string | null;
+        generosity_log_count: number;
+        active_nominee_count: number;
+      }>(`
+        SELECT
+          (SELECT COUNT(*)::int FROM wallet_accounts WHERE user_id = 'nicolasa-jackson-generosity') AS mom_wallet_count,
+          (SELECT token_balance::text FROM wallet_accounts WHERE user_id = 'nicolasa-jackson-generosity' LIMIT 1) AS mom_balance,
+          (SELECT total_earned::text FROM wallet_accounts WHERE user_id = 'nicolasa-jackson-generosity' LIMIT 1) AS mom_total_earned,
+          (SELECT COUNT(*)::int FROM wallet_accounts WHERE user_id = 'platform-generosity-fund') AS platform_wallet_count,
+          (SELECT token_balance::text FROM wallet_accounts WHERE user_id = 'platform-generosity-fund' LIMIT 1) AS platform_balance,
+          (SELECT total_earned::text FROM wallet_accounts WHERE user_id = 'platform-generosity-fund' LIMIT 1) AS platform_total_earned,
+          (SELECT COUNT(*)::int FROM mom_hearts) AS mom_hearts_count,
+          (SELECT COALESCE(SUM(jcmoves_amount), 0)::text FROM mom_hearts) AS mom_hearts_total,
+          (SELECT COUNT(*)::int FROM generosity_fund_log) AS generosity_log_count,
+          (SELECT COUNT(*)::int FROM nominees WHERE is_active = true) AS active_nominee_count
+      `);
+      const row = rows[0];
+      if (!row || Number(row.mom_wallet_count) !== 1) {
+        return { ok: false, detail: "Nicolasa Jackson Mom wallet is missing or duplicated" };
+      }
+      if (Number(row.platform_wallet_count) !== 1) {
+        return { ok: false, detail: "platform generosity fund wallet is missing or duplicated" };
+      }
+
+      const sourceChecks = [
+        {
+          name: "mom fund service",
+          path: "server/services/generosityFund.ts",
+          required: [
+            'MOMS_USER_ID = "nicolasa-jackson-generosity"',
+            "const BONUS_PERCENT = 0.01",
+            "rewardType: \"generosity_fund\"",
+            "ensureMomsAccount",
+          ],
+        },
+        {
+          name: "platform fund service",
+          path: "server/services/nominees.ts",
+          required: [
+            'GENEROSITY_FUND_ID = "platform-generosity-fund"',
+            "const NOMINEES_POOL_PERCENT = 0.01",
+            "const GENEROSITY_FUND_PERCENT = 0.10",
+            "creditPlatformGenerosityFund",
+          ],
+        },
+        {
+          name: "circular guard",
+          path: "server/storage.ts",
+          required: [
+            'INTERNAL_WALLET_IDS = new Set(["nicolasa-jackson-generosity", "platform-generosity-fund"])',
+            '!userId.startsWith("nominee-")',
+            "creditGenerosityFund(tokenAmount",
+            "creditPlatformGenerosityFund(tokenAmount",
+          ],
+        },
+        {
+          name: "mom routes",
+          path: "server/routes.ts",
+          required: [
+            'app.get("/api/mom/stats"',
+            'app.get("/api/mom/hearts"',
+            'app.post("/api/mom/hearts"',
+            "await ensureMomsAccount()",
+          ],
+        },
+        {
+          name: "floating mom heart",
+          path: "client/src/components/floating-mom-heart.tsx",
+          required: [
+            'queryKey: ["/api/mom/stats"]',
+            'queryKey: ["/api/mom/hearts"]',
+            'apiRequest("POST", "/api/mom/hearts"',
+            "QUICK_AMOUNTS",
+          ],
+        },
+        {
+          name: "admin giveback panel",
+          path: "client/src/pages/admin/marketplace.tsx",
+          required: [
+            "GenerosityFundPanel",
+            "Mom Wallet",
+            "Platform Fund",
+            "Active Nominees",
+          ],
+        },
+      ];
+
+      const missingFiles = sourceChecks.filter((check) => !existsSync(path.resolve(process.cwd(), check.path)));
+      if (missingFiles.length === 0) {
+        const missingSnippets = sourceChecks.flatMap((check) => {
+          const text = readFileSync(path.resolve(process.cwd(), check.path), "utf8");
+          return check.required
+            .filter((snippet) => !text.includes(snippet))
+            .map((snippet) => `${check.name}: ${snippet}`);
+        });
+        if (missingSnippets.length > 0) {
+          return { ok: false, detail: `missing giveback wiring: ${missingSnippets.join(", ")}` };
+        }
+      } else {
+        const builtClientText = readBuiltClientText();
+        if (!builtClientText) {
+          return {
+            ok: false,
+            detail: `source unavailable (${missingFiles.map((check) => check.path).join(", ")}) and no built client bundle found`,
+          };
+        }
+        const requiredBundleText = ["Generosity Fund", "Mom Wallet", "Platform Fund"];
+        const missingBundleText = requiredBundleText.filter((snippet) => !builtClientText.includes(snippet));
+        if (missingBundleText.length > 0) {
+          return { ok: false, detail: `production bundle missing giveback text: ${missingBundleText.join(", ")}` };
+        }
+      }
+
+      return {
+        ok: true,
+        detail: [
+          `Mom ${Number(row.mom_balance || 0).toLocaleString()} JCMOVES`,
+          `${Number(row.mom_hearts_count || 0).toLocaleString()} hearts / ${Number(row.mom_hearts_total || 0).toLocaleString()} donated`,
+          `platform ${Number(row.platform_balance || 0).toLocaleString()} JCMOVES`,
+          `${Number(row.generosity_log_count || 0).toLocaleString()} fund log rows`,
+          `${Number(row.active_nominee_count || 0).toLocaleString()} active nominee(s)`,
+          "internal wallets guarded from circular giveback credits",
+        ].join("; "),
       };
     },
   },
