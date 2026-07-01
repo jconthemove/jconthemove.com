@@ -29,6 +29,7 @@ import AddressField from "@/components/AddressField";
 import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 import MarketplaceSourceFlowStrip from "@/components/MarketplaceSourceFlowStrip";
+import MarketplaceNextStepFlow from "@/components/MarketplaceNextStepFlow";
 import SmartRequestShapePicker from "@/components/SmartRequestShapePicker";
 import SmartBookingGuidanceCard from "@/components/SmartBookingGuidanceCard";
 import ServicePriceMenu from "@/components/ServicePriceMenu";
@@ -2630,6 +2631,7 @@ export default function MultiServiceBookPage() {
     const serviceAddressDiscountAmount = c.quote?.serviceAddressDiscount?.amount ?? 0;
     const bundleDiscountAmount = Math.max(0, discount - serviceAddressDiscountAmount);
     const crew = quoteCrewSize(c.quote, c.items);
+    const confirmationPrimaryItem = c.items[0];
     const approvalOnlyConfirmation = c.items.some((item) => item.serviceCode === "moving" || item.serviceCode === "junk_removal");
     const trackUrl = c.customerEmail
       ? `/customer-login?intent=track&email=${encodeURIComponent(c.customerEmail)}`
@@ -2746,6 +2748,15 @@ export default function MultiServiceBookPage() {
                 <span>{approvalOnlyConfirmation ? "Specialist confirmation" : "Flat job estimate"}</span>
               </div>
             </div>
+            <MarketplaceNextStepFlow
+              side="customer"
+              shapeId={selectedMarketplaceShape.id}
+              serviceCode={confirmationPrimaryItem?.serviceCode || primaryMarketplaceItem?.serviceCode || null}
+              serviceLabel={confirmationPrimaryItem?.label || primaryMarketplaceItem?.label || null}
+              source={marketplaceSourceHint}
+              compact
+              className="text-left"
+            />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <Button className="w-full" onClick={() => setLocation(trackUrl)}>Track My Job</Button>
               <Button className="w-full" variant="outline" onClick={() => setLocation("/book")}>Book Another Service</Button>

@@ -1016,6 +1016,8 @@ const SCENARIOS: Scenario[] = [
             "ServicePriceMenu",
             "SmartBookingGuidanceCard",
             "MarketplaceShapeContext",
+            "MarketplaceNextStepFlow",
+            "Service Request Locked In",
             "booking-marketplace-flow",
           ],
         },
