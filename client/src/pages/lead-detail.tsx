@@ -25,6 +25,7 @@ import { JobOrderBuilder } from "@/components/JobOrderBuilder";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import MarketplaceSourceFlowStrip from "@/components/MarketplaceSourceFlowStrip";
+import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 import { BookingMenuIntelligenceCard } from "@/components/BookingMenuIntelligenceCard";
 import { extractBookingMenuIntelligence } from "@/lib/booking-menu-intelligence";
 import type { MarketplaceActionPhase } from "@shared/marketplaceShapes";
@@ -1027,6 +1028,15 @@ export default function LeadDetailPage() {
             serviceLabel={marketplaceServiceLabel}
             audience={marketplaceAudience}
             phase={marketplacePhase}
+            className="mt-3"
+          />
+          <MarketplaceProcessGuide
+            source={marketplaceSource}
+            shapeId={marketplaceShapeId}
+            serviceCode={marketplaceServiceCode}
+            serviceLabel={marketplaceServiceLabel}
+            audience={marketplaceAudience}
+            compact
             className="mt-3"
           />
           <BookingMenuIntelligenceCard
