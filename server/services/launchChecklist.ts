@@ -8,6 +8,7 @@
 
 import { pool } from "../db";
 import { existsSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import crypto from "node:crypto";
 import { validatePaymentEnv } from "./envValidation";
@@ -95,6 +96,20 @@ function readExpectedDeployCommit(): string | null {
     || process.env.VERCEL_GIT_COMMIT_SHA
     || process.env.GITHUB_SHA;
   if (envCommit?.trim()) return envCommit.trim().slice(0, 8);
+
+  try {
+    const gitDir = path.resolve(process.cwd(), ".git");
+    if (existsSync(gitDir)) {
+      const head = execFileSync("git", ["rev-parse", "--short=8", "HEAD"], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+      if (head) return head;
+    }
+  } catch {
+    // Fall through to build-info for deployed bundles without a .git directory.
+  }
 
   const buildInfoPath = path.resolve(process.cwd(), "dist/build-info.json");
   try {
@@ -747,6 +762,8 @@ const SCENARIOS: Scenario[] = [
         "/snow-removal",
         "/roofing",
         "/demolition",
+        "/route-days",
+        "/route-days/:slug",
       ] as const;
       if (!existsSync(appSourcePath)) {
         if (existsSync(builtClientPath)) {
