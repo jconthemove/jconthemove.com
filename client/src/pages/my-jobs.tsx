@@ -16,6 +16,7 @@ import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 import MarketplaceSourceFlowStrip from "@/components/MarketplaceSourceFlowStrip";
 import SmartBookingGuidanceCard from "@/components/SmartBookingGuidanceCard";
+import { BookingMenuIntelligenceCard } from "@/components/BookingMenuIntelligenceCard";
 import type { LucideIcon } from "lucide-react";
 import type { SmartBookingAnswers } from "@shared/smartBookingEngine";
 
@@ -65,6 +66,7 @@ interface CustomerJob {
   depositRequired?: boolean;
   depositAmount?: number;
   depositPaid?: boolean;
+  quoteSnapshot?: unknown;
   // Task #115: shared id grouping all leads booked in the same multi-service
   // submission. Leads with the same bundleGroupId render as one card on /my-jobs.
   bundleGroupId?: string | null;
@@ -488,6 +490,11 @@ function JobSheet({ job, open, onClose, onNewJob }: {
             serviceCode={job.serviceType}
             audience="customer"
             maxIdeas={2}
+          />
+          <BookingMenuIntelligenceCard
+            quoteSnapshot={job.quoteSnapshot}
+            fallbackServiceLabel={svc.label}
+            audience="customer"
           />
 
           {/* Deposit Pending badge */}

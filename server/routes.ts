@@ -8348,6 +8348,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         totalPrice: lead.totalPrice || '',
         crewSize: lead.crewSize || null,
         crewMembers: Array.isArray(lead.crewMembers) ? lead.crewMembers : [],
+        quoteSnapshot: lead.quoteSnapshot || {},
         completedAt: lead.completedAt?.toISOString?.() || null,
         createdAt: lead.createdAt?.toISOString() || ''
       }));
@@ -8396,6 +8397,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         depositRequired: lead.depositRequired || false,
         depositAmount: lead.depositAmount ? parseFloat(lead.depositAmount) : null,
         depositPaid: lead.depositPaid || false,
+        quoteSnapshot: lead.quoteSnapshot || {},
         isQuoteOnly: lead.isQuoteOnly || false,
         // Task #115: shared id linking all services booked together so the
         // /my-jobs UI can fold companion leads into a single grouped card.
