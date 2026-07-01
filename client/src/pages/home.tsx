@@ -24,6 +24,14 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ChatIntakeOverlay from "@/components/ChatIntakeOverlay";
+import {
+  IRONWOOD_DAILY_DISCOUNT,
+  ROUTE_DAY_DISCOUNT,
+  ROUTE_DAY_SCHEDULE,
+  ROUTE_DAY_SERVICE_TAGS,
+  SERVICE_ADDRESS_DISCOUNT_NOTE,
+  routeDayLandingHref,
+} from "@shared/routeDays";
 import brandedTruckImage from "@assets/google_movers/branded-truck.jpg";
 import crewRampImage from "@assets/google_movers/crew-ramp.jpg";
 import dollyBoxesImage from "@assets/google_movers/dolly-boxes.jpg";
@@ -405,6 +413,65 @@ export default function HomePage() {
         </div>
       </section>
 
+      <section id="route-days" className="border-b border-white/10 bg-slate-950 px-4 py-10 md:py-12">
+        <div className="mx-auto max-w-6xl">
+          <div className="grid gap-6 lg:grid-cols-[0.72fr_1.28fr] lg:items-start">
+            <div>
+              <p className="text-sm font-black uppercase tracking-[0.24em] text-emerald-300">Preferred Route Days</p>
+              <h2 className="mt-3 text-3xl font-black leading-tight tracking-tight md:text-4xl">
+                Stack local jobs by town. Save drive time. Serve more customers.
+              </h2>
+              <p className="mt-3 text-sm leading-relaxed text-slate-300">
+                We are building customer bases around target towns on certain days so moving, junk removal, handyman work, light demo, flooring, painting, roofing, and more can be grouped into smarter routes.
+              </p>
+              <div className="mt-5 flex flex-wrap gap-2 text-xs font-black uppercase tracking-wider text-slate-200">
+                {ROUTE_DAY_SERVICE_TAGS.map((tag) => (
+                  <span key={tag} className="rounded-full border border-white/15 bg-white/5 px-3 py-1">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+              <div className="mt-5 rounded-lg border border-emerald-400/25 bg-emerald-500/10 p-4 text-sm leading-relaxed text-emerald-50">
+                <p className="font-black">5% route-day savings</p>
+                <p className="mt-1 text-emerald-100/90">
+                  {ROUTE_DAY_DISCOUNT} {IRONWOOD_DAILY_DISCOUNT} {SERVICE_ADDRESS_DISCOUNT_NOTE}
+                </p>
+                <p className="mt-3 font-black">Flexible availability</p>
+                <p className="mt-1 text-emerald-100/90">
+                  If no jobs are requested for a route day, we can accept other jobs. Customers outside these towns can still request a quote and we will confirm availability with 2 crews and up to 6 movers.
+                </p>
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {ROUTE_DAY_SCHEDULE.map((route) => (
+                <button
+                  key={route.key}
+                  type="button"
+                  onClick={() => setLocation(routeDayLandingHref(route))}
+                  className="group rounded-lg border border-white/12 bg-white/[0.04] p-4 text-left transition hover:border-blue-400/60 hover:bg-blue-500/10"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-300">{route.day}</p>
+                      <h3 className="mt-1 text-xl font-black text-white">{route.city}</h3>
+                      <p className="mt-1 text-sm font-semibold text-slate-300">{route.state}</p>
+                    </div>
+                    <MapPin className="h-5 w-5 text-emerald-300 transition group-hover:scale-110" />
+                  </div>
+                  <p className="mt-4 text-sm leading-relaxed text-slate-300">{route.note}</p>
+                  <p className="mt-3 rounded-md border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-xs font-black text-emerald-200">
+                    Save 5% when the service address is in {route.city} and the job is booked for {route.day}
+                  </p>
+                  <span className="mt-4 inline-flex items-center gap-2 text-sm font-black text-blue-200">
+                    View {route.label} <ArrowRight className="h-4 w-4" />
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section id="services" className="px-4 py-10 md:py-12">
         <div className="mx-auto max-w-6xl">
           <div className="mb-7 flex items-center justify-center gap-5">
@@ -610,11 +677,12 @@ export default function HomePage() {
             <p className="mb-3 text-sm font-black uppercase tracking-widest">Service Area</p>
             <div className="space-y-2 text-sm text-slate-400">
               <p>Ironwood, MI</p>
-              <p>Ashland, WI</p>
-              <p>Iron River, MI</p>
-              <p>Houghton, MI</p>
-              <p>Mellen, Minocqua, Mercer &amp; Phelps, WI</p>
-              <p>Nearby Northern Wisconsin Northwoods areas</p>
+              {ROUTE_DAY_SCHEDULE.map((route) => (
+                <Link key={route.key} href={routeDayLandingHref(route)} className="block hover:text-white">
+                  {route.city} {route.day}
+                </Link>
+              ))}
+              <p>Other nearby areas by availability</p>
             </div>
           </div>
           <div>

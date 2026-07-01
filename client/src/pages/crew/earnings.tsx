@@ -19,6 +19,14 @@ import { notificationService } from "@/lib/notifications";
 import ProcessFlowCard, { type ProcessFlowStep } from "@/components/ProcessFlowCard";
 import MarketplaceActionMatrix from "@/components/MarketplaceActionMatrix";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
+import {
+  IRONWOOD_DAILY_DISCOUNT,
+  ROUTE_DAY_CAMPAIGN_NOTE,
+  ROUTE_DAY_PROMO_PACKAGES,
+  ROUTE_DAY_SCHEDULE,
+  routeDayLandingHref,
+  routeDayTrackingParams,
+} from "@shared/routeDays";
 
 interface MiningStatus {
   currentSession: { startedAt: string; userId: string } | null;
@@ -170,9 +178,15 @@ const ALL_CAPABILITIES: { key: string; label: string; icon: LucideIcon }[] = [
   { key: "uhaul", label: "U-Haul Access", icon: KeyRound },
 ];
 
-const AD_AREA_OPTIONS = ["Ironwood / Hurley", "Ashland / Washburn", "Iron River", "Wausau", "Northwoods"];
+const AD_AREA_OPTIONS = [
+  "Ironwood / Hurley",
+  ...ROUTE_DAY_SCHEDULE.map((route) => route.label),
+  "Wausau",
+  "Northwoods",
+];
 const AD_FOCUS_OPTIONS = ["Moving help", "U-Haul load/unload", "Junk removal", "Delivery help", "PODS / U-Box help", "Last-minute labor"];
 const AD_NOTE_PRESETS = [
+  { label: "Route days", text: `${ROUTE_DAY_CAMPAIGN_NOTE} ${IRONWOOD_DAILY_DISCOUNT}` },
   { label: "Openings", text: "A few local openings this week. Send ZIP, date, and photos for a quick quote review." },
   { label: "Last-minute", text: "Last-minute load/unload and delivery help may be available depending on crew timing." },
   { label: "Heavy item", text: "Good fit for couches, appliances, garage items, storage units, and truck unloads." },
@@ -293,19 +307,32 @@ export default function CrewEarningsPage({ marketingOnly = false }: { marketingO
     referralLink,
   ].filter(Boolean).join("\n\n");
   const referralSmsHref = `sms:?&body=${encodeURIComponent(referralShareText)}`;
+  const routeForAdArea = ROUTE_DAY_SCHEDULE.find((route) => route.label === adArea);
   const trackedAdLink = useMemo(() => {
     try {
-      const url = new URL(referralLink);
+      const routeUrl = routeForAdArea
+        ? `${window.location.origin}${routeDayLandingHref(routeForAdArea)}`
+        : referralLink;
+      const url = new URL(routeUrl);
       url.searchParams.set("utm_source", "crew_ad");
       url.searchParams.set("utm_medium", "facebook");
       url.searchParams.set("utm_campaign", `${adArea}-${adFocus}`.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""));
       url.searchParams.set("jc_area", adArea);
       url.searchParams.set("jc_focus", adFocus);
+      if (routeForAdArea) {
+        routeDayTrackingParams(routeForAdArea, "custom", ROUTE_DAY_PROMO_PACKAGES[1]).forEach((value, key) => {
+          if (!url.searchParams.get(key)) url.searchParams.set(key, value);
+        });
+        url.searchParams.set("utm_source", "crew_ad");
+        url.searchParams.set("utm_medium", "facebook");
+        url.searchParams.set("jc_focus", adFocus);
+        if (marketingRep?.slug) url.searchParams.set("rep", marketingRep.slug);
+      }
       return url.toString();
     } catch {
       return referralLink;
     }
-  }, [adArea, adFocus, referralLink]);
+  }, [adArea, adFocus, marketingRep?.slug, referralLink, routeForAdArea]);
   const adShareLink = adDraft?.trackedLink || trackedAdLink;
   const facebookShareHref = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(adShareLink)}`;
 

@@ -1,4 +1,12 @@
 import { z } from "zod";
+import {
+  IRONWOOD_DAILY_DISCOUNT,
+  ROUTE_DAY_CAMPAIGN_NOTE,
+  ROUTE_DAY_DISCOUNT,
+  ROUTE_DAY_PROMO_PACKAGES,
+  ROUTE_DAY_TRACKING_POINTS,
+  ROUTE_DAY_TRAVEL_PRICE_NOTE,
+} from "@shared/routeDays";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const DEFAULT_MODEL = "gpt-5.4-mini";
@@ -86,6 +94,10 @@ function fallbackDraft(input: MarketingAdDraftInput, reason?: string): Marketing
   const facebookPost = [
     `Need ${focus} around ${area}?`,
     "JC ON THE MOVE can help with moving, delivery, junk removal, cleanup, and local labor.",
+    `${ROUTE_DAY_DISCOUNT} ${IRONWOOD_DAILY_DISCOUNT}`,
+    `${ROUTE_DAY_TRAVEL_PRICE_NOTE} Route-day promo options: ${ROUTE_DAY_PROMO_PACKAGES.map((pkg) => `${pkg.crew} for ${pkg.hours} at ${pkg.priceRange}`).join("; ")}.`,
+    ROUTE_DAY_CAMPAIGN_NOTE,
+    `Use the tracked booking link so the promo code, job count, area, package, and campaign performance can be measured.`,
     "Send the details, add photos if you have them, and we will build the right quote before the crew is confirmed.",
     `${input.referralLink}${promoLine}${extra}${photoLine}`,
   ].join("\n\n");
@@ -93,12 +105,13 @@ function fallbackDraft(input: MarketingAdDraftInput, reason?: string): Marketing
   return {
     headline: `${focus} available in ${area}`,
     facebookPost,
-    shortText: `Need ${focus}? Book JC ON THE MOVE: ${input.referralLink}${input.promoCode ? ` Code ${input.promoCode}.` : ""}`,
+    shortText: `Need ${focus}? ${ROUTE_DAY_DISCOUNT} ${IRONWOOD_DAILY_DISCOUNT} Book JC ON THE MOVE: ${input.referralLink}${input.promoCode ? ` Code ${input.promoCode}.` : ""}`,
     hashtags: ["#JCONTHEMOVE", "#Northwoods", "#MovingHelp"],
     ctaLabel: "Book / Quote",
     photoSuggestion: input.photoUrl || input.photoDataUrl ? "Use the supplied photo and keep the booking link in the post." : "Use a clean crew, truck, before/after, or completed-job photo.",
     communityTargets: [
       `${area} community groups`,
+      "Route-day town groups and neighborhood pages",
       "Local buy/sell/trade groups",
       "Apartment, landlord, and student housing groups",
     ],
@@ -165,6 +178,14 @@ export async function generateMarketingAdDraft(rawInput: MarketingAdDraftInput):
             "Never promise guaranteed availability, exact prices, financing, or same-day service.",
             "Always include the provided booking/referral link in the Facebook post and short text.",
             "Do not invent testimonials, licenses, reviews, discounts, or photos.",
+            `Approved offer: ${ROUTE_DAY_DISCOUNT} ${IRONWOOD_DAILY_DISCOUNT}`,
+            `Approved travel package language: ${ROUTE_DAY_PROMO_PACKAGES.map((pkg) => `${pkg.title}: ${pkg.crew}, ${pkg.hours}, ${pkg.priceRange}`).join("; ")}.`,
+            ROUTE_DAY_TRAVEL_PRICE_NOTE,
+            "Explain route days as preferred batching windows, not hard service limits.",
+            "Say customers can still request jobs outside the target area/day and the team will confirm availability.",
+            "Mention 2 crews and up to 6 movers when it helps the post feel available.",
+            `Use the tracked booking link for performance reporting. The platform tracks these fields: ${ROUTE_DAY_TRACKING_POINTS.join(", ")}.`,
+            ROUTE_DAY_CAMPAIGN_NOTE,
             "If a photo is attached, only describe what is visibly useful for the ad; if unclear, keep the copy general.",
             "Return practical communityTargets and a short followUpText a worker can send in Messenger or SMS.",
           ].join(" "),

@@ -148,6 +148,16 @@ type MarketingTracking = {
   jcCampaign?: string;
   jcArea?: string;
   jcFocus?: string;
+  jcRouteCity?: string;
+  jcRouteState?: string;
+  jcRouteZip?: string;
+  jcRouteDay?: string;
+  jcRouteKey?: string;
+  jcPromoType?: string;
+  jcPackage?: string;
+  jcCrewTarget?: string;
+  jcHoursTarget?: string;
+  jcPriceBand?: string;
   fbclid?: string;
   referrer?: string;
 };
@@ -388,6 +398,10 @@ function formatAttributionSummary(attribution: Pick<BookingAttribution, "promoCo
 function formatAdHint(marketingTracking: MarketingTracking) {
   const focus = marketingTracking.jcFocus?.trim();
   const area = marketingTracking.jcArea?.trim();
+  const routeDay = marketingTracking.jcRouteDay?.trim();
+  const promoPackage = marketingTracking.jcPackage?.trim();
+  if (routeDay && area && promoPackage) return `${area} ${routeDay} - ${promoPackage.replace(/-/g, " ")}`;
+  if (routeDay && area) return `${area} ${routeDay}`;
   if (focus && area) return `${focus} around ${area}`;
   if (focus) return focus;
   if (area) return `Help around ${area}`;
@@ -994,6 +1008,16 @@ export default function MultiServiceBookPage() {
       jcCampaign: (sp.get("jc_campaign") || "").trim(),
       jcArea: (sp.get("jc_area") || "").trim(),
       jcFocus: (sp.get("jc_focus") || "").trim(),
+      jcRouteCity: (sp.get("jc_route_city") || "").trim(),
+      jcRouteState: (sp.get("jc_route_state") || "").trim(),
+      jcRouteZip: (sp.get("jc_route_zip") || "").trim(),
+      jcRouteDay: (sp.get("jc_route_day") || "").trim(),
+      jcRouteKey: (sp.get("jc_route_key") || "").trim(),
+      jcPromoType: (sp.get("jc_promo_type") || "").trim(),
+      jcPackage: (sp.get("jc_package") || "").trim(),
+      jcCrewTarget: (sp.get("jc_crew_target") || "").trim(),
+      jcHoursTarget: (sp.get("jc_hours_target") || "").trim(),
+      jcPriceBand: (sp.get("jc_price_band") || "").trim(),
       fbclid: (sp.get("fbclid") || "").trim(),
       referrer: document.referrer || "",
     };
@@ -1407,6 +1431,8 @@ export default function MultiServiceBookPage() {
   const quoteMutation = useMutation({
     mutationFn: async (payload: { seq: number; sig: string; payloadItems: SelectedItem[]; applyTokens: number }) => {
       const body: Record<string, unknown> = {
+        serviceAddress: serviceAddress.trim() || undefined,
+        promoCode: attribution.promoCode || undefined,
         items: payload.payloadItems.map(i => ({
           serviceCode: i.serviceCode,
           quantity: i.quantity,
@@ -2020,6 +2046,8 @@ export default function MultiServiceBookPage() {
     const finalTotal = Number(c.quote?.finalTotal ?? c.finalTotal ?? 0);
     const subtotal = Number(c.quote?.subtotal ?? finalTotal);
     const discount = Number(c.quote?.discountTotal ?? c.discountTotal ?? 0);
+    const serviceAddressDiscountAmount = c.quote?.serviceAddressDiscount?.amount ?? 0;
+    const bundleDiscountAmount = Math.max(0, discount - serviceAddressDiscountAmount);
     const crew = quoteCrewSize(c.quote, c.items);
     const approvalOnlyConfirmation = c.items.some((item) => item.serviceCode === "moving" || item.serviceCode === "junk_removal");
     const trackUrl = c.customerEmail
@@ -2090,16 +2118,28 @@ export default function MultiServiceBookPage() {
                   </div>
                 );
               })}
-              {!approvalOnlyConfirmation && discount > 0 && c.quote.bundleApplied && (
-                <div className="flex justify-between text-sm text-emerald-500 pt-1 border-t border-border">
-                  <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> {c.quote.bundleApplied.name}</span>
-                  <span>−${discount.toFixed(2)}</span>
-                </div>
-              )}
               {!approvalOnlyConfirmation && <div className="flex justify-between text-base font-bold pt-2 border-t border-border">
                 <span>Subtotal</span>
                 <span>${subtotal.toFixed(2)}</span>
               </div>}
+              {!approvalOnlyConfirmation && bundleDiscountAmount > 0 && c.quote.bundleApplied && (
+                <div className="flex justify-between text-sm text-emerald-500">
+                  <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> {c.quote.bundleApplied.name}</span>
+                  <span>-${bundleDiscountAmount.toFixed(2)}</span>
+                </div>
+              )}
+              {!approvalOnlyConfirmation && c.quote.serviceAddressDiscount && (
+                <div className="flex justify-between text-sm text-emerald-500">
+                  <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> {c.quote.serviceAddressDiscount.label}</span>
+                  <span>-${c.quote.serviceAddressDiscount.amount.toFixed(2)}</span>
+                </div>
+              )}
+              {!approvalOnlyConfirmation && c.quote.serviceAddressPricingAdjustment && (
+                <div className="flex justify-between text-sm text-orange-500">
+                  <span className="flex items-center gap-1"><AlertCircle className="h-3 w-3" /> {c.quote.serviceAddressPricingAdjustment.label}</span>
+                  <span>+${c.quote.serviceAddressPricingAdjustment.amount.toFixed(2)}</span>
+                </div>
+              )}
               {!approvalOnlyConfirmation && <div className="flex justify-between text-lg font-black pt-1">
                 <span>Total</span>
                 <span>${finalTotal.toFixed(2)}</span>

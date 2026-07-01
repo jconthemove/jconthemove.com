@@ -3026,6 +3026,7 @@ export type BookingQuoteItemInput = z.infer<typeof bookingQuoteItemInputSchema>;
 export const bookingQuoteRequestSchema = z.object({
   items: z.array(bookingQuoteItemInputSchema).min(1),
   source: z.string().optional(),
+  serviceAddress: z.string().trim().max(500).optional(),
   promoCode: z.string().trim().max(50).optional(),
   referralSlug: z.string().trim().max(80).optional(),
   // Task #175 — JCMOVES tokens the customer wants to redeem against this

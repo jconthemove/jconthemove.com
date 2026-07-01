@@ -1,4 +1,11 @@
 import { ArrowRight, Facebook, Instagram, MapPin, MessageCircle, Phone } from "lucide-react";
+import {
+  IRONWOOD_DAILY_DISCOUNT,
+  ROUTE_DAY_DISCOUNT,
+  ROUTE_DAY_SCHEDULE,
+  SERVICE_ADDRESS_DISCOUNT_NOTE,
+  routeDayLandingHref,
+} from "@shared/routeDays";
 
 export default function Footer() {
   return (
@@ -30,7 +37,7 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
           <div className="col-span-2">
             <h3 className="text-2xl font-bold mb-4">JC ON THE MOVE</h3>
             <p className="text-slate-300 mb-4 max-w-xl">
@@ -57,6 +64,24 @@ export default function Footer() {
               <li><a href="/book?mode=quick&service=delivery" className="hover:text-white transition-colors" data-testid="link-delivery">Delivery</a></li>
               <li><a href="/book?mode=quick&service=cleaning" className="hover:text-white transition-colors" data-testid="link-cleanup">Cleanup / Labor</a></li>
               <li><a href="/gallery" className="hover:text-white transition-colors" data-testid="link-work-photos">Work Photos</a></li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="text-lg font-semibold mb-4">Route Days</h4>
+            <ul className="space-y-2 text-slate-300">
+              {ROUTE_DAY_SCHEDULE.map((route) => (
+                <li key={route.key}>
+                  <a href={routeDayLandingHref(route)} className="hover:text-white transition-colors">
+                    {route.city} {route.day}
+                  </a>
+                </li>
+              ))}
+              <li className="font-semibold text-emerald-300">{ROUTE_DAY_DISCOUNT}</li>
+              <li className="font-semibold text-emerald-300">{IRONWOOD_DAILY_DISCOUNT}</li>
+              <li className="text-slate-400">{SERVICE_ADDRESS_DISCOUNT_NOTE}</li>
+              <li className="text-slate-400">Other jobs by availability</li>
+              <li className="text-slate-400">2 crews, up to 6 movers</li>
             </ul>
           </div>
           

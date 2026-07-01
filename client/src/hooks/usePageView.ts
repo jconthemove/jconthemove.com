@@ -19,7 +19,7 @@ export function usePageView() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        page: location,
+        page: `${window.location.pathname}${window.location.search}` || location,
         visitorId,
         referrer: document.referrer || null,
         userAgent: navigator.userAgent,

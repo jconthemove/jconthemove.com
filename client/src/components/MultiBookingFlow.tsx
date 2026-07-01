@@ -191,6 +191,29 @@ export interface QuoteResult {
   finalTotal: number;
   tokenEstimate: number;
   bundleApplied: { code: string; name: string; rawDiscount: number } | null;
+  serviceAddressDiscount?: {
+    code: string;
+    label: string;
+    reason: string;
+    discountPercent: number;
+    amount: number;
+  };
+  serviceAddressPricingAdjustment?: {
+    type: "out_of_town" | "non_discount_day";
+    label: string;
+    reason: string;
+    multiplier: number;
+    surchargePercent: number;
+    amount: number;
+  };
+  serviceAddressDiscountHint?: {
+    eligible: boolean;
+    code: string | null;
+    label: string | null;
+    reason: string;
+    discountPercent: number;
+    priceMultiplier?: number;
+  };
   items: Array<{ serviceCode: string; lineSubtotal: number; laborMeta?: QuoteLaborMeta }>;
   tokenRedemption?: { tokens: number; discountUsd: number };
 }
@@ -2883,6 +2906,8 @@ export function BookingSummarySticky({
   const [collapsed, setCollapsed] = useState(true);
   const subtotal = quote?.subtotal ?? items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
   const discount = quote?.discountTotal ?? 0;
+  const serviceAddressDiscountAmount = quote?.serviceAddressDiscount?.amount ?? 0;
+  const bundleDiscountAmount = Math.max(0, discount - serviceAddressDiscountAmount);
   const finalTotal = quote?.finalTotal ?? subtotal - discount;
   const tokens = quote?.tokenEstimate ?? 0;
   const crew = quoteCrewSize(quote, items);
@@ -2918,10 +2943,34 @@ export function BookingSummarySticky({
                 <span className="text-muted-foreground">Subtotal</span>
                 <span>${subtotal.toFixed(2)}</span>
               </div>
-              {discount > 0 && quote?.bundleApplied && (
+              {bundleDiscountAmount > 0 && quote?.bundleApplied && (
                 <div className="flex justify-between text-sm text-emerald-500">
                   <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> {quote.bundleApplied.name}</span>
-                  <span>−${discount.toFixed(2)}</span>
+                  <span>-${bundleDiscountAmount.toFixed(2)}</span>
+                </div>
+              )}
+              {quote?.serviceAddressDiscount && (
+                <div className="flex justify-between gap-3 text-sm text-emerald-500">
+                  <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> {quote.serviceAddressDiscount.label}</span>
+                  <span>-${quote.serviceAddressDiscount.amount.toFixed(2)}</span>
+                </div>
+              )}
+              {quote?.serviceAddressPricingAdjustment && (
+                <div className="flex justify-between gap-3 text-sm text-orange-500">
+                  <span className="flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" /> {quote.serviceAddressPricingAdjustment.label}
+                  </span>
+                  <span>+${quote.serviceAddressPricingAdjustment.amount.toFixed(2)}</span>
+                </div>
+              )}
+              {!quote?.serviceAddressDiscount && !quote?.serviceAddressPricingAdjustment && quote?.serviceAddressDiscountHint?.reason && (
+                <div className="rounded-md border border-emerald-500/20 bg-emerald-500/10 p-2 text-xs leading-relaxed text-emerald-600 dark:text-emerald-200">
+                  {quote.serviceAddressDiscountHint.reason}
+                </div>
+              )}
+              {quote?.serviceAddressPricingAdjustment?.reason && (
+                <div className="rounded-md border border-orange-500/20 bg-orange-500/10 p-2 text-xs leading-relaxed text-orange-700 dark:text-orange-200">
+                  {quote.serviceAddressPricingAdjustment.reason}
                 </div>
               )}
               <div className="flex justify-between text-base font-bold pt-1">
@@ -2997,10 +3046,32 @@ export function BookingSummarySticky({
             <span className="text-muted-foreground">Subtotal</span>
             <span>${subtotal.toFixed(2)}</span>
           </div>
-          {discount > 0 && quote?.bundleApplied && (
+          {bundleDiscountAmount > 0 && quote?.bundleApplied && (
             <div className="flex justify-between text-xs text-emerald-500">
               <span>{quote.bundleApplied.name}</span>
-              <span>−${discount.toFixed(2)}</span>
+              <span>-${bundleDiscountAmount.toFixed(2)}</span>
+            </div>
+          )}
+          {quote?.serviceAddressDiscount && (
+            <div className="flex justify-between gap-3 text-xs text-emerald-500">
+              <span>{quote.serviceAddressDiscount.label}</span>
+              <span>-${quote.serviceAddressDiscount.amount.toFixed(2)}</span>
+            </div>
+          )}
+          {quote?.serviceAddressPricingAdjustment && (
+            <div className="flex justify-between gap-3 text-xs text-orange-500">
+              <span>{quote.serviceAddressPricingAdjustment.label}</span>
+              <span>+${quote.serviceAddressPricingAdjustment.amount.toFixed(2)}</span>
+            </div>
+          )}
+          {!quote?.serviceAddressDiscount && !quote?.serviceAddressPricingAdjustment && quote?.serviceAddressDiscountHint?.reason && (
+            <div className="rounded-md border border-emerald-500/20 bg-emerald-500/10 p-2 text-[11px] leading-relaxed text-emerald-600 dark:text-emerald-200">
+              {quote.serviceAddressDiscountHint.reason}
+            </div>
+          )}
+          {quote?.serviceAddressPricingAdjustment?.reason && (
+            <div className="rounded-md border border-orange-500/20 bg-orange-500/10 p-2 text-[11px] leading-relaxed text-orange-700 dark:text-orange-200">
+              {quote.serviceAddressPricingAdjustment.reason}
             </div>
           )}
           <div className="flex justify-between text-[11px] text-muted-foreground">

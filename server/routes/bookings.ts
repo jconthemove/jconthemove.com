@@ -67,6 +67,7 @@ import {
   getMarketplaceShapeForServiceCode,
   type MarketplaceRequestShapeId,
 } from "@shared/marketplaceShapes";
+import { getRouteDayDiscountEligibility } from "@shared/routeDays";
 
 // Task #218 spec line 44: small moving = "$300 (or $340 if floor lifted;
 // we keep $300)". The labor math 2×2×$85 naturally produces $340, but
@@ -77,6 +78,29 @@ const SMALL_MOVE_SPECIAL_PRICE = 300;
 
 const router = Router();
 
+type ServiceAddressDiscount = {
+  code: string;
+  label: string;
+  reason: string;
+  discountPercent: number;
+  amount: number;
+};
+
+type ServiceAddressPricingAdjustment = {
+  type: "out_of_town" | "non_discount_day";
+  label: string;
+  reason: string;
+  multiplier: number;
+  surchargePercent: number;
+  amount: number;
+};
+
+type BookingPricingWithAddressDiscount = BookingPricingResult & {
+  serviceAddressDiscount?: ServiceAddressDiscount;
+  serviceAddressPricingAdjustment?: ServiceAddressPricingAdjustment;
+  serviceAddressDiscountHint?: ReturnType<typeof getRouteDayDiscountEligibility>;
+};
+
 const WORKER_TIERS = ["worker", "bronze", "silver", "gold", "platinum"] as const;
 type WorkerTier = typeof WORKER_TIERS[number];
 const tierRank: Record<WorkerTier, number> = { worker: 0, bronze: 1, silver: 2, gold: 3, platinum: 4 };
@@ -85,7 +109,27 @@ type PersistedBookingInput = BookingPricingItemInput & { serviceLabel: string };
 function safeMarketingTracking(raw: unknown) {
   const input = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
   const picked: Record<string, string> = {};
-  for (const key of ["utmSource", "utmMedium", "utmCampaign", "utmContent", "jcCampaign", "jcArea", "jcFocus", "fbclid", "referrer"]) {
+  for (const key of [
+    "utmSource",
+    "utmMedium",
+    "utmCampaign",
+    "utmContent",
+    "jcCampaign",
+    "jcArea",
+    "jcFocus",
+    "jcRouteCity",
+    "jcRouteState",
+    "jcRouteZip",
+    "jcRouteDay",
+    "jcRouteKey",
+    "jcPromoType",
+    "jcPackage",
+    "jcCrewTarget",
+    "jcHoursTarget",
+    "jcPriceBand",
+    "fbclid",
+    "referrer",
+  ]) {
     const value = input[key];
     if (typeof value === "string" && value.trim()) picked[key] = value.trim().slice(0, 500);
   }
@@ -139,6 +183,80 @@ function firstDetailValue(items: PersistedBookingInput[], keys: string[]): strin
     }
   }
   return null;
+}
+
+function applyServiceAddressDiscount(
+  quote: BookingPricingResult,
+  input: {
+    serviceAddress?: string | null;
+    requestedDate?: string | null;
+    flatBonus: number;
+    earnRate: number;
+  },
+): BookingPricingWithAddressDiscount {
+  const eligibility = getRouteDayDiscountEligibility({
+    serviceAddress: input.serviceAddress,
+    requestedDate: input.requestedDate,
+  });
+
+  const roundMoney = (value: number) => Math.round(value * 100) / 100;
+  if (eligibility.priceMultiplier > 1 && quote.finalTotal > 0) {
+    const amount = roundMoney(quote.finalTotal * (eligibility.priceMultiplier - 1));
+    const finalTotal = roundMoney(quote.finalTotal + amount);
+    const reward = computeBookingReward({
+      finalTotal,
+      flatBonus: input.flatBonus,
+      earnRate: input.earnRate,
+      bonusMultiplier: quote.bundleApplied?.bonusMultiplier ?? 1,
+      hasOverride: false,
+    });
+
+    return {
+      ...quote,
+      finalTotal,
+      tokenEstimate: reward.totalAward,
+      serviceAddressPricingAdjustment: {
+        type: eligibility.pricingAdjustment.type === "non_discount_day" ? "non_discount_day" : "out_of_town",
+        label: eligibility.pricingAdjustment.label || "Route pricing adjustment",
+        reason: eligibility.reason,
+        multiplier: eligibility.priceMultiplier,
+        surchargePercent: eligibility.pricingAdjustment.surchargePercent,
+        amount,
+      },
+      serviceAddressDiscountHint: eligibility,
+    };
+  }
+
+  if (!eligibility.eligible || !eligibility.code || eligibility.discountPercent <= 0 || quote.finalTotal <= 0) {
+    return { ...quote, serviceAddressDiscountHint: eligibility };
+  }
+
+  const amount = roundMoney(quote.finalTotal * (eligibility.discountPercent / 100));
+  if (amount <= 0) return quote;
+
+  const finalTotal = roundMoney(Math.max(0, quote.finalTotal - amount));
+  const reward = computeBookingReward({
+    finalTotal,
+    flatBonus: input.flatBonus,
+    earnRate: input.earnRate,
+    bonusMultiplier: quote.bundleApplied?.bonusMultiplier ?? 1,
+    hasOverride: false,
+  });
+
+  return {
+    ...quote,
+    discountTotal: roundMoney(quote.discountTotal + amount),
+    finalTotal,
+    tokenEstimate: reward.totalAward,
+    serviceAddressDiscount: {
+      code: eligibility.code,
+      label: eligibility.label || eligibility.code,
+      reason: eligibility.reason,
+      discountPercent: eligibility.discountPercent,
+      amount,
+    },
+    serviceAddressDiscountHint: eligibility,
+  };
 }
 
 function marketplaceShapeForBooking(items: PersistedBookingInput[], fallbackService: string) {
@@ -204,6 +322,11 @@ function buildLeadDetails(args: {
     typeof tracking.utmCampaign === "string" && tracking.utmCampaign ? `utm campaign: ${tracking.utmCampaign}` : null,
     typeof tracking.jcArea === "string" && tracking.jcArea ? `ad area: ${tracking.jcArea}` : null,
     typeof tracking.jcFocus === "string" && tracking.jcFocus ? `ad focus: ${tracking.jcFocus}` : null,
+    typeof tracking.jcRouteDay === "string" && tracking.jcRouteDay ? `route day: ${tracking.jcRouteDay}` : null,
+    typeof tracking.jcPackage === "string" && tracking.jcPackage ? `package: ${tracking.jcPackage}` : null,
+    typeof tracking.jcCrewTarget === "string" && tracking.jcCrewTarget ? `crew target: ${tracking.jcCrewTarget}` : null,
+    typeof tracking.jcHoursTarget === "string" && tracking.jcHoursTarget ? `hours target: ${tracking.jcHoursTarget}` : null,
+    typeof tracking.jcPriceBand === "string" && tracking.jcPriceBand ? `price band: ${tracking.jcPriceBand}` : null,
   ].filter(Boolean);
   return [
     `[BOOKING ${args.bookingReference}] Linked booking ${args.bookingId}`,
@@ -684,7 +807,7 @@ router.post("/bookings/quote", async (req: Request, res: Response) => {
   try {
     const body = bookingQuoteRequestSchema.parse(req.body);
     const catalog = await loadCatalog();
-    const { pricingInputs } = resolveItems(body.items, catalog);
+    const { pricingInputs, persistInputs } = resolveItems(body.items, catalog);
     // Pull live reward-engine settings so the displayed estimate uses the
     // exact same flatBonus/earnRate the issuer (disburseBookingTokens) will
     // use at confirmation time. Booking creation snapshots these onto the
@@ -702,12 +825,19 @@ router.post("/bookings/quote", async (req: Request, res: Response) => {
     // amount is surfaced (rather than silently zeroed) and the discounted
     // line + new finalTotal flow into both the displayed quote AND the
     // persisted booking when the customer hits "Confirm".
-    let result: BookingPricingResult & {
+    const requestedDate = firstDetailValue(persistInputs, ["requestedDate", "moveDate", "date"]);
+    const serviceAddress = body.serviceAddress || firstDetailValue(persistInputs, ["serviceAddress", "fromAddress", "address"]);
+    let result: BookingPricingWithAddressDiscount & {
       tokenRedemption?: { tokens: number; discountUsd: number };
-    } = baseResult;
+    } = applyServiceAddressDiscount(baseResult, {
+      serviceAddress,
+      requestedDate,
+      flatBonus: settings.flatBonus,
+      earnRate: settings.earnRate,
+    });
     if (body.applyTokens && body.applyTokens > 0) {
       const { validateRedemption, tokensToDollars } = await import("@shared/tokenRedemptionRules");
-      const validation = validateRedemption(body.applyTokens, baseResult.finalTotal, body.customerTier ?? null);
+      const validation = validateRedemption(body.applyTokens, result.finalTotal, body.customerTier ?? null);
       if (!validation.valid) {
         return res.status(400).json({
           error: "Token redemption rejected",
@@ -717,12 +847,12 @@ router.post("/bookings/quote", async (req: Request, res: Response) => {
       }
       const tokenDiscount = +tokensToDollars(validation.effectiveTokens).toFixed(2);
       result = {
-        ...baseResult,
+        ...result,
         tokenRedemption: {
           tokens: validation.effectiveTokens,
           discountUsd: tokenDiscount,
         },
-        finalTotal: +Math.max(0, baseResult.finalTotal - tokenDiscount).toFixed(2),
+        finalTotal: +Math.max(0, result.finalTotal - tokenDiscount).toFixed(2),
       };
     }
     // Task #174 — Apply demand-based surge multiplier to the finalTotal
@@ -999,12 +1129,19 @@ router.post("/bookings", async (req: Request, res: Response) => {
         serverTier = "bronze";
       }
     }
-    let quote: BookingPricingResult & {
+    const requestedDateForDiscount = firstDetailValue(persistInputs, ["requestedDate", "moveDate", "date"]);
+    const serviceAddressForDiscount = body.serviceAddress || firstDetailValue(persistInputs, ["serviceAddress", "fromAddress", "address"]);
+    let quote: BookingPricingWithAddressDiscount & {
       tokenRedemption?: { tokens: number; discountUsd: number };
-    } = baseQuote;
+    } = applyServiceAddressDiscount(baseQuote, {
+      serviceAddress: serviceAddressForDiscount,
+      requestedDate: requestedDateForDiscount,
+      flatBonus: settings.flatBonus,
+      earnRate: settings.earnRate,
+    });
     if (wantsTokens) {
       const { validateRedemption, tokensToDollars } = await import("@shared/tokenRedemptionRules");
-      const validation = validateRedemption(body.applyTokens!, baseQuote.finalTotal, serverTier);
+      const validation = validateRedemption(body.applyTokens!, quote.finalTotal, serverTier);
       if (!validation.valid) {
         return res.status(400).json({
           error: "Token redemption rejected",
@@ -1033,8 +1170,8 @@ router.post("/bookings", async (req: Request, res: Response) => {
       const tokenDiscount = +tokensToDollars(validation.effectiveTokens).toFixed(2);
       preflightTokenRedemption = { tokens: validation.effectiveTokens, discountUsd: tokenDiscount };
       quote = {
-        ...baseQuote,
-        finalTotal: +Math.max(0, baseQuote.finalTotal - tokenDiscount).toFixed(2),
+        ...quote,
+        finalTotal: +Math.max(0, quote.finalTotal - tokenDiscount).toFixed(2),
         tokenRedemption: preflightTokenRedemption,
       };
     }
@@ -2160,6 +2297,11 @@ router.get("/admin/booking-analytics", isAuthenticated, async (req: any, res: Re
       campaigns: Set<string>;
       areas: Set<string>;
       focuses: Set<string>;
+      routeDays: Set<string>;
+      packages: Set<string>;
+      priceBands: Set<string>;
+      crewTargets: Set<string>;
+      hoursTargets: Set<string>;
     }>();
     const campaignStats = new Map<string, {
       campaign: string;
@@ -2169,6 +2311,23 @@ router.get("/admin/booking-analytics", isAuthenticated, async (req: any, res: Re
       promoCodes: Set<string>;
       areas: Set<string>;
       focuses: Set<string>;
+      routeDays: Set<string>;
+      packages: Set<string>;
+      priceBands: Set<string>;
+      crewTargets: Set<string>;
+      hoursTargets: Set<string>;
+    }>();
+    const routeDayStats = new Map<string, {
+      routeKey: string;
+      routeDay: string;
+      area: string;
+      count: number;
+      revenue: number;
+      promoCodes: Set<string>;
+      campaigns: Set<string>;
+      sources: Set<string>;
+      packages: Set<string>;
+      priceBands: Set<string>;
     }>();
 
     const getAttrMeta = (attr: typeof quoteAttributions.$inferSelect): Record<string, unknown> => (
@@ -2218,6 +2377,42 @@ router.get("/admin/booking-analytics", isAuthenticated, async (req: any, res: Re
           : {};
         return tracking.jcFocus;
       });
+      const routeDay = firstAttrValue(attrs, (_attr, meta) => {
+        const tracking = meta.marketingTracking && typeof meta.marketingTracking === "object" && !Array.isArray(meta.marketingTracking)
+          ? meta.marketingTracking as Record<string, unknown>
+          : {};
+        return tracking.jcRouteDay;
+      });
+      const routeKey = firstAttrValue(attrs, (_attr, meta) => {
+        const tracking = meta.marketingTracking && typeof meta.marketingTracking === "object" && !Array.isArray(meta.marketingTracking)
+          ? meta.marketingTracking as Record<string, unknown>
+          : {};
+        return tracking.jcRouteKey;
+      });
+      const packageType = firstAttrValue(attrs, (_attr, meta) => {
+        const tracking = meta.marketingTracking && typeof meta.marketingTracking === "object" && !Array.isArray(meta.marketingTracking)
+          ? meta.marketingTracking as Record<string, unknown>
+          : {};
+        return tracking.jcPackage;
+      });
+      const crewTarget = firstAttrValue(attrs, (_attr, meta) => {
+        const tracking = meta.marketingTracking && typeof meta.marketingTracking === "object" && !Array.isArray(meta.marketingTracking)
+          ? meta.marketingTracking as Record<string, unknown>
+          : {};
+        return tracking.jcCrewTarget;
+      });
+      const hoursTarget = firstAttrValue(attrs, (_attr, meta) => {
+        const tracking = meta.marketingTracking && typeof meta.marketingTracking === "object" && !Array.isArray(meta.marketingTracking)
+          ? meta.marketingTracking as Record<string, unknown>
+          : {};
+        return tracking.jcHoursTarget;
+      });
+      const priceBand = firstAttrValue(attrs, (_attr, meta) => {
+        const tracking = meta.marketingTracking && typeof meta.marketingTracking === "object" && !Array.isArray(meta.marketingTracking)
+          ? meta.marketingTracking as Record<string, unknown>
+          : {};
+        return tracking.jcPriceBand;
+      });
 
       if (isBundle) {
         bundleCount += 1;
@@ -2251,6 +2446,11 @@ router.get("/admin/booking-analytics", isAuthenticated, async (req: any, res: Re
         campaigns: new Set<string>(),
         areas: new Set<string>(),
         focuses: new Set<string>(),
+        routeDays: new Set<string>(),
+        packages: new Set<string>(),
+        priceBands: new Set<string>(),
+        crewTargets: new Set<string>(),
+        hoursTargets: new Set<string>(),
       };
       sourceSlot.count += 1;
       sourceSlot.revenue += final;
@@ -2259,6 +2459,11 @@ router.get("/admin/booking-analytics", isAuthenticated, async (req: any, res: Re
       if (campaign) sourceSlot.campaigns.add(campaign);
       if (area) sourceSlot.areas.add(area);
       if (focus) sourceSlot.focuses.add(focus);
+      if (routeDay) sourceSlot.routeDays.add(routeDay);
+      if (packageType) sourceSlot.packages.add(packageType);
+      if (priceBand) sourceSlot.priceBands.add(priceBand);
+      if (crewTarget) sourceSlot.crewTargets.add(crewTarget);
+      if (hoursTarget) sourceSlot.hoursTargets.add(hoursTarget);
       sourceStats.set(source, sourceSlot);
 
       if (campaign) {
@@ -2270,13 +2475,47 @@ router.get("/admin/booking-analytics", isAuthenticated, async (req: any, res: Re
           promoCodes: new Set<string>(),
           areas: new Set<string>(),
           focuses: new Set<string>(),
+          routeDays: new Set<string>(),
+          packages: new Set<string>(),
+          priceBands: new Set<string>(),
+          crewTargets: new Set<string>(),
+          hoursTargets: new Set<string>(),
         };
         campaignSlot.count += 1;
         campaignSlot.revenue += final;
         if (promoCode) campaignSlot.promoCodes.add(promoCode);
         if (area) campaignSlot.areas.add(area);
         if (focus) campaignSlot.focuses.add(focus);
+        if (routeDay) campaignSlot.routeDays.add(routeDay);
+        if (packageType) campaignSlot.packages.add(packageType);
+        if (priceBand) campaignSlot.priceBands.add(priceBand);
+        if (crewTarget) campaignSlot.crewTargets.add(crewTarget);
+        if (hoursTarget) campaignSlot.hoursTargets.add(hoursTarget);
         campaignStats.set(campaign, campaignSlot);
+      }
+
+      if (routeDay || routeKey || packageType) {
+        const key = routeKey || `${area || "unknown-area"}-${routeDay || "unknown-day"}`;
+        const routeSlot = routeDayStats.get(key) ?? {
+          routeKey: key,
+          routeDay: routeDay || "",
+          area: area || "",
+          count: 0,
+          revenue: 0,
+          promoCodes: new Set<string>(),
+          campaigns: new Set<string>(),
+          sources: new Set<string>(),
+          packages: new Set<string>(),
+          priceBands: new Set<string>(),
+        };
+        routeSlot.count += 1;
+        routeSlot.revenue += final;
+        if (promoCode) routeSlot.promoCodes.add(promoCode);
+        if (campaign) routeSlot.campaigns.add(campaign);
+        if (source) routeSlot.sources.add(source);
+        if (packageType) routeSlot.packages.add(packageType);
+        if (priceBand) routeSlot.priceBands.add(priceBand);
+        routeDayStats.set(key, routeSlot);
       }
     }
 
@@ -2306,6 +2545,11 @@ router.get("/admin/booking-analytics", isAuthenticated, async (req: any, res: Re
         campaigns: Array.from(row.campaigns).sort(),
         areas: Array.from(row.areas).sort(),
         focuses: Array.from(row.focuses).sort(),
+        routeDays: Array.from(row.routeDays).sort(),
+        packages: Array.from(row.packages).sort(),
+        priceBands: Array.from(row.priceBands).sort(),
+        crewTargets: Array.from(row.crewTargets).sort(),
+        hoursTargets: Array.from(row.hoursTargets).sort(),
       }));
     const campaignBreakdown = Array.from(campaignStats.values())
       .sort((a, b) => b.count - a.count || b.revenue - a.revenue)
@@ -2319,6 +2563,26 @@ router.get("/admin/booking-analytics", isAuthenticated, async (req: any, res: Re
         promoCodes: Array.from(row.promoCodes).sort(),
         areas: Array.from(row.areas).sort(),
         focuses: Array.from(row.focuses).sort(),
+        routeDays: Array.from(row.routeDays).sort(),
+        packages: Array.from(row.packages).sort(),
+        priceBands: Array.from(row.priceBands).sort(),
+        crewTargets: Array.from(row.crewTargets).sort(),
+        hoursTargets: Array.from(row.hoursTargets).sort(),
+      }));
+    const routeDayBreakdown = Array.from(routeDayStats.values())
+      .sort((a, b) => b.count - a.count || b.revenue - a.revenue)
+      .map((row) => ({
+        routeKey: row.routeKey,
+        routeDay: row.routeDay,
+        area: row.area,
+        count: row.count,
+        revenue: +row.revenue.toFixed(2),
+        aov: row.count > 0 ? +(row.revenue / row.count).toFixed(2) : 0,
+        promoCodes: Array.from(row.promoCodes).sort(),
+        campaigns: Array.from(row.campaigns).sort(),
+        sources: Array.from(row.sources).sort(),
+        packages: Array.from(row.packages).sort(),
+        priceBands: Array.from(row.priceBands).sort(),
       }));
 
     return res.json({
@@ -2340,6 +2604,7 @@ router.get("/admin/booking-analytics", isAuthenticated, async (req: any, res: Re
       topCombinations,
       sourceBreakdown,
       campaignBreakdown,
+      routeDayBreakdown,
     });
   } catch (err) {
     console.error("[admin/booking-analytics] error:", err);

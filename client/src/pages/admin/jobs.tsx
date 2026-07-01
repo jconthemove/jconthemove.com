@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -69,6 +69,15 @@ function formatDateShort(dateStr: string | null | undefined): string {
     const d = new Date(dateStr.includes("T") ? dateStr : dateStr + "T12:00:00");
     return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   } catch { return dateStr; }
+}
+
+function formatDateInput(dateStr: string | null | undefined): string {
+  if (!dateStr) return "";
+  const raw = String(dateStr).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toISOString().slice(0, 10);
 }
 
 type Lead = {
@@ -523,8 +532,28 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
   const [tradeNote, setTradeNote] = useState<Record<string, string>>({});
   const [overrideReason, setOverrideReason] = useState("");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [scheduleWindow, setScheduleWindow] = useState("Morning");
+  const [scheduleCrewSize, setScheduleCrewSize] = useState("2");
+  const [scheduleHours, setScheduleHours] = useState("3");
 
   const jobTradeRequests = tradeRequests.filter(r => r.leadId === lead?.id && r.status === "pending");
+
+  useEffect(() => {
+    if (!lead || !open) return;
+    setBasePrice(lead.basePrice || "");
+    setTotalPrice(lead.totalPrice || "");
+    setQuoteNote(lead.quoteNotes || "");
+    setBtcAmount("");
+    setBtcLink(null);
+    setOverrideReason("");
+    setTradeNote({});
+    setDeleteConfirmOpen(false);
+    setScheduleDate(formatDateInput(lead.confirmedDate || lead.moveDate));
+    setScheduleWindow(lead.arrivalWindow || "Morning");
+    setScheduleCrewSize(String(lead.crewSize || 2));
+    setScheduleHours(String(lead.confirmedHours || 3));
+  }, [lead?.id, open]);
 
   type PaymentPanel = {
     status: { key: string; label: string; color: "green" | "yellow" | "blue" | "gray" } | null;
@@ -754,6 +783,56 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
     },
   });
 
+  const scheduleJobMutation = useMutation({
+    mutationFn: async () => {
+      if (!lead) throw new Error("No lead selected");
+      const status = String(lead.status || "").toLowerCase();
+      const canConvert = new Set(["new", "quote_requested", "contacted", "quoted", "chatbot_pending"]).has(status);
+      const confirmedDate = scheduleDate.trim();
+      const crewSize = Math.max(1, Math.min(12, Number(scheduleCrewSize) || Number(lead.crewSize) || 2));
+      const confirmedHours = Math.max(0.5, Math.min(24, Number(scheduleHours) || Number(lead.confirmedHours) || 3));
+      const base = numericPrice(basePrice || lead.basePrice || totalPrice || lead.totalPrice);
+      const total = numericPrice(totalPrice || lead.totalPrice || basePrice || lead.basePrice);
+
+      if (!confirmedDate) throw new Error("Pick a date first");
+      if (base <= 0) throw new Error("Set a price before adding this to the calendar");
+
+      const payload = {
+        basePrice: base,
+        totalPrice: total > 0 ? total : base,
+        confirmedDate,
+        arrivalWindow: scheduleWindow.trim() || undefined,
+        crewSize,
+        confirmedHours,
+        crewMembers: crewMembersArr,
+        confirmedFromAddress: lead.fromAddress || undefined,
+        confirmedToAddress: lead.toAddress || undefined,
+        quoteNotes: quoteNote.trim() || undefined,
+      };
+
+      const res = canConvert
+        ? await apiRequest("POST", `/api/leads/${lead.id}/convert-to-job`, payload)
+        : await apiRequest("PATCH", `/api/leads/${lead.id}`, payload);
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed to schedule job" }));
+        throw new Error(err.error || "Failed to schedule job");
+      }
+      return res.json();
+    },
+    onSuccess: (updatedLead: Lead) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads/available"] });
+      toast({
+        title: "Calendar updated",
+        description: `${updatedLead.firstName || "Job"} ${updatedLead.lastName || ""}`.trim() + " is ready for the crew board.",
+      });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Calendar update failed", description: e.message, variant: "destructive" });
+    },
+  });
+
   if (!lead) return null;
 
   const effectiveDate = lead.confirmedDate || lead.moveDate;
@@ -773,6 +852,7 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
   const crewNeeded = Math.max(1, Number(lead.crewSize || 2));
   const crewReady = crewMembersArr.length >= crewNeeded;
   const statusKey = String(lead.status || "").toLowerCase();
+  const canConvertToCalendar = new Set(["new", "quote_requested", "contacted", "quoted", "chatbot_pending"]).has(statusKey);
   const completeReady = ["completed", "customer_approved", "payout_calculated", "payout_sent", "closed", "paid"].includes(statusKey);
   const invoiceReady = Boolean(
     lead.squarePaymentUrl
@@ -845,6 +925,93 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
             serviceLabel={lead.serviceType}
             compact
           />
+          <div id="admin-job-calendar" className="scroll-mt-4 rounded-xl border border-blue-500/25 bg-blue-950/20 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-blue-200">
+                <Calendar className="h-3.5 w-3.5" /> Quick calendar
+              </p>
+              <Badge className="border-blue-500/30 bg-blue-500/15 text-blue-200">
+                {canConvertToCalendar ? "Request -> job" : "Calendar edit"}
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] uppercase text-slate-500">Date</label>
+                <Input
+                  type="date"
+                  value={scheduleDate}
+                  onChange={e => setScheduleDate(e.target.value)}
+                  className="mt-0.5 h-9 bg-slate-900/70 border-slate-700 text-white"
+                  data-testid="input-admin-job-calendar-date"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] uppercase text-slate-500">Window</label>
+                <Input
+                  value={scheduleWindow}
+                  onChange={e => setScheduleWindow(e.target.value)}
+                  placeholder="Morning"
+                  className="mt-0.5 h-9 bg-slate-900/70 border-slate-700 text-white"
+                  data-testid="input-admin-job-calendar-window"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] uppercase text-slate-500">Crew</label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={12}
+                  value={scheduleCrewSize}
+                  onChange={e => setScheduleCrewSize(e.target.value)}
+                  className="mt-0.5 h-9 bg-slate-900/70 border-slate-700 text-white"
+                  data-testid="input-admin-job-calendar-crew"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] uppercase text-slate-500">Hours</label>
+                <Input
+                  type="number"
+                  min={0.5}
+                  max={24}
+                  step={0.5}
+                  value={scheduleHours}
+                  onChange={e => setScheduleHours(e.target.value)}
+                  className="mt-0.5 h-9 bg-slate-900/70 border-slate-700 text-white"
+                  data-testid="input-admin-job-calendar-hours"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="text-[10px] uppercase text-slate-500">Price used</label>
+                <Input
+                  value={basePrice || totalPrice || ""}
+                  onChange={e => {
+                    setBasePrice(e.target.value);
+                    if (!totalPrice) setTotalPrice(e.target.value);
+                  }}
+                  placeholder="400.00"
+                  className="mt-0.5 h-9 bg-slate-900/70 border-slate-700 text-white font-bold"
+                  data-testid="input-admin-job-calendar-price"
+                />
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              onClick={() => scheduleJobMutation.mutate()}
+              disabled={scheduleJobMutation.isPending}
+              className="mt-3 w-full bg-blue-600 text-white hover:bg-blue-500"
+              data-testid="button-admin-job-add-to-calendar"
+            >
+              {scheduleJobMutation.isPending
+                ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                : <Calendar className="mr-2 h-4 w-4" />}
+              {canConvertToCalendar ? "Add to calendar and crew board" : "Update calendar"}
+            </Button>
+            <p className="mt-2 text-xs text-slate-400">
+              Sets date, hours, crew, and price. Request cards become available jobs for dispatch.
+            </p>
+          </div>
           <MarketplaceProcessGuide
             source={sourceLabel || lead.source}
             shapeId={marketplaceShapeId}

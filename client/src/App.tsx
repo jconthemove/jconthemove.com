@@ -77,6 +77,7 @@ const LeaveReviewPage = lazy(() => import("@/pages/leave-review"));
 const QuotePage = lazy(() => import("@/pages/quote"));
 const SponsorsPage = lazy(() => import("@/pages/sponsors"));
 const ServicesPage = lazy(() => import("@/pages/services"));
+const RouteDaysPage = lazy(() => import("@/pages/route-days"));
 const GalleryPage = lazy(() => import("@/pages/gallery"));
 const ReviewsPage = lazy(() => import("@/pages/reviews"));
 const SwapPage = lazy(() => import("@/pages/swap"));
@@ -784,6 +785,7 @@ const PUBLIC_PATH_PREFIXES = [
   "/demolition",
   "/sponsors",
   "/services",
+  "/route-days",
   "/pricing",
   "/gallery",
   "/reviews",
@@ -870,6 +872,8 @@ function Router() {
       
       {/* Services page - accessible to all */}
       <Route path="/services" component={ServicesPage} />
+      <Route path="/route-days" component={RouteDaysPage} />
+      <Route path="/route-days/:slug" component={RouteDaysPage} />
       <Route path="/pricing" component={PricingPage} />
       
       {/* Gallery page - accessible to all */}

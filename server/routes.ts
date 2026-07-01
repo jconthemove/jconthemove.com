@@ -24,6 +24,16 @@ import { eq, desc, sql, and, gte, lte, or, ilike, inArray, isNull } from 'drizzl
 import { db, pool } from './db';
 import { rewards, walletAccounts, walletPayouts, cashoutRequests, fundingDeposits, reserveTransactions, treasuryAccounts, users, leads, swapRequests, treasurySwapRules, bitcoinPayments, stakes, stakingTiers, contacts, notifications, walletTransactions, jewelryItems, shopItems, giftCards, miningSessions, miningClaims, treasuryWithdrawals, tokenConversions, rewardSettings, recoveryTokens, promoCodes, reviews, rewardCategories, rewardItems, rewardRedemptions, buybackFund, laborQuotes, jobTradeRequests, workerProfiles, quoteApprovals, quoteConsensusVotes, quoteAttributions, marketingReps, marketingCallEvents, insertMarketingRepSchema, jobPayoutSettings, referralPartners, jobAssignments, jobPayoutCalculations, jobWorkerPayouts } from '@shared/schema';
 import { DEFAULT_MARKETING_REPS } from '@shared/marketingNetwork';
+import {
+  getRouteDayDiscountEligibility,
+  IRONWOOD_DAILY_DISCOUNT,
+  IRONWOOD_DAILY_DISCOUNT_CODE,
+  ROUTE_DAY_DISCOUNT,
+  ROUTE_DAY_DISCOUNT_CODE,
+  ROUTE_DAY_PROMO_PACKAGES,
+  ROUTE_DAY_TRAVEL_PRICE_NOTE,
+  SERVICE_ADDRESS_DISCOUNT_NOTE,
+} from '@shared/routeDays';
 import { getFaucetPayService } from "./services/faucetpay";
 import { getAdvertisingService } from "./services/advertising";
 import { FAUCET_CONFIG, calculateJCMovesReward, getTierFromSpend, getTierFromPoints, LOYALTY_TIERS, TIER_POINT_AWARDS, type TierPointActivity } from "./constants";
@@ -71,7 +81,27 @@ const CHATBOT_JUNK_TRAVEL_CHARGE_PER_TIER = 50;
 function safeMarketingTracking(raw: unknown) {
   const input = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
   const picked: Record<string, string> = {};
-  for (const key of ["utmSource", "utmMedium", "utmCampaign", "utmContent", "jcCampaign", "jcArea", "jcFocus", "fbclid", "referrer"]) {
+  for (const key of [
+    "utmSource",
+    "utmMedium",
+    "utmCampaign",
+    "utmContent",
+    "jcCampaign",
+    "jcArea",
+    "jcFocus",
+    "jcRouteCity",
+    "jcRouteState",
+    "jcRouteZip",
+    "jcRouteDay",
+    "jcRouteKey",
+    "jcPromoType",
+    "jcPackage",
+    "jcCrewTarget",
+    "jcHoursTarget",
+    "jcPriceBand",
+    "fbclid",
+    "referrer",
+  ]) {
     const value = input[key];
     if (typeof value === "string" && value.trim()) picked[key] = value.trim().slice(0, 500);
   }
@@ -387,6 +417,38 @@ async function linkEmployeePromoCodes() {
 // ─────────────────────────────────────────────────────────────────────────────
 async function seedMarketingNetwork() {
   try {
+    const serviceAddressPromoSeeds = [
+      {
+        code: ROUTE_DAY_DISCOUNT_CODE,
+        description: `${ROUTE_DAY_DISCOUNT} ${SERVICE_ADDRESS_DISCOUNT_NOTE} ${ROUTE_DAY_TRAVEL_PRICE_NOTE} ${ROUTE_DAY_PROMO_PACKAGES.map((pkg) => `${pkg.crew} for ${pkg.hours} at ${pkg.priceRange}`).join("; ")}.`,
+      },
+      {
+        code: IRONWOOD_DAILY_DISCOUNT_CODE,
+        description: `${IRONWOOD_DAILY_DISCOUNT} ${SERVICE_ADDRESS_DISCOUNT_NOTE}`,
+      },
+    ];
+
+    for (const promo of serviceAddressPromoSeeds) {
+      await db.insert(promoCodes).values({
+        code: promo.code,
+        description: promo.description,
+        discountPercent: "5.00",
+        discountPercentJewelry: "0.00",
+        rewardTokens: "0.00",
+        referralRewardTokens: "0.00",
+        isActive: true,
+      }).onConflictDoUpdate({
+        target: promoCodes.code,
+        set: {
+          description: promo.description,
+          discountPercent: "5.00",
+          discountPercentJewelry: "0.00",
+          isActive: true,
+          updatedAt: new Date(),
+        },
+      });
+    }
+
     for (const rep of DEFAULT_MARKETING_REPS) {
       await db.insert(promoCodes).values({
         code: rep.promoCode,
@@ -4794,6 +4856,11 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
           marketingTracking.utmCampaign ? `UTM campaign: ${marketingTracking.utmCampaign}` : "",
           marketingTracking.jcArea ? `Ad area: ${marketingTracking.jcArea}` : "",
           marketingTracking.jcFocus ? `Ad focus: ${marketingTracking.jcFocus}` : "",
+          marketingTracking.jcRouteDay ? `Route day: ${marketingTracking.jcRouteDay}` : "",
+          marketingTracking.jcPackage ? `Package: ${marketingTracking.jcPackage}` : "",
+          marketingTracking.jcCrewTarget ? `Crew target: ${marketingTracking.jcCrewTarget}` : "",
+          marketingTracking.jcHoursTarget ? `Hours target: ${marketingTracking.jcHoursTarget}` : "",
+          marketingTracking.jcPriceBand ? `Price band: ${marketingTracking.jcPriceBand}` : "",
           parsed.mediaLink ? `Photo/video/album link: ${parsed.mediaLink}` : "",
           parsed.notes ? `Notes: ${parsed.notes}` : "",
           photoNames.length ? `Photo files mentioned: ${photoNames.join(", ")}` : "",
@@ -8529,6 +8596,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
     confirmedDate: z.string().trim().min(1, "Confirmed date is required"),
     arrivalWindow: z.string().trim().max(80).optional(),
     crewSize: z.coerce.number().int().min(1).max(12).default(2),
+    confirmedHours: z.coerce.number().positive().max(24).optional(),
     crewMembers: z.array(z.string()).default([]),
     confirmedFromAddress: z.string().trim().max(500).optional(),
     confirmedToAddress: z.string().trim().max(500).optional(),
@@ -8571,6 +8639,7 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         confirmedDate: data.confirmedDate,
         arrivalWindow: data.arrivalWindow || null,
         crewSize: data.crewSize,
+        confirmedHours: data.confirmedHours ?? existingLead.confirmedHours ?? null,
         crewMembers: data.crewMembers,
         confirmedFromAddress: data.confirmedFromAddress || existingLead.fromAddress,
         confirmedToAddress: data.confirmedToAddress || existingLead.toAddress || null,
@@ -17738,16 +17807,30 @@ Thank you for your business!
   // Validate a promo code (public - no auth required, just checks if valid)
   app.post("/api/promo-codes/validate", async (req: any, res) => {
     try {
-      const { code, context } = z.object({
+      const { code, context, serviceAddress, requestedDate } = z.object({
         code: z.string().min(1).max(50),
         context: z.enum(['service', 'jewelry', 'any']).default('any'),
+        serviceAddress: z.string().trim().max(500).optional(),
+        requestedDate: z.string().trim().max(40).optional(),
       }).parse(req.body);
+      const normalizedCode = code.toUpperCase().trim();
+
+      if (normalizedCode === ROUTE_DAY_DISCOUNT_CODE || normalizedCode === IRONWOOD_DAILY_DISCOUNT_CODE) {
+        const eligibility = getRouteDayDiscountEligibility({ serviceAddress, requestedDate });
+        if (!eligibility.eligible || eligibility.code !== normalizedCode) {
+          return res.status(400).json({
+            valid: false,
+            error: eligibility.reason,
+            serviceAddressDiscountHint: eligibility,
+          });
+        }
+      }
 
       const { promoCodes } = await import("@shared/schema");
       const [promo] = await db
         .select()
         .from(promoCodes)
-        .where(eq(promoCodes.code, code.toUpperCase().trim()))
+        .where(eq(promoCodes.code, normalizedCode))
         .limit(1);
 
       if (!promo) return res.status(404).json({ valid: false, error: "Promo code not found" });

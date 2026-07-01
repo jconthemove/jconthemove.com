@@ -10,6 +10,15 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AdminPricingEditor } from "@/components/AdminPricingEditor";
 import {
+  IRONWOOD_DAILY_DISCOUNT,
+  ROUTE_DAY_DISCOUNT,
+  ROUTE_DAY_SCHEDULE,
+  ROUTE_DAY_SERVICE_TAGS,
+  SERVICE_ADDRESS_DISCOUNT_NOTE,
+  ROUTE_DAY_PROMO_PACKAGES,
+  routeDayLandingHref,
+} from "@shared/routeDays";
+import {
   Truck, Users, Clock, DollarSign, CheckCircle, Star,
   ChevronRight, ArrowLeft, Phone, Zap, Shield, Award,
   Package, Layers, Wrench, Sparkles, Calculator, ChevronDown, ChevronUp,
@@ -265,6 +274,65 @@ export default function ServicesPage() {
       </div>
 
       <div className="max-w-4xl mx-auto px-4 space-y-10">
+
+        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-5">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-300">Route-day scheduling</p>
+              <h2 className="mt-2 text-2xl font-black text-white">Preferred town days, flexible crew availability.</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-300">
+                We try to stack work by area to reduce repeat drive time: moving, junk removal, handyman, light demo, flooring, painting, roofing, and more. If a route day has no requested jobs, we can accept other jobs. Customers in any nearby area can still request a quote and we will check the schedule.
+              </p>
+              <p className="mt-3 rounded-lg border border-emerald-400/25 bg-emerald-500/10 px-3 py-2 text-sm font-black text-emerald-100">
+                {ROUTE_DAY_DISCOUNT} {IRONWOOD_DAILY_DISCOUNT} {SERVICE_ADDRESS_DISCOUNT_NOTE}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-slate-950/60 p-3 text-sm text-slate-200 md:min-w-[190px]">
+              <p className="font-black text-white">Crew capacity</p>
+              <p className="mt-1 text-slate-300">2 crews</p>
+              <p className="text-slate-300">Up to 6 movers</p>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-2 sm:grid-cols-2">
+            {ROUTE_DAY_SCHEDULE.map((route) => (
+              <button
+                key={route.key}
+                type="button"
+                onClick={() => navigate(routeDayLandingHref(route))}
+                className="rounded-xl border border-white/10 bg-slate-950/50 p-3 text-left transition hover:border-emerald-400/60 hover:bg-emerald-500/10"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-widest text-emerald-300">{route.day}</p>
+                    <p className="text-lg font-black text-white">{route.city}</p>
+                  </div>
+                  <CalendarCheck className="h-5 w-5 text-emerald-300" />
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-slate-400">{route.note}</p>
+                <p className="mt-2 text-xs font-black text-emerald-300">
+                  View {route.label} packages, promo code, and tracking flow
+                </p>
+              </button>
+            ))}
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            {ROUTE_DAY_PROMO_PACKAGES.map((promoPackage) => (
+              <div key={promoPackage.title} className="rounded-xl border border-white/10 bg-slate-950/50 p-4">
+                <p className="text-xs font-black uppercase tracking-widest text-blue-300">{promoPackage.title}</p>
+                <p className="mt-2 text-lg font-black text-white">{promoPackage.crew} / {promoPackage.hours}</p>
+                <p className="mt-1 text-sm font-black text-emerald-300">{promoPackage.priceRange}</p>
+                <p className="mt-2 text-xs leading-relaxed text-slate-400">{promoPackage.bestFor}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {ROUTE_DAY_SERVICE_TAGS.map((tag) => (
+              <span key={tag} className="rounded-full border border-white/10 bg-slate-950/40 px-2.5 py-1 text-[11px] font-bold text-slate-300">
+                {tag}
+              </span>
+            ))}
+          </div>
+        </div>
 
         {/* ── HOME TYPE RECOMMENDER ─────────────────────────────────────── */}
         <div className="rounded-2xl bg-slate-800/50 border border-slate-700/50 p-5">

@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Megaphone, Tags, TrendingUp, Package, Layers } from "lucide-react";
+import { MapPin, Megaphone, Tags, TrendingUp, Package, Layers } from "lucide-react";
 
 // ── types ─────────────────────────────────────────────────────────────────
 interface BookingAnalyticsResponse {
@@ -30,6 +30,11 @@ interface BookingAnalyticsResponse {
     campaigns: string[];
     areas: string[];
     focuses: string[];
+    routeDays: string[];
+    packages: string[];
+    priceBands: string[];
+    crewTargets: string[];
+    hoursTargets: string[];
   }[];
   campaignBreakdown: {
     campaign: string;
@@ -40,6 +45,24 @@ interface BookingAnalyticsResponse {
     promoCodes: string[];
     areas: string[];
     focuses: string[];
+    routeDays: string[];
+    packages: string[];
+    priceBands: string[];
+    crewTargets: string[];
+    hoursTargets: string[];
+  }[];
+  routeDayBreakdown: {
+    routeKey: string;
+    routeDay: string;
+    area: string;
+    count: number;
+    revenue: number;
+    aov: number;
+    promoCodes: string[];
+    campaigns: string[];
+    sources: string[];
+    packages: string[];
+    priceBands: string[];
   }[];
 }
 
@@ -239,13 +262,19 @@ export default function AdminBookingAnalyticsPage() {
                       </div>
                       <Badge variant="secondary">{fmtPct(row.bundleRate)} bundle</Badge>
                     </div>
-                    {(row.promoCodes.length > 0 || row.campaigns.length > 0) && (
+                    {(row.promoCodes.length > 0 || row.campaigns.length > 0 || row.routeDays.length > 0 || row.packages.length > 0) && (
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {row.promoCodes.slice(0, 4).map((code) => (
                           <Badge key={code} variant="outline" className="font-mono">Promo {code}</Badge>
                         ))}
                         {row.campaigns.slice(0, 4).map((campaign) => (
                           <Badge key={campaign} variant="outline" className="font-mono">Campaign {campaign}</Badge>
+                        ))}
+                        {row.routeDays.slice(0, 3).map((day) => (
+                          <Badge key={`route-${day}`} variant="secondary">{day}</Badge>
+                        ))}
+                        {row.packages.slice(0, 2).map((pkg) => (
+                          <Badge key={`pkg-${pkg}`} variant="secondary">{pkg.replace(/-/g, " ")}</Badge>
                         ))}
                       </div>
                     )}
@@ -290,6 +319,9 @@ export default function AdminBookingAnalyticsPage() {
                     {row.focuses.slice(0, 1).map((focus) => (
                       <Badge key={`focus-${focus}`} variant="secondary">{focus}</Badge>
                     ))}
+                    {row.packages.slice(0, 1).map((pkg) => (
+                      <Badge key={`package-${pkg}`} variant="secondary">{pkg.replace(/-/g, " ")}</Badge>
+                    ))}
                   </div>
                 ))}
               </div>
@@ -297,6 +329,48 @@ export default function AdminBookingAnalyticsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card data-testid="card-route-day-performance">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <MapPin className="h-4 w-4" /> Route-day performance
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <Skeleton className="h-40 w-full" />
+          ) : (data?.routeDayBreakdown.length ?? 0) === 0 ? (
+            <p className="text-sm text-muted-foreground">No route-day campaign bookings in range.</p>
+          ) : (
+            <div className="space-y-3">
+              {data!.routeDayBreakdown.map((row) => (
+                <div key={row.routeKey} className="rounded-md border p-3 text-sm" data-testid={`route-day-row-${row.routeKey}`}>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold">{row.area || row.routeKey}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {row.routeDay || "Route day"} - {row.count} booking{row.count === 1 ? "" : "s"} - {fmtMoney(row.revenue)} - AOV {fmtMoney(row.aov)}
+                      </div>
+                    </div>
+                    {row.promoCodes[0] && <Badge variant="outline" className="font-mono">{row.promoCodes[0]}</Badge>}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {row.packages.map((pkg) => (
+                      <Badge key={pkg} variant="secondary">{pkg.replace(/-/g, " ")}</Badge>
+                    ))}
+                    {row.priceBands.map((band) => (
+                      <Badge key={band} variant="outline">${band.replace("-", "-$")}</Badge>
+                    ))}
+                    {row.sources.slice(0, 3).map((source) => (
+                      <Badge key={source} variant="outline">{fmtSource(source)}</Badge>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card data-testid="card-attach-rate">
         <CardHeader>
