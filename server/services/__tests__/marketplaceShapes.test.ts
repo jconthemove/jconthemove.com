@@ -7,11 +7,18 @@ import {
   MARKETPLACE_SIMPLE_SIDES,
   MARKETPLACE_SOURCE_FLOW_MATRIX,
   MARKETPLACE_SMART_BOOKING_STEPS,
+  getMarketplaceShapeForServiceCode,
   getMarketplaceSourceFlowForSource,
   type MarketplaceActionPhase,
   type MarketplaceActionRail,
+  type MarketplaceRequestShapeId,
   type MarketplaceSideId,
 } from "../../../shared/marketplaceShapes";
+import {
+  SERVICE_PRICE_MENU,
+  SERVICE_PRICE_MENU_CATEGORIES,
+  formatServicePriceRange,
+} from "../../../shared/servicePriceMenu";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -200,6 +207,71 @@ test("links every source flow to at least one operational action task", () => {
 
   for (const flow of MARKETPLACE_SOURCE_FLOW_MATRIX) {
     assert.ok(linkedFlowIds.has(flow.id), `${flow.id} should be linked to at least one action task`);
+  }
+});
+
+test("keeps the smart service price menu usable and tied to valid request shapes", () => {
+  const shapeIds = new Set(MARKETPLACE_REQUEST_SHAPES.map((shape) => shape.id));
+  const categoryIds = new Set(SERVICE_PRICE_MENU_CATEGORIES.map((category) => category.id));
+
+  assert.ok(SERVICE_PRICE_MENU.length >= 20, "service price menu should cover the core launch paths");
+
+  for (const task of SERVICE_PRICE_MENU) {
+    assertFilled(task.id, "task.id");
+    assertFilled(task.serviceCode, `${task.id}.serviceCode`);
+    assertFilled(task.label, `${task.id}.label`);
+    assertFilled(task.description, `${task.id}.description`);
+    assertFilled(task.priceUnit, `${task.id}.priceUnit`);
+    assertFilled(task.operationsSignal, `${task.id}.operationsSignal`);
+    assert.ok(categoryIds.has(task.categoryId), `${task.id} references unknown category ${task.categoryId}`);
+    assert.ok(shapeIds.has(task.shapeId), `${task.id} references unknown shape ${task.shapeId}`);
+    assert.ok(task.priceMin > 0, `${task.id} must have a positive minimum estimate`);
+    assert.ok(task.priceMax >= task.priceMin, `${task.id} maximum estimate cannot be below minimum`);
+    assert.ok(task.defaultCrew >= 1, `${task.id} must suggest at least one worker`);
+    assert.ok(task.defaultHours >= 1, `${task.id} must suggest at least one hour`);
+    assert.ok(task.tags.length > 0, `${task.id} should have searchable tags`);
+    assert.ok(task.customerNeeds.length > 0, `${task.id} should tell the intake what to ask for`);
+    assert.match(formatServicePriceRange(task), /^\$[\d,]+-\$[\d,]+$/, `${task.id} should format a customer range`);
+  }
+});
+
+test("routes service menu task codes to the same shape shown on the customer picker", () => {
+  for (const task of SERVICE_PRICE_MENU) {
+    const routed = getMarketplaceShapeForServiceCode(task.serviceCode);
+    assert.equal(
+      routed.id,
+      task.shapeId,
+      `${task.id} serviceCode ${task.serviceCode} should route to ${task.shapeId}`,
+    );
+  }
+});
+
+test("keeps common marketplace service aliases pointed at the intended operational card shape", () => {
+  const examples: Array<[string, MarketplaceRequestShapeId]> = [
+    ["moving", "moving_help"],
+    ["load_unload", "moving_help"],
+    ["ubox", "moving_help"],
+    ["pack_unpack", "moving_help"],
+    ["delivery", "delivery_reuse"],
+    ["store_pickup", "delivery_reuse"],
+    ["single_item", "delivery_reuse"],
+    ["small_project_labor", "delivery_reuse"],
+    ["lawn_care", "repeat_loop"],
+    ["snow_removal", "repeat_loop"],
+    ["junk_removal", "repeat_loop"],
+    ["handyman", "repeat_loop"],
+    ["roofing", "repeat_loop"],
+    ["flooring", "repeat_loop"],
+    ["painting", "repeat_loop"],
+    ["demolition", "repeat_loop"],
+  ];
+
+  for (const [serviceCode, expectedShapeId] of examples) {
+    assert.equal(
+      getMarketplaceShapeForServiceCode(serviceCode).id,
+      expectedShapeId,
+      `${serviceCode} should route to ${expectedShapeId}`,
+    );
   }
 });
 

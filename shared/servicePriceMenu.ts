@@ -88,7 +88,7 @@ export const SERVICE_PRICE_MENU: ServicePriceMenuTask[] = [
   {
     id: "donation_or_dump_run",
     categoryId: "delivery",
-    serviceCode: "junk_removal",
+    serviceCode: "donation_dump_pickup",
     shapeId: "delivery_reuse",
     label: "Donation or dump run",
     description: "Small disposal, donation drop-off, or reuse run.",
@@ -105,7 +105,7 @@ export const SERVICE_PRICE_MENU: ServicePriceMenuTask[] = [
   {
     id: "small_project_block",
     categoryId: "delivery",
-    serviceCode: "labor",
+    serviceCode: "small_project_labor",
     shapeId: "delivery_reuse",
     label: "Small project labor block",
     description: "A short two-person work block for lifting, carrying, staging, or setup.",
