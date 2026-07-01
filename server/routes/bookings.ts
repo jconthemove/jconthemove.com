@@ -65,6 +65,7 @@ import { quoteByLaborHours, LABOR_RATE_PER_HOUR, quoteMovingFromTable } from "@s
 import {
   getMarketplaceRequestShape,
   getMarketplaceShapeForServiceCode,
+  getMarketplaceSourceFlowsForContext,
   type MarketplaceRequestShapeId,
 } from "@shared/marketplaceShapes";
 import { getRouteDayDiscountEligibility } from "@shared/routeDays";
@@ -267,6 +268,25 @@ function marketplaceShapeForBooking(items: PersistedBookingInput[], fallbackServ
     if (shape) return shape;
   }
   return getMarketplaceShapeForServiceCode(items[0]?.serviceCode || fallbackService);
+}
+
+function marketplaceSourceFlowForBooking(items: PersistedBookingInput[], shapeId: MarketplaceRequestShapeId, fallbackSource: string) {
+  const sourceSignal = firstDetailValue(items, [
+    "priceMenuSourceSignal",
+    "marketplaceSourceSignal",
+    "marketplaceSource",
+    "sourceSignal",
+    "source",
+    "utmSource",
+    "jcFocus",
+  ]) || fallbackSource;
+  return getMarketplaceSourceFlowsForContext({
+    source: sourceSignal,
+    shapeId,
+    serviceCode: items[0]?.serviceCode || null,
+    serviceLabel: items[0]?.serviceLabel || null,
+    limit: 1,
+  })[0] || null;
 }
 
 function maxCrew(items: BookingPricingResult["items"], fallbackInputs: PersistedBookingInput[]): number {
@@ -1365,6 +1385,7 @@ router.post("/bookings", async (req: Request, res: Response) => {
         const dropoffAddress = firstDetailValue(persistInputs, ["dropoffAddress", "toAddress", "destinationAddress"]);
         const serviceType = serviceTypeForLead(persistInputs);
         const marketplaceShape = marketplaceShapeForBooking(persistInputs, serviceType);
+        const marketplaceSourceFlow = marketplaceSourceFlowForBooking(persistInputs, marketplaceShape.id, leadSource);
         const crewSize = maxCrew(quote.items, persistInputs);
         const confirmedHours = firstHours(quote.items, persistInputs);
         const bookingReference = `JOB-${booking.id.slice(0, 8).toUpperCase()}`;
@@ -1393,6 +1414,21 @@ router.post("/bookings", async (req: Request, res: Response) => {
             worker: marketplaceShape.worker,
             company: marketplaceShape.company,
           },
+          marketplaceSourceFlowId: marketplaceSourceFlow?.id || null,
+          marketplaceSourceFlow: marketplaceSourceFlow
+            ? {
+                id: marketplaceSourceFlow.id,
+                source: marketplaceSourceFlow.source,
+                category: marketplaceSourceFlow.category,
+                borrowedSignal: marketplaceSourceFlow.borrowedSignal,
+                customerMove: marketplaceSourceFlow.customerMove,
+                workerMove: marketplaceSourceFlow.workerMove,
+                companyControl: marketplaceSourceFlow.companyControl,
+                automationHook: marketplaceSourceFlow.automationHook,
+                rewardTrigger: marketplaceSourceFlow.rewardTrigger,
+                surfaces: marketplaceSourceFlow.surfaces,
+              }
+            : null,
           subtotal: quote.subtotal,
           discountTotal: quote.discountTotal,
           finalTotal: quote.finalTotal,

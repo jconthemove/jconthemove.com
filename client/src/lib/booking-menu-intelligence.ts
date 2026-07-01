@@ -117,6 +117,15 @@ export function extractBookingMenuIntelligence(
     : Array.isArray(recoveredSnapshot.items)
       ? recoveredSnapshot.items
       : [];
+  const sourceFlow = plainRecord(snapshot.marketplaceSourceFlow);
+  const snapshotSourceSignal =
+    stringValue(snapshot.marketplaceSourceSignal) ||
+    stringValue(snapshot.sourceSignal) ||
+    stringValue(sourceFlow.source);
+  const snapshotOperationsSignal =
+    stringValue(snapshot.marketplaceOperationsSignal) ||
+    stringValue(sourceFlow.companyControl) ||
+    stringValue(sourceFlow.automationHook);
   const preview = quotePreviewFromSnapshot(snapshot);
   const previewRange = quotePreviewEstimate(preview);
   const zoneName = quotePreviewZoneName(preview);
@@ -124,8 +133,8 @@ export function extractBookingMenuIntelligence(
   for (const rawItem of requestedItems) {
     const item = plainRecord(rawItem) as RequestedQuoteItem;
     const details = plainRecord(item.details);
-    const sourceSignal = itemStringValue(item, "priceMenuSourceSignal");
-    const operationsSignal = itemStringValue(item, "priceMenuOperationsSignal");
+    const sourceSignal = itemStringValue(item, "priceMenuSourceSignal") || snapshotSourceSignal;
+    const operationsSignal = itemStringValue(item, "priceMenuOperationsSignal") || snapshotOperationsSignal;
     const loadType = itemStringValue(item, "loadType");
     const movingPath = itemStringValue(item, "movingPath");
     const truckSize = itemStringValue(item, "truckSize") || itemStringValue(item, "truckProvider") || itemStringValue(item, "truckSituation");
@@ -192,6 +201,30 @@ export function extractBookingMenuIntelligence(
       truckSize,
       zoneName,
       quoteReviewRequired,
+    };
+  }
+
+  if (snapshotSourceSignal || snapshotOperationsSignal || previewRange || zoneName) {
+    return {
+      serviceLabel: fallbackServiceLabel,
+      sourceSignal: snapshotSourceSignal,
+      operationsSignal: snapshotOperationsSignal,
+      customerNeeds: [],
+      range: previewRange,
+      unit: null,
+      category: null,
+      taskId: null,
+      packageId: null,
+      packageLabel: null,
+      crew: null,
+      hours: null,
+      minPrice: null,
+      maxPrice: null,
+      loadType: null,
+      movingPath: null,
+      truckSize: null,
+      zoneName,
+      quoteReviewRequired: false,
     };
   }
 
