@@ -47,8 +47,8 @@ const publishBlockers = [
   {
     title: "Cloudflare DNS",
     icon: Globe2,
-    probeIds: ["public_deploy_freshness", "public_app_url"],
-    action: "Point www.jconthemove.com at the Render custom-domain target and keep the bare domain redirecting to www.",
+    probeIds: ["custom_domain_routing", "public_app_url"],
+    action: "Point www.jconthemove.com at the Render custom-domain target, then keep the bare domain redirecting to www while preserving path/query.",
     note: "The public launch domain should serve the same Render build that passes the checklist.",
   },
 ];
@@ -84,7 +84,7 @@ export default function AdminLaunchChecklistPage() {
       `Generated: ${new Date().toLocaleString()}`,
       `Status: ${summary.allOk ? "READY" : "NOT READY"}`,
       `Results: ${summary.green} green, ${summary.red} failed, ${summary.notRun} not run, ${summary.total} total`,
-      "Coverage: deploy freshness, health/readiness, payments, public routes, booking funnel, quick requests with photos/media links, tracked marketing attribution, worker rep pages, profit share, payout safety",
+      "Coverage: deploy freshness, custom domain routing, health/readiness, payments, public routes, booking funnel, quick requests with photos/media links, tracked marketing attribution, worker rep pages, profit share, payout safety",
       "",
       ...scenarios.map((s) => {
         const r = results[s.id];
@@ -124,6 +124,12 @@ export default function AdminLaunchChecklistPage() {
     if (matched.length === 0) return { label: "Not checked", className: "border-slate-700 bg-slate-950/70 text-slate-300" };
     if (matched.some((r) => !r.ok)) return { label: "Needs action", className: "border-amber-500/40 bg-amber-950/30 text-amber-100" };
     return { label: "Looks good", className: "border-emerald-500/35 bg-emerald-950/25 text-emerald-100" };
+  }
+
+  function publishBlockerFailures(probeIds: string[]) {
+    return probeIds
+      .map((id) => results[id])
+      .filter((result): result is Result => !!result && !result.ok);
   }
 
   return (
@@ -184,6 +190,7 @@ export default function AdminLaunchChecklistPage() {
         <div className="mt-4 grid gap-3 lg:grid-cols-2">
           {publishBlockers.map((item) => {
             const state = publishBlockerState(item.probeIds);
+            const failures = publishBlockerFailures(item.probeIds);
             const Icon = item.icon;
             return (
               <div key={item.title} className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
@@ -197,6 +204,16 @@ export default function AdminLaunchChecklistPage() {
                   </span>
                 </div>
                 <p className="mt-3 text-sm leading-6 text-slate-200">{item.action}</p>
+                {failures.length > 0 && (
+                  <div className="mt-3 space-y-2 rounded-lg border border-amber-500/25 bg-amber-950/20 p-3">
+                    {failures.map((failure) => (
+                      <div key={failure.id}>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-200">{failure.label}</p>
+                        <p className="mt-1 text-xs leading-5 text-amber-100/90">{failure.detail}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <p className="mt-2 text-xs leading-5 text-slate-500">{item.note}</p>
               </div>
             );
@@ -223,6 +240,7 @@ export default function AdminLaunchChecklistPage() {
         <div className="mt-3 grid gap-2 text-sm text-slate-300 sm:grid-cols-2 lg:grid-cols-3">
           <span>Payments and deposits</span>
           <span>Deploy freshness</span>
+          <span>Custom domain routing</span>
           <span>Health and database readiness</span>
           <span>Public customer and worker routes</span>
           <span>Public booking catalog</span>
