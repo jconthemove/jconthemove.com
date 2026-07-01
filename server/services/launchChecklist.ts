@@ -31,6 +31,7 @@ export type ScenarioId =
   | "env_required"
   | "database_readiness"
   | "public_deploy_freshness"
+  | "custom_domain_routing"
   | "square_configured"
   | "btc_address_configured"
   | "pricing_engine"
@@ -179,7 +180,7 @@ function siblingHealthUrl(baseHealthUrl: string, pathname: string): string {
   return url.toString();
 }
 
-async function fetchHealthJson(url: string): Promise<{ status: number; ok: boolean; body: HealthBody }> {
+async function fetchHealthJson(url: string): Promise<{ status: number; ok: boolean; body: HealthBody; headers: Headers }> {
   const timeoutMs = Number(process.env.LAUNCH_HEALTH_TIMEOUT_MS || 12_000);
   const signal = AbortSignal.timeout(Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 12_000);
   const response = await fetch(url, {
@@ -196,7 +197,25 @@ async function fetchHealthJson(url: string): Promise<{ status: number; ok: boole
   } catch {
     throw new Error(`${url} returned non-JSON response (${response.status})`);
   }
-  return { status: response.status, ok: response.ok, body };
+  return { status: response.status, ok: response.ok, body, headers: response.headers };
+}
+
+function header(headers: Headers, name: string): string {
+  return headers.get(name) || "";
+}
+
+function hostSignals(headers: Headers): string[] {
+  return [
+    header(headers, "x-railway-67") ? "railway" : "",
+    header(headers, "x-railway-edge") ? "railway" : "",
+    header(headers, "x-render-origin-server") ? "render" : "",
+    header(headers, "cf-ray") ? "cloudflare" : "",
+    header(headers, "server") ? `server=${header(headers, "server")}` : "",
+  ].filter(Boolean);
+}
+
+function customDomainHealthUrl(): string {
+  return process.env.CUSTOM_DOMAIN_HEALTH_URL?.trim() || "https://www.jconthemove.com/health";
 }
 
 type MarketingProbeIds = {
@@ -561,34 +580,83 @@ const SCENARIOS: Scenario[] = [
       const healthUrl = publicRenderHealthUrl();
       const readinessUrl = siblingHealthUrl(healthUrl, "/api/health");
       const expectedCommit = readExpectedDeployCommit();
+      const problems: string[] = [];
       const liveness = await fetchHealthJson(healthUrl);
       const liveCommit = liveness.body.version?.shortCommit || liveness.body.version?.commit?.slice(0, 8) || null;
 
       if (!liveness.ok || !["alive", "ready"].includes(liveness.body.status || "")) {
-        return { ok: false, detail: `${healthUrl} not alive: http=${liveness.status} status=${liveness.body.status || "unknown"}` };
+        problems.push(`${healthUrl} not alive: http=${liveness.status} status=${liveness.body.status || "unknown"}`);
       }
       if (!liveCommit) {
-        return { ok: false, detail: `${healthUrl} is alive but missing version.shortCommit; public Render is serving an older build` };
+        problems.push(`${healthUrl} is missing version.shortCommit; public Render is serving an older build`);
       }
       if (expectedCommit && liveCommit !== expectedCommit) {
-        return { ok: false, detail: `${healthUrl} commit ${liveCommit} does not match current build ${expectedCommit}` };
+        problems.push(`${healthUrl} commit ${liveCommit || "missing"} does not match current build ${expectedCommit}`);
       }
       if (liveness.body.boot?.status === "failed") {
-        return { ok: false, detail: `${healthUrl} boot failed: ${liveness.body.boot.error || "unknown error"}` };
+        problems.push(`${healthUrl} boot failed: ${liveness.body.boot.error || "unknown error"}`);
       }
 
       const readiness = await fetchHealthJson(readinessUrl);
       const missingEnv = readiness.body.checks?.env?.missingRequired || [];
       if (missingEnv.length > 0) {
-        return { ok: false, detail: `${readinessUrl} missing env: ${missingEnv.join(", ")}` };
+        problems.push(`${readinessUrl} missing env: ${missingEnv.join(", ")}`);
       }
       if (!readiness.ok || readiness.body.status !== "ready") {
-        return { ok: false, detail: `${readinessUrl} not ready: http=${readiness.status} status=${readiness.body.status || "unknown"}` };
+        problems.push(`${readinessUrl} not ready: http=${readiness.status} status=${readiness.body.status || "unknown"}`);
+      }
+
+      if (problems.length > 0) {
+        return { ok: false, detail: problems.join("; ") };
       }
 
       return {
         ok: true,
         detail: `${healthUrl} running ${liveCommit}${expectedCommit ? " (matches current build)" : ""}; strict readiness passed`,
+      };
+    },
+  },
+  {
+    id: "custom_domain_routing",
+    label: "Custom domain routes to the current Render app",
+    run: async () => {
+      const domainHealthUrl = customDomainHealthUrl();
+      if (domainHealthUrl.toLowerCase() === "skip") {
+        return { ok: true, detail: "custom domain routing check skipped by CUSTOM_DOMAIN_HEALTH_URL=skip" };
+      }
+
+      const expectedCommit = readExpectedDeployCommit();
+      const health = await fetchHealthJson(domainHealthUrl);
+      const signals = hostSignals(health.headers);
+      const liveCommit = health.body.version?.shortCommit || health.body.version?.commit?.slice(0, 8) || null;
+      const problems: string[] = [];
+
+      if (!health.ok || !["alive", "ready"].includes(health.body.status || "")) {
+        problems.push(`${domainHealthUrl} not alive: http=${health.status} status=${health.body.status || "unknown"}`);
+      }
+      if (signals.includes("railway") || signals.some((signal) => signal.toLowerCase().includes("railway"))) {
+        problems.push(`${new URL(domainHealthUrl).hostname} is still served by Railway`);
+      }
+      if (!liveCommit) {
+        problems.push(`${domainHealthUrl} is missing version.shortCommit`);
+      }
+      if (expectedCommit && liveCommit && liveCommit !== expectedCommit) {
+        problems.push(`${domainHealthUrl} commit ${liveCommit} does not match current build ${expectedCommit}`);
+      }
+      if (health.body.boot?.status === "failed") {
+        problems.push(`${domainHealthUrl} boot failed: ${health.body.boot.error || "unknown error"}`);
+      }
+
+      if (problems.length > 0) {
+        return {
+          ok: false,
+          detail: `${problems.join("; ")}; host signals: ${signals.join(", ") || "none"}`,
+        };
+      }
+
+      return {
+        ok: true,
+        detail: `${domainHealthUrl} serves current commit ${liveCommit || "unknown"}; host signals: ${signals.join(", ") || "none"}`,
       };
     },
   },
