@@ -7,7 +7,7 @@
 // turn green before publishing.
 
 import { pool } from "../db";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -45,6 +45,7 @@ export type ScenarioId =
   | "admin_access_ready"
   | "public_booking_catalog"
   | "marketplace_source_model"
+  | "marketplace_surface_mounts"
   | "quick_request_notifications"
   | "quick_request_storage"
   | "tracked_marketing_funnel"
@@ -119,6 +120,22 @@ function readExpectedDeployCommit(): string | null {
   } catch {
     return null;
   }
+}
+
+function readBuiltClientText(): string | null {
+  const publicDir = path.resolve(process.cwd(), "dist/public");
+  const indexPath = path.join(publicDir, "index.html");
+  const assetDir = path.join(publicDir, "assets");
+  if (!existsSync(indexPath)) return null;
+
+  const chunks: string[] = [readFileSync(indexPath, "utf8")];
+  if (existsSync(assetDir)) {
+    for (const entry of readdirSync(assetDir)) {
+      if (!entry.endsWith(".js")) continue;
+      chunks.push(readFileSync(path.join(assetDir, entry), "utf8"));
+    }
+  }
+  return chunks.join("\n");
 }
 
 function publicRenderHealthUrl(): string {
@@ -887,6 +904,84 @@ const SCENARIOS: Scenario[] = [
         ok: true,
         detail: `${MARKETPLACE_SOURCE_FLOW_MATRIX.length} source flows, ${MARKETPLACE_REQUEST_SHAPES.length} request shapes, ${MARKETPLACE_OPERATING_FLYWHEEL.length} flywheel stages, ${MARKETPLACE_ACTION_TASKS.length} action tasks`,
       };
+    },
+  },
+  {
+    id: "marketplace_surface_mounts",
+    label: "Marketplace process is mounted on customer, worker, and company job surfaces",
+    run: async () => {
+      const surfaces = [
+        {
+          name: "customer my-jobs",
+          path: "client/src/pages/my-jobs.tsx",
+          required: [
+            "MarketplaceProcessGuide",
+            "MarketplaceSourceFlowStrip",
+            "SmartBookingGuidanceCard",
+            "BookingMenuIntelligenceCard",
+            'audience="customer"',
+          ],
+        },
+        {
+          name: "worker crew jobs",
+          path: "client/src/pages/crew/jobs.tsx",
+          required: [
+            "MarketplaceProcessGuide",
+            "MarketplaceTaskSplit",
+            "MarketplaceActionMatrix",
+            "BookingMenuIntelligenceCard",
+            'audience="worker"',
+          ],
+        },
+        {
+          name: "company admin jobs",
+          path: "client/src/pages/admin/jobs.tsx",
+          required: [
+            "MarketplaceProcessGuide",
+            "MarketplaceTaskSplit",
+            "MarketplaceActionMatrix",
+            "BookingMenuIntelligenceCard",
+            'audience="company"',
+          ],
+        },
+        {
+          name: "shared lead detail",
+          path: "client/src/pages/lead-detail.tsx",
+          required: [
+            "MarketplaceProcessGuide",
+            "MarketplaceSourceFlowStrip",
+            "BookingMenuIntelligenceCard",
+            "marketplaceAudience",
+          ],
+        },
+      ];
+
+      const sourceMissing = surfaces.filter((surface) => !existsSync(path.resolve(process.cwd(), surface.path)));
+      if (sourceMissing.length === 0) {
+        const missing = surfaces.flatMap((surface) => {
+          const text = readFileSync(path.resolve(process.cwd(), surface.path), "utf8");
+          return surface.required
+            .filter((snippet) => !text.includes(snippet))
+            .map((snippet) => `${surface.name}: ${snippet}`);
+        });
+        return missing.length === 0
+          ? { ok: true, detail: `${surfaces.length} live job surfaces carry marketplace process/source/package guidance` }
+          : { ok: false, detail: `missing surface wiring: ${missing.join(", ")}` };
+      }
+
+      const builtClientText = readBuiltClientText();
+      if (!builtClientText) {
+        return {
+          ok: false,
+          detail: `source unavailable (${sourceMissing.map((surface) => surface.path).join(", ")}) and no built client bundle found`,
+        };
+      }
+
+      const requiredBundleText = ["1, 2, 3 Process", "Customer path", "Worker path", "Company path"];
+      const missingBundleText = requiredBundleText.filter((snippet) => !builtClientText.includes(snippet));
+      return missingBundleText.length === 0
+        ? { ok: true, detail: "production bundle includes customer, worker, and company marketplace process labels" }
+        : { ok: false, detail: `production bundle missing marketplace process text: ${missingBundleText.join(", ")}` };
     },
   },
   {
