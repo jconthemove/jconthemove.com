@@ -782,11 +782,23 @@ const SCENARIOS: Scenario[] = [
       const { rows } = await pool.query<{
         wallet_count: number;
         active_reward_items: number;
+        active_service_rewards: number;
         auto_approve_threshold: string | null;
       }>(`
         SELECT
           (SELECT COUNT(*)::int FROM wallet_accounts) AS wallet_count,
           (SELECT COUNT(*)::int FROM reward_items WHERE status = 'active') AS active_reward_items,
+          (
+            SELECT COUNT(*)::int
+            FROM reward_items
+            WHERE status = 'active'
+              AND (
+                delivery_type = 'service_credit'
+                OR creates_invoice_credit = true
+                OR creates_service_credit = true
+                OR creates_coupon_code = true
+              )
+          ) AS active_service_rewards,
           (
             SELECT token_amount::text
             FROM reward_settings
@@ -803,11 +815,55 @@ const SCENARIOS: Scenario[] = [
       if (Number(row.active_reward_items) <= 0) {
         return { ok: false, detail: "reward shop has no active redeemable items" };
       }
+      if (Number(row.active_service_rewards) <= 0) {
+        return { ok: false, detail: "reward shop has no active service credit, invoice credit, or coupon rewards" };
+      }
       if (!row.auto_approve_threshold) {
         return { ok: false, detail: "redemption_auto_approve_threshold is missing or inactive" };
       }
 
-      const walletSurfaceChecks = [
+      const sourceChecks = [
+        {
+          name: "wallet and reward routes",
+          path: "server/routes.ts",
+          required: [
+            'app.get("/api/wallet/balance"',
+            'app.get("/api/rewards/wallet"',
+            'app.get("/api/reward-shop/items"',
+            'app.post("/api/reward-shop/redeem"',
+            'app.get("/api/reward-shop/my-redemptions"',
+            'app.post("/api/wallet/cancel-pending-redemption"',
+            'app.post("/api/wallet/withdraw"',
+            'app.post("/api/wallet/transfer"',
+            "refuseWithdrawal",
+            "refusePeerTransfer",
+          ],
+        },
+        {
+          name: "atomic booking wallet settlement",
+          path: "server/services/walletPay.ts",
+          required: [
+            "export async function settleBookingPayment",
+            "FOR UPDATE",
+            "validateRedemption",
+            "UPDATE wallet_accounts",
+            "UPDATE bookings SET status = 'confirmed'",
+            "payment_paid_at = NOW()",
+          ],
+        },
+        {
+          name: "booking token redemption bridge",
+          path: "server/routes/bookings.ts",
+          required: [
+            "settleBookingPayment",
+            "body.applyTokens",
+            "body.payFromWallet",
+            "serverTier",
+            "preflightTokenRedemption",
+            "rewardFlatBonusSnapshot",
+            "rewardEarnRateSnapshot",
+          ],
+        },
         {
           name: "customer wallet",
           path: "client/src/pages/customer/wallet.tsx",
@@ -815,6 +871,16 @@ const SCENARIOS: Scenario[] = [
             "button-jcmoves-receive",
             "button-add-credit",
             "Redeem Rewards",
+            "JCMOVES USD",
+          ],
+        },
+        {
+          name: "reward marketplace",
+          path: "client/src/pages/rewards-marketplace.tsx",
+          required: [
+            'queryKey: ["/api/reward-shop/items"]',
+            'apiRequest("POST", "/api/reward-shop/redeem"',
+            'queryKey: ["/api/reward-shop/my-redemptions"]',
             "JCMOVES USD",
           ],
         },
@@ -829,9 +895,9 @@ const SCENARIOS: Scenario[] = [
           ],
         },
       ];
-      const missingSourceFiles = walletSurfaceChecks.filter((surface) => !existsSync(path.resolve(process.cwd(), surface.path)));
+      const missingSourceFiles = sourceChecks.filter((surface) => !existsSync(path.resolve(process.cwd(), surface.path)));
       if (missingSourceFiles.length === 0) {
-        const missingSurfaceSnippets = walletSurfaceChecks.flatMap((surface) => {
+        const missingSurfaceSnippets = sourceChecks.flatMap((surface) => {
           const text = readFileSync(path.resolve(process.cwd(), surface.path), "utf8");
           return surface.required
             .filter((snippet) => !text.includes(snippet))
@@ -857,7 +923,7 @@ const SCENARIOS: Scenario[] = [
 
       return {
         ok: true,
-        detail: `${row.wallet_count} wallets; ${row.active_reward_items} active rewards; approval threshold ${Number(row.auto_approve_threshold).toLocaleString()} JCMOVES; customer + crew receive/redeem UI mounted`,
+        detail: `${row.wallet_count} wallets; ${row.active_reward_items} active rewards (${row.active_service_rewards} service/coupon rewards); approval threshold ${Number(row.auto_approve_threshold).toLocaleString()} JCMOVES; customer + crew receive/redeem UI, shop redemption routes, and atomic booking settlement mounted`,
       };
     },
   },
