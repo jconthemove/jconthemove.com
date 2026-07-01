@@ -756,6 +756,7 @@ function JobDetailSheet({
   const menuIntelligence = extractBookingMenuIntelligence(lead.quoteSnapshot, fallbackServiceLabel);
   const marketplaceSourceContext = menuIntelligence?.sourceSignal || null;
   const marketplaceServiceLabel = menuIntelligence?.serviceLabel || fallbackServiceLabel;
+  const marketplaceWorkerPhase = workerActionPhaseForLead(lead);
 
   const crewEmployees = crewMembersArr
     .map(id => employees.find(e => e.id === id))
@@ -808,19 +809,28 @@ function JobDetailSheet({
           />
           <MarketplaceActionMatrix
             rail="worker"
-            phase={workerActionPhaseForLead(lead)}
+            phase={marketplaceWorkerPhase}
             source={marketplaceSourceContext}
             serviceCode={lead.serviceType}
             serviceLabel={marketplaceServiceLabel}
             compact
             limit={3}
           />
+          <MarketplaceTaskSplit
+            rails={["bronze", "silver", "gold"]}
+            phase={marketplaceWorkerPhase}
+            source={marketplaceSourceContext}
+            serviceCode={lead.serviceType}
+            serviceLabel={marketplaceServiceLabel}
+            compact
+            limitPerRail={2}
+          />
           <MarketplaceSourceFlowStrip
             source={marketplaceSourceContext}
             serviceCode={lead.serviceType}
             serviceLabel={marketplaceServiceLabel}
             audience="worker"
-            phase={workerActionPhaseForLead(lead)}
+            phase={marketplaceWorkerPhase}
           />
           <MarketplaceShapeContext
             serviceCode={lead.serviceType}

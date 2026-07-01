@@ -10,18 +10,32 @@ import {
 } from "lucide-react";
 import {
   MARKETPLACE_ACTION_TASKS,
+  getMarketplaceSourceFlowsForContext,
   type MarketplaceActionPhase,
   type MarketplaceActionRail,
   type MarketplaceActionTask,
+  type MarketplaceRequestShapeId,
 } from "@shared/marketplaceShapes";
+import { resolveMarketplaceShape } from "@/components/MarketplaceShapeBadge";
 
 type PhaseFilter = MarketplaceActionPhase | "all";
 
 type MarketplaceTaskSplitProps = {
   rails?: MarketplaceActionRail[];
   phase?: PhaseFilter;
+  shapeId?: string | null;
+  serviceCode?: string | null;
+  serviceLabel?: string | null;
+  source?: string | null;
+  limitPerRail?: number;
   compact?: boolean;
   className?: string;
+};
+
+type TaskContext = {
+  shapeId: MarketplaceRequestShapeId | null;
+  flowIds: Set<string>;
+  label: string | null;
 };
 
 const phaseOrder: MarketplaceActionPhase[] = ["start", "progress", "finish"];
@@ -83,14 +97,54 @@ function selectedRails(rails?: MarketplaceActionRail[]) {
   return railOrder.filter((rail) => set.has(rail));
 }
 
-function visibleTasks(rail: MarketplaceActionRail, phase: PhaseFilter) {
+function buildTaskContext({
+  shapeId,
+  serviceCode,
+  serviceLabel,
+  source,
+}: Pick<MarketplaceTaskSplitProps, "shapeId" | "serviceCode" | "serviceLabel" | "source">): TaskContext {
+  const hasContext = Boolean(shapeId || serviceCode || serviceLabel || source);
+  if (!hasContext) return { shapeId: null, flowIds: new Set(), label: null };
+
+  const shape = resolveMarketplaceShape({ shapeId, serviceCode, serviceLabel });
+  const flows = getMarketplaceSourceFlowsForContext({
+    source,
+    shapeId,
+    serviceCode,
+    serviceLabel,
+    limit: 4,
+  });
+  const primaryFlow = flows[0];
+
+  return {
+    shapeId: shape.id,
+    flowIds: new Set(flows.map((flow) => flow.id)),
+    label: primaryFlow ? `${shape.shape} / ${primaryFlow.source}` : shape.shape,
+  };
+}
+
+function visibleTasks(
+  rail: MarketplaceActionRail,
+  phase: PhaseFilter,
+  context: TaskContext,
+  limitPerRail?: number,
+) {
   return MARKETPLACE_ACTION_TASKS
-    .filter((task) => task.rail === rail && (phase === "all" || task.phase === phase))
+    .filter((task) => {
+      const shapeMatch = !context.shapeId || task.shapeIds.includes(context.shapeId);
+      return task.rail === rail && shapeMatch && (phase === "all" || task.phase === phase);
+    })
     .sort((a, b) => {
+      if (context.flowIds.size > 0) {
+        const aFlowScore = a.flowIds.some((flowId) => context.flowIds.has(flowId)) ? 1 : 0;
+        const bFlowScore = b.flowIds.some((flowId) => context.flowIds.has(flowId)) ? 1 : 0;
+        if (aFlowScore !== bFlowScore) return bFlowScore - aFlowScore;
+      }
       const phaseScore = phaseOrder.indexOf(a.phase) - phaseOrder.indexOf(b.phase);
       if (phaseScore !== 0) return phaseScore;
       return b.bonusJcMoves - a.bonusJcMoves;
-    });
+    })
+    .slice(0, typeof limitPerRail === "number" ? Math.max(0, limitPerRail) : undefined);
 }
 
 function totalBonus(tasks: MarketplaceActionTask[]) {
@@ -109,11 +163,17 @@ function phaseSummary(tasks: MarketplaceActionTask[]) {
 export default function MarketplaceTaskSplit({
   rails,
   phase = "all",
+  shapeId,
+  serviceCode,
+  serviceLabel,
+  source,
+  limitPerRail,
   compact = false,
   className = "",
 }: MarketplaceTaskSplitProps) {
+  const context = buildTaskContext({ shapeId, serviceCode, serviceLabel, source });
   const lanes = selectedRails(rails)
-    .map((rail) => ({ rail, tasks: visibleTasks(rail, phase) }))
+    .map((rail) => ({ rail, tasks: visibleTasks(rail, phase, context, limitPerRail) }))
     .filter((lane) => lane.tasks.length > 0);
 
   if (lanes.length === 0) return null;
@@ -136,7 +196,7 @@ export default function MarketplaceTaskSplit({
         </div>
         <div className="flex items-center gap-2 rounded-full border border-orange-400/25 bg-slate-950/60 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-orange-200">
           <Users className="h-3.5 w-3.5" />
-          {phase === "all" ? "1-2-3" : phaseLabels[phase]}
+          {context.label || (phase === "all" ? "1-2-3" : phaseLabels[phase])}
         </div>
       </div>
 

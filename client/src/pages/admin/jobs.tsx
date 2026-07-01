@@ -37,6 +37,7 @@ import MarketplaceActionMatrix from "@/components/MarketplaceActionMatrix";
 import MarketplaceShapeContext from "@/components/MarketplaceShapeContext";
 import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 import MarketplaceSourceFlowStrip from "@/components/MarketplaceSourceFlowStrip";
+import MarketplaceTaskSplit from "@/components/MarketplaceTaskSplit";
 import ProcessFlowCard, { type ProcessFlowStep, type ProcessStepState } from "@/components/ProcessFlowCard";
 import SmartBookingGuidanceCard from "@/components/SmartBookingGuidanceCard";
 import { BookingMenuIntelligenceCard } from "@/components/BookingMenuIntelligenceCard";
@@ -890,6 +891,7 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
     completeReady,
   });
   const guidanceAnswers = smartBookingAnswersForLead(lead);
+  const marketplaceAdminPhase = marketplaceActionPhaseForLead(lead);
 
   return (
     <Sheet open={open} onOpenChange={v => !v && onClose()}>
@@ -1042,7 +1044,7 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
           />
           <MarketplaceActionMatrix
             rail="platinum"
-            phase={marketplaceActionPhaseForLead(lead)}
+            phase={marketplaceAdminPhase}
             source={marketplaceSourceContext}
             shapeId={marketplaceShapeId}
             serviceCode={marketplaceServiceCode}
@@ -1050,13 +1052,23 @@ function AdminJobDetailPanel({ lead, onClose, employees, tradeRequests, open }: 
             compact
             limit={3}
           />
+          <MarketplaceTaskSplit
+            rails={["silver", "gold", "platinum"]}
+            phase={marketplaceAdminPhase}
+            source={marketplaceSourceContext}
+            shapeId={marketplaceShapeId}
+            serviceCode={marketplaceServiceCode}
+            serviceLabel={marketplaceServiceLabel}
+            compact
+            limitPerRail={2}
+          />
           <MarketplaceSourceFlowStrip
             source={marketplaceSourceContext}
             shapeId={marketplaceShapeId}
             serviceCode={marketplaceServiceCode}
             serviceLabel={marketplaceServiceLabel}
             audience="company"
-            phase={marketplaceActionPhaseForLead(lead)}
+            phase={marketplaceAdminPhase}
           />
           <MarketplaceShapeContext
             shapeId={marketplaceShapeId}

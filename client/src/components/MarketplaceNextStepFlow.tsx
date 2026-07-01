@@ -15,19 +15,32 @@ import {
   MARKETPLACE_ACTION_TASKS,
   MARKETPLACE_OPERATING_FLYWHEEL,
   MARKETPLACE_SIMPLE_SIDES,
+  getMarketplaceSourceFlowsForContext,
   type MarketplaceActionPhase,
   type MarketplaceActionRail,
   type MarketplaceFlywheelStage,
+  type MarketplaceRequestShapeId,
   type MarketplaceSideId,
 } from "@shared/marketplaceShapes";
+import { resolveMarketplaceShape } from "@/components/MarketplaceShapeBadge";
 
 type SideFilter = MarketplaceSideId | "all";
 
 type MarketplaceNextStepFlowProps = {
   side?: SideFilter;
   rails?: MarketplaceActionRail[];
+  shapeId?: string | null;
+  serviceCode?: string | null;
+  serviceLabel?: string | null;
+  source?: string | null;
   compact?: boolean;
   className?: string;
+};
+
+type TaskContext = {
+  shapeId: MarketplaceRequestShapeId | null;
+  flowIds: Set<string>;
+  label: string | null;
 };
 
 type StepDefinition = {
@@ -116,16 +129,52 @@ function sideDescription(side: MarketplaceSideId) {
   return MARKETPLACE_SIMPLE_SIDES.find((item) => item.id === side);
 }
 
-function railTasks(phase: MarketplaceActionPhase, rails: MarketplaceActionRail[]) {
+function buildTaskContext({
+  shapeId,
+  serviceCode,
+  serviceLabel,
+  source,
+}: Pick<MarketplaceNextStepFlowProps, "shapeId" | "serviceCode" | "serviceLabel" | "source">): TaskContext {
+  const hasContext = Boolean(shapeId || serviceCode || serviceLabel || source);
+  if (!hasContext) return { shapeId: null, flowIds: new Set(), label: null };
+
+  const shape = resolveMarketplaceShape({ shapeId, serviceCode, serviceLabel });
+  const flows = getMarketplaceSourceFlowsForContext({
+    source,
+    shapeId,
+    serviceCode,
+    serviceLabel,
+    limit: 4,
+  });
+  const primaryFlow = flows[0];
+
+  return {
+    shapeId: shape.id,
+    flowIds: new Set(flows.map((flow) => flow.id)),
+    label: primaryFlow ? `${shape.shape} / ${primaryFlow.source}` : shape.shape,
+  };
+}
+
+function railTasks(phase: MarketplaceActionPhase, rails: MarketplaceActionRail[], context: TaskContext) {
   return MARKETPLACE_ACTION_TASKS
-    .filter((task) => task.phase === phase && rails.includes(task.rail))
-    .sort((a, b) => b.bonusJcMoves - a.bonusJcMoves)
+    .filter((task) => {
+      const shapeMatch = !context.shapeId || task.shapeIds.includes(context.shapeId);
+      return task.phase === phase && rails.includes(task.rail) && shapeMatch;
+    })
+    .sort((a, b) => {
+      if (context.flowIds.size > 0) {
+        const aFlowScore = a.flowIds.some((flowId) => context.flowIds.has(flowId)) ? 1 : 0;
+        const bFlowScore = b.flowIds.some((flowId) => context.flowIds.has(flowId)) ? 1 : 0;
+        if (aFlowScore !== bFlowScore) return bFlowScore - aFlowScore;
+      }
+      return b.bonusJcMoves - a.bonusJcMoves;
+    })
     .slice(0, 3);
 }
 
-function bonusTotal(rails: MarketplaceActionRail[]) {
+function bonusTotal(rails: MarketplaceActionRail[], context: TaskContext) {
   return MARKETPLACE_ACTION_TASKS
-    .filter((task) => rails.includes(task.rail))
+    .filter((task) => rails.includes(task.rail) && (!context.shapeId || task.shapeIds.includes(context.shapeId)))
     .reduce((sum, task) => sum + Math.max(0, task.bonusJcMoves || 0), 0);
 }
 
@@ -137,10 +186,15 @@ function selectedSides(side: SideFilter) {
 export default function MarketplaceNextStepFlow({
   side = "all",
   rails,
+  shapeId,
+  serviceCode,
+  serviceLabel,
+  source,
   compact = false,
   className = "",
 }: MarketplaceNextStepFlowProps) {
   const sides = selectedSides(side);
+  const context = buildTaskContext({ shapeId, serviceCode, serviceLabel, source });
 
   return (
     <section className={`rounded-xl border border-blue-400/20 bg-blue-500/10 p-4 ${className}`}>
@@ -159,7 +213,7 @@ export default function MarketplaceNextStepFlow({
           )}
         </div>
         <span className="rounded-full border border-blue-400/30 bg-slate-950/60 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-blue-200">
-          1, 2, 3
+          {context.label || "1, 2, 3"}
         </span>
       </div>
 
@@ -169,7 +223,7 @@ export default function MarketplaceNextStepFlow({
           const Icon = meta.icon;
           const taskRails = rails || defaultRailsBySide[selectedSide];
           const simple = sideDescription(selectedSide);
-          const bonus = bonusTotal(taskRails);
+          const bonus = bonusTotal(taskRails, context);
 
           return (
             <div key={selectedSide} className="rounded-lg border border-slate-800 bg-slate-950/65 p-3">
@@ -198,6 +252,7 @@ export default function MarketplaceNextStepFlow({
                     step={step}
                     side={selectedSide}
                     rails={taskRails}
+                    context={context}
                     compact={compact}
                   />
                 ))}
@@ -222,18 +277,20 @@ function FlowStep({
   step,
   side,
   rails,
+  context,
   compact,
 }: {
   step: StepDefinition;
   side: MarketplaceSideId;
   rails: MarketplaceActionRail[];
+  context: TaskContext;
   compact: boolean;
 }) {
   const Icon = step.icon;
   const ActionIcon = phaseIcon[step.phase];
   const stages = stagesForStep(step);
   const primaryStage = stages[0];
-  const tasks = railTasks(step.phase, rails);
+  const tasks = railTasks(step.phase, rails, context);
 
   return (
     <div className="rounded-md border border-slate-800 bg-slate-900/70 p-2.5">
