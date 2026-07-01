@@ -505,6 +505,17 @@ export const MARKETPLACE_REFERENCE_BLUEPRINTS: MarketplaceReferenceBlueprint[] =
     metric: "Approved quote to paid time",
   },
   {
+    reference: "Discord + Solbot Webhooks",
+    borrow: "Webhook-style event delivery, channel reminders, crew broadcasts, and marketing nudges.",
+    avoid: "Blasting raw customer requests to everyone forever or treating Discord as the source of truth.",
+    jcSurface: "Notifications, Marketing Webhooks, Crew Jobs",
+    customerWin: "Gets faster response because requests reach the right operators.",
+    workerWin: "Receives relevant available-job, assignment, reminder, and marketing prompts.",
+    companyWin: "Keeps leads as the source of truth while mirroring lifecycle events to useful channels.",
+    nextBuild: "Event rules that route new requests to admin, available jobs to eligible crew, assignments to assigned crew, and marketing reminders by area.",
+    metric: "Useful event-to-action rate",
+  },
+  {
     reference: "JCMOVES Crypto",
     borrow: "Rewards, streaks, referrals, task bonuses, and repeat engagement.",
     avoid: "Issuing rewards without verified value or completed work.",
@@ -1370,6 +1381,26 @@ export function getMarketplaceSourceFlowForSource(source: string | null | undefi
 
 export function getMarketplaceSourceFlowsForShape(id: MarketplaceRequestShapeId) {
   return MARKETPLACE_SOURCE_FLOW_MATRIX.filter((flow) => flow.shapeIds.includes(id));
+}
+
+function meaningfulReferenceTokens(value: string): string[] {
+  const stopwords = new Set(["a", "an", "and", "the", "com"]);
+  return normalizeMarketplaceText(value)
+    .split("_")
+    .filter((token) => token && !stopwords.has(token));
+}
+
+export function getMarketplaceReferenceBlueprintsForSource(source: string | null | undefined, limit = 4) {
+  const flow = getMarketplaceSourceFlowForSource(source);
+  if (!flow) return [];
+
+  const flowTokens = new Set(sourceTokens(flow));
+  const matches = MARKETPLACE_REFERENCE_BLUEPRINTS.filter((blueprint) => {
+    const referenceTokens = meaningfulReferenceTokens(blueprint.reference);
+    return referenceTokens.length > 0 && referenceTokens.every((token) => flowTokens.has(token));
+  });
+
+  return matches.slice(0, Math.max(0, limit));
 }
 
 export function getMarketplaceSourceFlowsForContext({

@@ -8,6 +8,7 @@ import {
   MARKETPLACE_SOURCE_FLOW_MATRIX,
   MARKETPLACE_SMART_BOOKING_STEPS,
   getMarketplaceShapeForServiceCode,
+  getMarketplaceReferenceBlueprintsForSource,
   getMarketplaceSourceFlowForSource,
   getMarketplaceSourceFlowsForContext,
   type MarketplaceActionPhase,
@@ -93,6 +94,7 @@ const requiredBlueprintReferences = [
   "PODS",
   "U-Box",
   "Square",
+  "Discord + Solbot Webhooks",
   "JCMOVES Crypto",
   "Generosity Fund",
 ];
@@ -113,6 +115,33 @@ test("keeps best-of-best references visible as blueprints", () => {
       referenceText.includes(normalize(reference)),
       `${reference} should be represented in reference blueprints`,
     );
+  }
+});
+
+test("maps each operational source flow back to reference blueprints", () => {
+  for (const flow of MARKETPLACE_SOURCE_FLOW_MATRIX) {
+    const blueprints = getMarketplaceReferenceBlueprintsForSource(flow.source);
+    assert.ok(blueprints.length > 0, `${flow.id} should expose at least one operating blueprint`);
+  }
+
+  const expectedBlueprints: Array<[string, string[]]> = [
+    ["Target + Walmart", ["Target", "Walmart"]],
+    ["U-Haul + MovingHelp + MovingHelper", ["U-Haul", "MovingHelp / MovingHelper"]],
+    ["Google + Yelp", ["Google", "Yelp"]],
+    ["Facebook + Craigslist", ["Facebook", "Craigslist"]],
+    ["Discord + Solbot-style webhooks", ["Discord + Solbot Webhooks"]],
+    ["JCMOVES Crypto", ["JCMOVES Crypto"]],
+    ["Generosity Fund", ["Generosity Fund"]],
+  ];
+
+  for (const [source, expectedReferences] of expectedBlueprints) {
+    const references = getMarketplaceReferenceBlueprintsForSource(source).map((blueprint) => blueprint.reference);
+    for (const expectedReference of expectedReferences) {
+      assert.ok(
+        references.includes(expectedReference),
+        `${source} should expose ${expectedReference} as an operating blueprint`,
+      );
+    }
   }
 });
 

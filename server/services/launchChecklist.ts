@@ -23,6 +23,7 @@ import {
   MARKETPLACE_REFERENCE_BLUEPRINTS,
   MARKETPLACE_REQUEST_SHAPES,
   MARKETPLACE_SOURCE_FLOW_MATRIX,
+  getMarketplaceReferenceBlueprintsForSource,
   getMarketplaceSourceFlowForSource,
 } from "../../shared/marketplaceShapes";
 
@@ -967,6 +968,7 @@ const SCENARIOS: Scenario[] = [
         "PODS",
         "U-Box",
         "Square",
+        "Discord + Solbot Webhooks",
         "JCMOVES Crypto",
         "Generosity Fund",
       ];
@@ -974,6 +976,13 @@ const SCENARIOS: Scenario[] = [
       const missingReferences = requiredReferences.filter((reference) => !referenceText.includes(reference.toLowerCase()));
       if (missingReferences.length > 0) {
         return { ok: false, detail: `missing reference blueprints: ${missingReferences.join(", ")}` };
+      }
+
+      const flowsWithoutBlueprints = MARKETPLACE_SOURCE_FLOW_MATRIX.filter(
+        (flow) => getMarketplaceReferenceBlueprintsForSource(flow.source).length === 0,
+      );
+      if (flowsWithoutBlueprints.length > 0) {
+        return { ok: false, detail: `source flow(s) without operating blueprints: ${flowsWithoutBlueprints.map((flow) => flow.id).join(", ")}` };
       }
 
       const linkedFlowIds = new Set(MARKETPLACE_ACTION_TASKS.flatMap((task) => task.flowIds));
@@ -1029,6 +1038,17 @@ const SCENARIOS: Scenario[] = [
             "fast_quote",
             "Quick Quote",
             "Start here",
+          ],
+        },
+        {
+          name: "source lookup",
+          path: "client/src/components/MarketplaceSourceLookup.tsx",
+          required: [
+            "getMarketplaceReferenceBlueprintsForSource",
+            "Operating Blueprints",
+            "Borrow",
+            "Avoid",
+            "Next build",
           ],
         },
         {

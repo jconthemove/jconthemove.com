@@ -13,6 +13,7 @@ import {
 import {
   MARKETPLACE_ACTION_TASKS,
   MARKETPLACE_SOURCE_FLOW_MATRIX,
+  getMarketplaceReferenceBlueprintsForSource,
   type MarketplaceActionPhase,
   type MarketplaceFunctionalIdeaStatus,
   type MarketplaceSideId,
@@ -93,6 +94,10 @@ export default function MarketplaceSourceLookup({ className = "" }: MarketplaceS
   const [sourceId, setSourceId] = useState("uhaul_movinghelp");
   const [side, setSide] = useState<MarketplaceSideId>("company");
   const flow = MARKETPLACE_SOURCE_FLOW_MATRIX.find((item) => item.id === sourceId) || MARKETPLACE_SOURCE_FLOW_MATRIX[0];
+  const blueprints = useMemo(
+    () => getMarketplaceReferenceBlueprintsForSource(flow.source, 4),
+    [flow.source],
+  );
   const matchingTasks = useMemo(
     () => MARKETPLACE_ACTION_TASKS
       .filter((task) => task.flowIds.includes(flow.id))
@@ -185,6 +190,41 @@ export default function MarketplaceSourceLookup({ className = "" }: MarketplaceS
             </p>
           </div>
 
+          {blueprints.length > 0 && (
+            <div className="rounded-lg border border-amber-400/20 bg-amber-500/10 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-200">
+                    Operating Blueprints
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-slate-300">
+                    Borrow the useful pattern, avoid the trap, and track the next build.
+                  </p>
+                </div>
+                <span className="rounded-full border border-amber-400/30 bg-slate-950/60 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-100">
+                  {blueprints.length} matched
+                </span>
+              </div>
+              <div className="mt-3 grid gap-2">
+                {blueprints.map((blueprint) => (
+                  <div key={blueprint.reference} className="rounded-md border border-slate-800 bg-slate-950/70 p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <p className="text-sm font-black text-white">{blueprint.reference}</p>
+                      <span className="rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-300">
+                        {blueprint.metric}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid gap-2 md:grid-cols-2">
+                      <BlueprintFact label="Borrow" value={blueprint.borrow} tone="emerald" />
+                      <BlueprintFact label="Avoid" value={blueprint.avoid} tone="red" />
+                    </div>
+                    <BlueprintFact label="Next build" value={blueprint.nextBuild} tone="blue" className="mt-2" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="grid gap-2 md:grid-cols-3">
             {(["start", "progress", "finish"] as MarketplaceActionPhase[]).map((phase) => {
               const meta = phaseMeta[phase];
@@ -247,6 +287,31 @@ export default function MarketplaceSourceLookup({ className = "" }: MarketplaceS
         </div>
       </div>
     </section>
+  );
+}
+
+function BlueprintFact({
+  label,
+  value,
+  tone,
+  className = "",
+}: {
+  label: string;
+  value: string;
+  tone: "blue" | "emerald" | "red";
+  className?: string;
+}) {
+  const classes = {
+    blue: "border-blue-400/20 bg-blue-500/10 text-blue-200",
+    emerald: "border-emerald-400/20 bg-emerald-500/10 text-emerald-200",
+    red: "border-red-400/20 bg-red-500/10 text-red-200",
+  }[tone];
+
+  return (
+    <div className={`rounded-md border p-3 ${classes} ${className}`}>
+      <p className="text-[10px] font-bold uppercase tracking-[0.16em]">{label}</p>
+      <p className="mt-1 text-xs leading-5 text-slate-300">{value}</p>
+    </div>
   );
 }
 
