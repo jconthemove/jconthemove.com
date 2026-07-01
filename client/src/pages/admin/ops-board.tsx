@@ -29,6 +29,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { User } from "@shared/schema";
+import MarketplaceShapeBadge from "@/components/MarketplaceShapeBadge";
 
 type Lead = {
   id: string;
@@ -248,7 +249,10 @@ function TradingJobCard({ lead, compact = false, onOpen }: { lead: Lead; compact
           </div>
           <div className="min-w-0 flex-1">
             <div className="truncate text-xs font-black text-white">{customerName(lead)}</div>
-            <div className="truncate text-[10px] text-slate-400">{service} - {formatMoney(lead.totalPrice || lead.basePrice)}</div>
+            <div className="mt-0.5 flex flex-wrap items-center gap-1">
+              <span className="truncate text-[10px] text-slate-400">{service} - {formatMoney(lead.totalPrice || lead.basePrice)}</span>
+              <MarketplaceShapeBadge serviceCode={lead.serviceType} serviceLabel={service} className="text-[8px]" />
+            </div>
           </div>
         </div>
       ) : (
@@ -276,6 +280,7 @@ function TradingJobCard({ lead, compact = false, onOpen }: { lead: Lead; compact
                   <Package className="h-3.5 w-3.5 text-blue-300" />
                   {service}
                 </span>
+                <MarketplaceShapeBadge serviceCode={lead.serviceType} serviceLabel={service} />
               </div>
             </div>
           </div>
@@ -813,6 +818,7 @@ export default function OpsBoardPage() {
                       >
                         <CheckCircle2 className="h-3 w-3 flex-shrink-0" />
                         <span className="truncate">{SERVICE_LABELS[lead.serviceType] || lead.serviceType}</span>
+                        <MarketplaceShapeBadge serviceCode={lead.serviceType} serviceLabel={SERVICE_LABELS[lead.serviceType]} className="ml-auto text-[8px]" />
                       </button>
                     ))}
                     {completedDayJobs.length > (activeDayJobs.length > 0 ? 1 : 3) && (

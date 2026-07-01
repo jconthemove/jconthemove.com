@@ -28,6 +28,7 @@ import { ConfettiBurst } from "@/components/ConfettiBurst";
 import { getWorkerLevel, type LoyaltyTierKey } from "@/lib/loyalty";
 import ProcessFlowCard, { type ProcessFlowStep } from "@/components/ProcessFlowCard";
 import MarketplaceSourceFlowStrip from "@/components/MarketplaceSourceFlowStrip";
+import MarketplaceShapeBadge from "@/components/MarketplaceShapeBadge";
 import type { MarketplaceActionPhase } from "@shared/marketplaceShapes";
 
 const MONTH_NAMES_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -1235,7 +1236,10 @@ export default function CrewTodayPage() {
                       <div className="flex items-center gap-2 bg-blue-950/40 border border-blue-700/30 rounded-lg p-2.5 hover:bg-blue-900/40 cursor-pointer">
                         <span className="text-lg leading-none">{SERVICE_ICONS[job.serviceType] ?? "📦"}</span>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-white truncate capitalize">{job.serviceType.replace(/-/g, " ")} Job</p>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <p className="text-sm font-semibold text-white truncate capitalize">{job.serviceType.replace(/-/g, " ")} Job</p>
+                            <MarketplaceShapeBadge serviceCode={job.serviceType} className="text-[8px]" />
+                          </div>
                           {(job.confirmedFromAddress || job.fromAddress) && (
                             <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
                               <MapPin className="h-3 w-3" />
@@ -1322,7 +1326,10 @@ export default function CrewTodayPage() {
                   <div className="flex items-center gap-3 bg-white/[0.03] rounded-xl p-3 border border-white/5 cursor-pointer hover:bg-white/[0.06] transition-colors">
                     <span className="text-2xl">{SERVICE_ICONS[job.serviceType] ?? "🚛"}</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm font-semibold truncate">{job.firstName} {job.lastName}</p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className="text-white text-sm font-semibold truncate">{job.firstName} {job.lastName}</p>
+                          <MarketplaceShapeBadge serviceCode={job.serviceType} className="text-[8px]" />
+                        </div>
                       {job.fromAddress && (
                         <p className="text-slate-400 text-xs flex items-center gap-1">
                           <MapPin className="h-3 w-3" />{job.fromAddress}
@@ -1482,7 +1489,10 @@ export default function CrewTodayPage() {
                     <div className="flex items-center gap-2">
                       <span className="text-xl leading-none">{SERVICE_ICONS[job.serviceType] ?? "🚛"}</span>
                       <div>
-                        <p className="text-white text-sm font-semibold capitalize">{job.serviceType.replace(/-/g, " ")} Job</p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className="text-white text-sm font-semibold capitalize">{job.serviceType.replace(/-/g, " ")} Job</p>
+                          <MarketplaceShapeBadge serviceCode={job.serviceType} className="text-[8px]" />
+                        </div>
                         <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                           <span className="text-slate-400 text-xs flex items-center gap-1">
                             <Calendar className="h-3 w-3" />{dateLabel}
@@ -1708,9 +1718,12 @@ export default function CrewTodayPage() {
                     <div className="flex items-center gap-3 cursor-pointer">
                       <span className="text-2xl">{SERVICE_ICONS[job.serviceType] ?? "🚛"}</span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-semibold truncate capitalize">
-                          {job.serviceType?.replace(/-/g, " ")} Job
-                        </p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className="text-white text-sm font-semibold truncate capitalize">
+                            {job.serviceType?.replace(/-/g, " ")} Job
+                          </p>
+                          <MarketplaceShapeBadge serviceCode={job.serviceType} className="text-[8px]" />
+                        </div>
                         <p className="text-slate-400 text-xs flex items-center gap-1">
                           <Calendar className="h-3 w-3" />{dateLabel}
                           {job.fromAddress && (
