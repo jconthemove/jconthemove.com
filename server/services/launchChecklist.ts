@@ -1045,9 +1045,11 @@ const SCENARIOS: Scenario[] = [
           path: "client/src/components/SmartBookingGuidanceCard.tsx",
           required: [
             "guidance.nextAction",
+            "guidance.recommendedTasks",
             "smart-guidance-next-option",
             "sourcePatterns",
             "missingLabels",
+            "Who moves it",
           ],
         },
         {

@@ -1,7 +1,11 @@
 import {
+  MARKETPLACE_ACTION_TASKS,
   MARKETPLACE_SMART_BOOKING_STEPS,
   getMarketplaceRequestShape,
   getMarketplaceShapeForServiceCode,
+  getMarketplaceSourceFlowsForContext,
+  type MarketplaceActionPhase,
+  type MarketplaceActionRail,
   type MarketplaceRequestShapeId,
   type MarketplaceSmartBookingStep,
   type MarketplaceSmartBookingStepId,
@@ -69,11 +73,24 @@ export type SmartBookingNextAction = {
   companyControl: string;
 };
 
+export type SmartBookingRecommendedTask = {
+  id: string;
+  rail: MarketplaceActionRail;
+  side: "customer" | "worker" | "company";
+  title: string;
+  action: string;
+  proof: string;
+  bonusJcMoves: number;
+  companyGuardrail: string;
+  sourceMatches: string[];
+};
+
 export type SmartBookingGuidance = {
   shapeId: MarketplaceRequestShapeId;
   shapeLabel: string;
   nextStep: SmartBookingGuidanceStep | null;
   nextAction: SmartBookingNextAction;
+  recommendedTasks: SmartBookingRecommendedTask[];
   steps: SmartBookingGuidanceStep[];
   completedRequired: number;
   totalRequired: number;
@@ -656,6 +673,54 @@ function buildSmartBookingNextAction({
   };
 }
 
+const railPriorityByPhase: Record<MarketplaceActionPhase, MarketplaceActionRail[]> = {
+  start: ["customer", "bronze", "silver", "gold", "platinum"],
+  progress: ["silver", "gold", "platinum", "customer", "bronze"],
+  finish: ["bronze", "gold", "platinum", "customer", "silver"],
+};
+
+function recommendedTasksForNextAction({
+  shapeId,
+  nextAction,
+}: {
+  shapeId: MarketplaceRequestShapeId;
+  nextAction: SmartBookingNextAction;
+}): SmartBookingRecommendedTask[] {
+  const phase = nextAction.stage;
+  const flows = getMarketplaceSourceFlowsForContext({
+    source: nextAction.sourcePatterns,
+    shapeId,
+    limit: 4,
+  });
+  const flowIds = new Set(flows.map((flow) => flow.id));
+  const railPriority = railPriorityByPhase[phase];
+
+  return MARKETPLACE_ACTION_TASKS
+    .filter((task) => task.phase === phase && task.shapeIds.includes(shapeId))
+    .map((task) => {
+      const sourceMatches = task.flowIds.filter((flowId) => flowIds.has(flowId));
+      return {
+        id: task.id,
+        rail: task.rail,
+        side: task.side,
+        title: task.title,
+        action: task.action,
+        proof: task.proof,
+        bonusJcMoves: task.bonusJcMoves,
+        companyGuardrail: task.companyGuardrail,
+        sourceMatches,
+      } satisfies SmartBookingRecommendedTask;
+    })
+    .sort((a, b) => {
+      if (a.sourceMatches.length !== b.sourceMatches.length) return b.sourceMatches.length - a.sourceMatches.length;
+      const aRail = railPriority.indexOf(a.rail);
+      const bRail = railPriority.indexOf(b.rail);
+      if (aRail !== bRail) return aRail - bRail;
+      return b.bonusJcMoves - a.bonusJcMoves;
+    })
+    .slice(0, 4);
+}
+
 export function getSmartBookingGuidance(
   answers: SmartBookingAnswers,
   serviceLabel?: string,
@@ -687,12 +752,17 @@ export function getSmartBookingGuidance(
     missingRequired,
     fastPathReady,
   });
+  const recommendedTasks = recommendedTasksForNextAction({
+    shapeId: shape.id,
+    nextAction,
+  });
 
   return {
     shapeId: shape.id,
     shapeLabel: shape.shape,
     nextStep,
     nextAction,
+    recommendedTasks,
     steps,
     completedRequired: requiredSteps.length - missingRequired.length,
     totalRequired: requiredSteps.length,

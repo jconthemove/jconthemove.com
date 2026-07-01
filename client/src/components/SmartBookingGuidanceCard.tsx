@@ -1,8 +1,9 @@
-import { ArrowRight, Bot, CheckCircle2, Circle, ShieldCheck } from "lucide-react";
+import { ArrowRight, Bot, CheckCircle2, Circle, Coins, ShieldCheck } from "lucide-react";
 import {
   getSmartBookingGuidance,
   type SmartBookingAnswers,
   type SmartBookingGuidanceStepStatus,
+  type SmartBookingRecommendedTask,
 } from "@shared/smartBookingEngine";
 
 type SmartBookingGuidanceCardProps = {
@@ -20,6 +21,14 @@ const statusClass: Record<SmartBookingGuidanceStepStatus, string> = {
   optional: "border-slate-700 bg-slate-900/60 text-slate-400",
 };
 
+const railClass: Record<SmartBookingRecommendedTask["rail"], string> = {
+  customer: "border-cyan-400/30 bg-cyan-500/10 text-cyan-200",
+  bronze: "border-orange-400/30 bg-orange-500/10 text-orange-200",
+  silver: "border-slate-300/30 bg-slate-400/10 text-slate-200",
+  gold: "border-yellow-400/30 bg-yellow-500/10 text-yellow-200",
+  platinum: "border-purple-400/30 bg-purple-500/10 text-purple-200",
+};
+
 export default function SmartBookingGuidanceCard({
   answers,
   serviceLabel,
@@ -32,6 +41,7 @@ export default function SmartBookingGuidanceCard({
   const next = guidance.nextStep;
   const visibleSteps = nextOnly && next ? [next] : guidance.steps;
   const topLevelQuickOptions = Boolean(onQuickOption && next && guidance.nextAction.answerOptions.length > 0 && (compact || nextOnly));
+  const visibleTasks = compact ? guidance.recommendedTasks.slice(0, 2) : guidance.recommendedTasks;
 
   return (
     <section className={`rounded-xl border border-cyan-400/20 bg-cyan-500/10 p-3 ${className}`}>
@@ -89,6 +99,27 @@ export default function SmartBookingGuidanceCard({
           <p className="mt-2 text-[10px] leading-4 text-slate-500">
             Borrowed from: <span className="text-slate-300">{guidance.nextAction.sourcePatterns}</span>
           </p>
+        )}
+        {visibleTasks.length > 0 && (
+          <div className="mt-3 grid gap-1.5">
+            <p className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">Who moves it</p>
+            {visibleTasks.map((task) => (
+              <div key={task.id} className="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950/55 px-2 py-1.5">
+                <div className="min-w-0">
+                  <span className={`rounded-full border px-1.5 py-0.5 text-[8px] font-black uppercase ${railClass[task.rail]}`}>
+                    {task.rail}
+                  </span>
+                  <p className="mt-1 truncate text-[11px] font-bold text-slate-200">{task.title}</p>
+                </div>
+                {task.bonusJcMoves > 0 && (
+                  <span className="flex shrink-0 items-center gap-1 text-[10px] font-black text-orange-300">
+                    <Coins className="h-3 w-3" />
+                    {task.bonusJcMoves.toLocaleString()}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
         )}
       </div>
 

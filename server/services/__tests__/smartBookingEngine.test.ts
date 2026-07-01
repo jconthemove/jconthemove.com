@@ -125,6 +125,9 @@ test("guides a partial moving card to the next missing smart-booking step", () =
   assert.equal(guidance.nextAction.missingLabels.includes("truck, container, or access"), true);
   assert.equal(guidance.nextAction.answerOptions.includes("Customer truck"), true);
   assert.match(guidance.nextAction.sourcePatterns, /U-Haul/);
+  assert.equal(guidance.recommendedTasks[0]?.rail, "customer");
+  assert.equal(guidance.recommendedTasks.some((task) => task.rail === "bronze"), true);
+  assert.equal(guidance.recommendedTasks.some((task) => task.bonusJcMoves > 0), true);
 });
 
 test("marks a fully-sized moving request ready for quote review", () => {
@@ -146,6 +149,9 @@ test("marks a fully-sized moving request ready for quote review", () => {
   assert.equal(guidance.nextAction.label, "Ready - optional detail");
   assert.match(guidance.nextAction.prompt, /ready for quote review/i);
   assert.equal(guidance.nextAction.answerOptions.includes("Add photos"), true);
+  assert.equal(guidance.recommendedTasks[0]?.rail, "silver");
+  assert.equal(guidance.recommendedTasks.some((task) => task.rail === "gold"), true);
+  assert.equal(guidance.recommendedTasks.some((task) => task.rail === "platinum"), true);
 });
 
 console.log(`smartBookingEngine tests passed: ${passed}`);
