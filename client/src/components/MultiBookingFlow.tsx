@@ -1217,44 +1217,44 @@ export function MovingJunkPackagePicker({
       const packageNote = travel > 0 ? ` · +$${travel} travel` : "";
       const standardMovingPackages: CrewPackage[] = [
         {
-          id: "pkg_move_1_local_light",
-          label: "Package 1 · Local loading, unloading, or delivery",
-          desc: `Ironwood local light job · 4-6 labor hours · load, unload, or single-item delivery${packageNote}`,
-          minPrice: 200 + surcharge + travel,
-          maxPrice: 300 + surcharge + travel,
+          id: "pkg_move_1_2m_2h",
+          label: "2 movers / 2 hours",
+          desc: `Small local load, unload, delivery, or 1-2 item help · 4 labor hours${packageNote}`,
+          minPrice: 300 + surcharge + travel,
+          maxPrice: 425 + surcharge + travel,
           crew: 2,
-          hours: 3,
-          tag: "Quick quote",
+          hours: 2,
+          tag: "Quick job",
         },
         {
-          id: "pkg_move_2_load_unload",
-          label: "Package 2 · Loading + unloading or bigger job",
-          desc: `Most local moves · 6-8 labor hours · good for load + unload or a larger local job${packageNote}`,
-          minPrice: 300 + surcharge + travel,
-          maxPrice: 450 + surcharge + travel,
+          id: "pkg_move_2_2m_3h",
+          label: "2 movers / 3 hours",
+          desc: `Most common local moving-help package · good for U-Haul load, unload, or small apartment${packageNote}`,
+          minPrice: 400 + surcharge + travel,
+          maxPrice: 500 + surcharge + travel,
           crew: 2,
-          hours: 4,
+          hours: 3,
           tag: "Most common",
         },
         {
-          id: "pkg_move_3_two_movers_day",
-          label: "Package 3 · 2 movers for the day",
-          desc: `2 movers · 7 hours each · 14 labor hours total${packageNote}`,
-          minPrice: 1100 + surcharge + travel,
-          maxPrice: 1100 + surcharge + travel,
-          crew: 2,
-          hours: 7,
-          tag: "Day crew",
+          id: "pkg_move_3_3m_2h",
+          label: "3 movers / 2 hours",
+          desc: `Faster crew for stairs, heavier pieces, or tight unload windows · 6 labor hours${packageNote}`,
+          minPrice: 400 + surcharge + travel,
+          maxPrice: 550 + surcharge + travel,
+          crew: 3,
+          hours: 2,
+          tag: "Faster crew",
         },
         {
-          id: "pkg_move_4_four_movers_day",
-          label: "Package 4 · 4 movers for the day",
-          desc: `4-mover power crew · fixed full-day package for large jobs${packageNote}`,
-          minPrice: 1900 + surcharge + travel,
-          maxPrice: 1900 + surcharge + travel,
+          id: "pkg_move_4_quote_review",
+          label: "Quote review / large crew",
+          desc: `Large home, multiple stops, heavy access, or longer route · coordinator confirms crew and final price${packageNote}`,
+          minPrice: 725 + surcharge + travel,
+          maxPrice: 1200 + surcharge + travel,
           crew: 4,
-          hours: 6,
-          tag: "Large job",
+          hours: 4,
+          tag: "Review",
         },
       ];
       const movingBase = standardMovingPackages.filter(pkg => !pkg.crew || pkg.crew >= movingQuote.crew);
@@ -1317,7 +1317,7 @@ export function MovingJunkPackagePicker({
     .join("|");
   const [showMorePackages, setShowMorePackages] = useState(false);
   const selectedPackage = packages.find(p => p.id === item.details.packageId) || null;
-  const recommendedPackage = packages[0] || null;
+  const recommendedPackage = packages.find(p => p.tag === "Most common") || packages[0] || null;
   const selectedPath = MOVING_PATHS.find((path) => path.id === item.details.movingPath) || null;
   const hideLoadChoice = isMoving && ["load_only", "unload_only", "load_unload"].includes(item.details.movingPath || "");
   const showDropoffForPath = isMoving && ["load_unload", "full_household"].includes(item.details.movingPath || "");
