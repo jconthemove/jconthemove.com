@@ -10,6 +10,7 @@ type SmartBookingGuidanceCardProps = {
   serviceLabel?: string;
   compact?: boolean;
   nextOnly?: boolean;
+  onQuickOption?: (stepId: string, option: string) => void;
   className?: string;
 };
 
@@ -24,6 +25,7 @@ export default function SmartBookingGuidanceCard({
   serviceLabel,
   compact = false,
   nextOnly = false,
+  onQuickOption,
   className = "",
 }: SmartBookingGuidanceCardProps) {
   const guidance = getSmartBookingGuidance(answers, serviceLabel);
@@ -84,6 +86,21 @@ export default function SmartBookingGuidanceCard({
                     </span>
                   </div>
                   <p className="mt-1 text-[11px] leading-4 text-slate-300">{step.prompt}</p>
+                  {onQuickOption && step.quickOptions.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5" aria-label={`${step.label} quick answers`}>
+                      {step.quickOptions.map((option) => (
+                        <button
+                          key={`${step.id}-${option}`}
+                          type="button"
+                          onClick={() => onQuickOption(step.id, option)}
+                          className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-black text-cyan-100 transition hover:border-cyan-300 hover:bg-cyan-400/20"
+                          data-testid={`smart-guidance-option-${step.id}-${option.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+                        >
+                          {option}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {step.missingSignals.length > 0 && (
                     <p className="mt-1 text-[10px] leading-4 text-orange-200">
                       Missing: {step.missingSignals.join(", ").replace(/_/g, " ")}

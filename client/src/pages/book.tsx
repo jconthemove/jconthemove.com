@@ -703,6 +703,31 @@ function priceMenuScope(task: ServicePriceMenuTask) {
   return `${task.label}: ${task.description} Typical range ${formatServicePriceRange(task)} (${task.priceUnit}). Need: ${needs}.`;
 }
 
+function movingPackageDetails(crew: number, hours: number, label: string): Partial<SelectedItem["details"]> {
+  const baseEstimate = crew * hours * 85;
+  return {
+    packageId: `smart_${crew}m_${String(hours).replace(".", "p")}h`,
+    packageLabel: label,
+    crew,
+    hours,
+    minPrice: Math.round(baseEstimate * 0.8),
+    maxPrice: Math.round(baseEstimate * 1.15),
+    inventoryCrewRecommendation: crew,
+    inventoryLaborHours: hours,
+    inventoryPriceMin: Math.round(baseEstimate * 0.8),
+    inventoryPriceMax: Math.round(baseEstimate * 1.15),
+    quoteConfidence: "medium" as const,
+  };
+}
+
+function appendQuickAnswerNote(existing: string, note: string) {
+  const trimmed = note.trim();
+  if (!trimmed || existing.includes(trimmed)) return existing;
+  return existing.trim()
+    ? `${existing.trim()}\n\nQuick answer: ${trimmed}`
+    : `Quick answer: ${trimmed}`;
+}
+
 const STEPS = ["services", "address", "configure", "contact", "safety", "review"] as const;
 type Step = (typeof STEPS)[number];
 const STEP_LABELS: Record<Step, string> = {
@@ -1895,6 +1920,248 @@ export default function MultiServiceBookPage() {
     });
   }
 
+  function applyMovingQuickPatch(
+    details: Partial<SelectedItem["details"]>,
+    description: string,
+    nextStep: Step = "configure",
+  ) {
+    const svc = resolveCatalogService(services, "moving");
+    setSelectedPriceMenuTaskId(null);
+    setSelectedMarketplaceShapeId("moving_help");
+    setItems((prev) => {
+      const existing = prev.find((item) => item.serviceCode === svc.code);
+      const baseItem = existing || makeItem(svc);
+      const quickNote = details.notes;
+      const nextDetails: SelectedItem["details"] = {
+        ...detailsWithMarketplaceShape(baseItem.details, "moving_help"),
+        ...details,
+      };
+      if (quickNote) {
+        nextDetails.notes = appendQuickAnswerNote(baseItem.details.notes || "", quickNote);
+      }
+      const nextItem: SelectedItem = {
+        ...baseItem,
+        priceMode: "quote",
+        unitPrice: typeof details.minPrice === "number" ? details.minPrice : baseItem.unitPrice,
+        details: nextDetails,
+      };
+      return existing
+        ? prev.map((item) => item.serviceCode === svc.code ? nextItem : item)
+        : [...prev, nextItem];
+    });
+    setBookingMode("builder");
+    setStep(nextStep);
+    trackBookingFunnel("smart_guidance_option_selected");
+    toast({ title: "Smart answer applied", description });
+  }
+
+  function applyPrimaryQuickNote(note: string, nextStep: Step = "configure") {
+    const target = primaryMarketplaceItem;
+    if (!target) {
+      setContact((current) => ({
+        ...current,
+        notes: appendQuickAnswerNote(current.notes, note),
+      }));
+      setBookingMode("builder");
+      setStep(nextStep);
+      toast({ title: "Smart answer saved", description: note });
+      return;
+    }
+    setItems((prev) => prev.map((item) => item.serviceCode === target.serviceCode
+      ? { ...item, details: { ...item.details, notes: appendQuickAnswerNote(item.details.notes || "", note) } }
+      : item));
+    setBookingMode("builder");
+    setStep(nextStep);
+    trackBookingFunnel("smart_guidance_option_selected");
+    toast({ title: "Smart answer saved", description: note });
+  }
+
+  function applySmartGuidanceOption(stepId: string, option: string) {
+    const normalized = option.toLowerCase();
+
+    if (stepId === "where_when") {
+      if (normalized.includes("date flexible")) {
+        setContact((current) => ({
+          ...current,
+          notes: appendQuickAnswerNote(current.notes, "Date flexible"),
+        }));
+      }
+      setBookingMode("builder");
+      setStep("address");
+      trackBookingFunnel("smart_guidance_option_selected");
+      toast({
+        title: "Next: address and date",
+        description: normalized.includes("date flexible")
+          ? "Date flexibility saved. Add ZIP or address so we can price the zone."
+          : "Add ZIP or address so we can price the zone fast.",
+      });
+      return;
+    }
+
+    if (stepId === "job_shape") {
+      if (normalized.includes("delivery")) {
+        applyMarketplaceShape("delivery_reuse");
+        setStep("address");
+        toast({ title: "Delivery path selected", description: "Pickup/drop-off and item details will size the card." });
+        return;
+      }
+      if (normalized.includes("repeat")) {
+        applyMarketplaceShape("repeat_loop");
+        setStep("services");
+        toast({ title: "Repeat work path selected", description: "Choose lawn, snow, junk, handyman, cleaning, or another route-ready service." });
+        return;
+      }
+      if (normalized.includes("not sure")) {
+        applyMarketplaceShape("fast_quote");
+        setStep("services");
+        toast({ title: "Quick quote path selected", description: "Pick the closest service or leave the details for quote review." });
+        return;
+      }
+      const movingPath: SelectedItem["details"]["movingPath"] = normalized.includes("unload") && !normalized.includes("load +")
+        ? "unload_only"
+        : normalized.includes("load +") || normalized.includes("load /") || normalized.includes("load and")
+          ? "load_unload"
+          : "load_only";
+      const loadType = movingPath === "unload_only"
+        ? "Unload only"
+        : movingPath === "load_unload"
+          ? "Load + unload"
+          : "Load only";
+      applyMovingQuickPatch(
+        {
+          movingPath,
+          loadType,
+          jobSize: "Standard moving help",
+        },
+        `${loadType} saved. Next we need truck, package, date, and address.`,
+        "address",
+      );
+      return;
+    }
+
+    if (stepId === "truck_context") {
+      if (normalized.includes("customer truck") || normalized.includes("u-haul")) {
+        applyMovingQuickPatch(
+          {
+            truckNeeded: false,
+            truckSize: normalized.includes("u-haul") ? "U-Haul / rental truck" : "Customer truck",
+            jobSize: "Standard moving help",
+          },
+          "Customer truck context saved.",
+        );
+        return;
+      }
+      if (normalized.includes("need jc")) {
+        applyMovingQuickPatch(
+          {
+            truckNeeded: true,
+            truckSize: "JC truck needed",
+            jobSize: "Standard moving help",
+            notes: "Customer may need JC truck.",
+          },
+          "JC truck need saved for quote review.",
+        );
+        return;
+      }
+      if (normalized.includes("trailer") || normalized.includes("storage") || normalized.includes("container")) {
+        applyMovingQuickPatch(
+          {
+            truckNeeded: false,
+            truckSize: normalized.includes("trailer") ? "Trailer" : "Storage/container",
+            jobSize: "Standard moving help",
+            notes: option,
+          },
+          `${option} saved for quote review.`,
+        );
+        return;
+      }
+      if (normalized.includes("stairs")) {
+        applyMovingQuickPatch(
+          {
+            hasStairs: true,
+            notes: "Stairs/access mentioned.",
+          },
+          "Stairs/access note saved.",
+        );
+        return;
+      }
+    }
+
+    if (stepId === "smart_package") {
+      if (normalized.includes("2 movers / 3")) {
+        applyMovingQuickPatch(
+          {
+            ...movingPackageDetails(2, 3, "2 movers / 3 hours"),
+            jobSize: "Standard moving help",
+          },
+          "Common 2 movers / 3 hours package selected.",
+        );
+        return;
+      }
+      if (normalized.includes("3 movers / 2")) {
+        applyMovingQuickPatch(
+          {
+            ...movingPackageDetails(3, 2, "3 movers / 2 hours"),
+            jobSize: "Standard moving help",
+          },
+          "Faster 3 movers / 2 hours package selected.",
+        );
+        return;
+      }
+      if (normalized.includes("2 movers / 2")) {
+        applyMovingQuickPatch(
+          {
+            ...movingPackageDetails(2, 2, "2 movers / 2 hours"),
+            jobSize: "Small moving help",
+          },
+          "Small 2 movers / 2 hours package selected.",
+        );
+        return;
+      }
+      applyMovingQuickPatch(
+        {
+          packageId: "quote_review",
+          packageLabel: "Quote review - crew confirms",
+          priceReviewRequired: true,
+          quoteConfidence: "low" as const,
+          notes: "Customer selected quote review instead of a standard package.",
+        },
+        "Quote review saved. Staff will confirm crew, hours, and final price.",
+      );
+      return;
+    }
+
+    if (stepId === "detail_capture") {
+      if (normalized.includes("no extra")) {
+        applyPrimaryQuickNote("No extra details added.");
+        return;
+      }
+      applyPrimaryQuickNote(option);
+      return;
+    }
+
+    if (stepId === "contact_recovery") {
+      const preference = normalized.includes("email")
+        ? "Preferred contact: email"
+        : normalized.includes("call")
+          ? "Preferred contact: call"
+          : normalized.includes("help now")
+            ? "Urgent request: needs help now"
+            : "Preferred contact: text";
+      setContact((current) => ({
+        ...current,
+        notes: appendQuickAnswerNote(current.notes, preference),
+      }));
+      setBookingMode("builder");
+      setStep("contact");
+      trackBookingFunnel("smart_guidance_option_selected");
+      toast({ title: "Contact preference saved", description: preference });
+      return;
+    }
+
+    applyPrimaryQuickNote(option);
+  }
+
   function applySmartStart() {
     const raw = smartStartText.trim();
     if (!raw) {
@@ -2755,6 +3022,7 @@ export default function MultiServiceBookPage() {
                 serviceLabel={primaryMarketplaceItem?.label || selectedMarketplaceShape.shape}
                 compact
                 nextOnly
+                onQuickOption={applySmartGuidanceOption}
                 className="mb-3"
               />
               <MarketplaceProcessGuide
