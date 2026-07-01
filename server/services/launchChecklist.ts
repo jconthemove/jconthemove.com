@@ -850,30 +850,57 @@ const SCENARIOS: Scenario[] = [
         "target",
         "walmart",
         "goodwill",
+        "mcdonalds",
         "mc donalds",
         "2men and a truck",
+        "two men and a truck",
         "uhaul",
+        "u-haul",
         "movinghelp.com",
         "movinghelper.com",
         "porch moving group",
         "hire-a-helper",
         "yelp",
-        "facebook",
         "google",
-        "pods",
+        "facebook",
         "craigslist",
+        "pods",
+        "u-box",
         "square",
         "discord",
+        "solbot webhook",
         "jcmoves",
+        "crypto",
         "generosity",
         "mom",
+        "nominee",
       ];
       const missingAliases = requiredAliases.filter((alias) => !getMarketplaceSourceFlowForSource(alias));
       if (missingAliases.length > 0) {
         return { ok: false, detail: `missing source aliases: ${missingAliases.join(", ")}` };
       }
 
-      const requiredReferences = ["Target", "Walmart", "Goodwill", "McDonald's", "U-Haul", "MovingHelp", "JCMOVES Crypto", "Generosity Fund"];
+      const requiredReferences = [
+        "Target",
+        "Walmart",
+        "Goodwill",
+        "McDonald's",
+        "Two Men and a Truck",
+        "U-Haul",
+        "MovingHelp",
+        "MovingHelper",
+        "Porch Moving Group",
+        "HireAHelper",
+        "Yelp",
+        "Google",
+        "Facebook",
+        "Craigslist",
+        "PODS",
+        "U-Box",
+        "Square",
+        "JCMOVES Crypto",
+        "Generosity Fund",
+      ];
       const referenceText = MARKETPLACE_REFERENCE_BLUEPRINTS.map((blueprint) => blueprint.reference).join(" ").toLowerCase();
       const missingReferences = requiredReferences.filter((reference) => !referenceText.includes(reference.toLowerCase()));
       if (missingReferences.length > 0) {
