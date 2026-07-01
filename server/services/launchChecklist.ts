@@ -51,6 +51,7 @@ export type ScenarioId =
   | "quick_request_notifications"
   | "quick_request_storage"
   | "tracked_marketing_funnel"
+  | "promo_code_integrity"
   | "marketing_rep_pages"
   | "profit_share_settings"
   | "payout_safety_gate";
@@ -1342,6 +1343,218 @@ const SCENARIOS: Scenario[] = [
     id: "tracked_marketing_funnel",
     label: "Tracked crew/webhook campaign link reaches booking + campaign analytics",
     run: runTrackedMarketingFunnelProbe,
+  },
+  {
+    id: "promo_code_integrity",
+    label: "Promo codes are valid, trackable, and reward-safe",
+    run: async () => {
+      const { rows } = await pool.query<{
+        total_codes: number;
+        active_codes: number;
+        duplicate_active_codes: string | null;
+        malformed_active_codes: string | null;
+        expired_active_codes: string | null;
+        maxed_active_codes: string | null;
+        invalid_value_codes: string | null;
+        orphan_referrer_codes: string | null;
+        orphan_rep_codes: string | null;
+      }>(`
+        WITH duplicate_active AS (
+          SELECT UPPER(TRIM(code)) AS code
+          FROM promo_codes
+          WHERE is_active = true
+          GROUP BY UPPER(TRIM(code))
+          HAVING COUNT(*) > 1
+        ),
+        malformed_active AS (
+          SELECT code
+          FROM promo_codes
+          WHERE is_active = true
+            AND (
+              code <> UPPER(code)
+              OR code !~ '^[A-Z0-9][A-Z0-9_-]{1,63}$'
+            )
+        ),
+        expired_active AS (
+          SELECT code
+          FROM promo_codes
+          WHERE is_active = true
+            AND expires_at IS NOT NULL
+            AND expires_at <= NOW()
+        ),
+        maxed_active AS (
+          SELECT code
+          FROM promo_codes
+          WHERE is_active = true
+            AND max_uses IS NOT NULL
+            AND uses_count >= max_uses
+        ),
+        invalid_values AS (
+          SELECT code
+          FROM promo_codes
+          WHERE discount_percent::numeric < 0
+             OR discount_percent::numeric > 100
+             OR discount_percent_jewelry::numeric < 0
+             OR discount_percent_jewelry::numeric > 100
+             OR reward_tokens::numeric < 0
+             OR referral_reward_tokens::numeric < 0
+             OR uses_count < 0
+             OR (max_uses IS NOT NULL AND max_uses <= 0)
+        ),
+        orphan_referrers AS (
+          SELECT pc.code
+          FROM promo_codes pc
+          LEFT JOIN users u ON u.id = pc.referral_user_id
+          WHERE pc.referral_user_id IS NOT NULL
+            AND u.id IS NULL
+        ),
+        orphan_reps AS (
+          SELECT mr.promo_code AS code
+          FROM marketing_reps mr
+          LEFT JOIN promo_codes pc ON UPPER(pc.code) = UPPER(mr.promo_code) AND pc.is_active = true
+          WHERE mr.is_active = true
+            AND pc.id IS NULL
+        )
+        SELECT
+          (SELECT COUNT(*)::int FROM promo_codes) AS total_codes,
+          (SELECT COUNT(*)::int FROM promo_codes WHERE is_active = true) AS active_codes,
+          (SELECT STRING_AGG(code, ', ' ORDER BY code) FROM duplicate_active) AS duplicate_active_codes,
+          (SELECT STRING_AGG(code, ', ' ORDER BY code) FROM malformed_active) AS malformed_active_codes,
+          (SELECT STRING_AGG(code, ', ' ORDER BY code) FROM expired_active) AS expired_active_codes,
+          (SELECT STRING_AGG(code, ', ' ORDER BY code) FROM maxed_active) AS maxed_active_codes,
+          (SELECT STRING_AGG(code, ', ' ORDER BY code) FROM invalid_values) AS invalid_value_codes,
+          (SELECT STRING_AGG(code, ', ' ORDER BY code) FROM orphan_referrers) AS orphan_referrer_codes,
+          (SELECT STRING_AGG(code, ', ' ORDER BY code) FROM orphan_reps) AS orphan_rep_codes
+      `);
+      const row = rows[0];
+      if (!row || Number(row.total_codes) === 0) {
+        return { ok: false, detail: "no promo codes found; marketing, rep pages, and customer discounts need at least one code" };
+      }
+      if (Number(row.active_codes) === 0) {
+        return { ok: false, detail: `${row.total_codes} promo code(s) exist but none are active` };
+      }
+
+      const hardFailures = [
+        row.duplicate_active_codes ? `duplicate active codes: ${row.duplicate_active_codes}` : "",
+        row.malformed_active_codes ? `malformed active codes: ${row.malformed_active_codes}` : "",
+        row.expired_active_codes ? `expired active codes still active: ${row.expired_active_codes}` : "",
+        row.maxed_active_codes ? `maxed-out codes still active: ${row.maxed_active_codes}` : "",
+        row.invalid_value_codes ? `invalid promo values: ${row.invalid_value_codes}` : "",
+        row.orphan_referrer_codes ? `codes point to missing referrers: ${row.orphan_referrer_codes}` : "",
+        row.orphan_rep_codes ? `active rep pages point to missing/inactive promo codes: ${row.orphan_rep_codes}` : "",
+      ].filter(Boolean);
+      if (hardFailures.length > 0) {
+        return { ok: false, detail: hardFailures.join("; ") };
+      }
+
+      const sourceChecks = [
+        {
+          name: "promo schema",
+          path: "shared/schema.ts",
+          required: [
+            'pgTable("promo_codes"',
+            "discountPercent",
+            "rewardTokens",
+            "referralRewardTokens",
+            "maxUses",
+          ],
+        },
+        {
+          name: "promo admin api",
+          path: "server/routes.ts",
+          required: [
+            'app.get("/api/admin/promo-codes"',
+            'app.post("/api/admin/promo-codes"',
+            'app.patch("/api/admin/promo-codes/:id"',
+            'app.delete("/api/admin/promo-codes/:id"',
+            'app.post("/api/promo-codes/apply"',
+          ],
+        },
+        {
+          name: "booking attribution bridge",
+          path: "server/routes/bookings.ts",
+          required: [
+            "marketingPromoCode",
+            "marketingReferralSlug",
+            "quoteAttributions",
+            "promoCode: leadPromoCode",
+            "marketingCampaignId",
+          ],
+        },
+        {
+          name: "public booking attribution capture",
+          path: "client/src/pages/book.tsx",
+          required: [
+            'sp.get("promo")',
+            'sp.get("rep")',
+            "marketingTracking",
+            "buildBookingFunnelSnapshot",
+            "promoCode: attribution.promoCode",
+          ],
+        },
+        {
+          name: "rep landing page",
+          path: "client/src/pages/marketing-rep.tsx",
+          required: [
+            "rep.promoCode",
+            "withTracking",
+            "shareText",
+            "Use code",
+          ],
+        },
+        {
+          name: "admin promo ui",
+          path: "client/src/pages/admin-promo-codes.tsx",
+          required: [
+            'queryKey: ["/api/admin/promo-codes"]',
+            "Create Promo Code",
+            "Referrer Token Reward",
+            "Max Uses",
+            "Delete Promo Code?",
+          ],
+        },
+        {
+          name: "booking analytics promo chips",
+          path: "client/src/pages/admin/booking-analytics.tsx",
+          required: [
+            "promoCodes",
+            "Promo {code}",
+            "sourceBreakdown",
+          ],
+        },
+      ];
+
+      const missingFiles = sourceChecks.filter((check) => !existsSync(path.resolve(process.cwd(), check.path)));
+      if (missingFiles.length === 0) {
+        const missingSnippets = sourceChecks.flatMap((check) => {
+          const text = readFileSync(path.resolve(process.cwd(), check.path), "utf8");
+          return check.required
+            .filter((snippet) => !text.includes(snippet))
+            .map((snippet) => `${check.name}: ${snippet}`);
+        });
+        if (missingSnippets.length > 0) {
+          return { ok: false, detail: `missing promo wiring: ${missingSnippets.join(", ")}` };
+        }
+      } else {
+        const builtClientText = readBuiltClientText();
+        if (!builtClientText) {
+          return {
+            ok: false,
+            detail: `source unavailable (${missingFiles.map((check) => check.path).join(", ")}) and no built client bundle found`,
+          };
+        }
+        const requiredBundleText = ["Promo Codes", "Referral code", "Promo"];
+        const missingBundleText = requiredBundleText.filter((snippet) => !builtClientText.includes(snippet));
+        if (missingBundleText.length > 0) {
+          return { ok: false, detail: `production bundle missing promo text: ${missingBundleText.join(", ")}` };
+        }
+      }
+
+      return {
+        ok: true,
+        detail: `${row.active_codes}/${row.total_codes} promo code(s) active; no duplicate/malformed/expired/maxed/orphan reward links; booking + rep + analytics wiring mounted`,
+      };
+    },
   },
   {
     id: "marketing_rep_pages",
