@@ -130,6 +130,19 @@ export type MarketplaceActionTask = {
   shapeIds: MarketplaceRequestShapeId[];
 };
 
+export type MarketplaceSourceReadinessLevel = "ready" | "watch" | "build";
+
+export type MarketplaceSourceOperationalReadiness = {
+  sourceFlowId: string;
+  ownerRail: MarketplaceActionRail;
+  readiness: MarketplaceSourceReadinessLevel;
+  launchQuestion: string;
+  nextAction: string;
+  publishProof: string;
+  automationGate: string;
+  rewardClose: string;
+};
+
 export type MarketplaceSmartBookingStepId =
   | "where_when"
   | "job_shape"
@@ -1128,6 +1141,139 @@ export const MARKETPLACE_ACTION_TASKS: MarketplaceActionTask[] = [
   },
 ];
 
+export const MARKETPLACE_SOURCE_READINESS: MarketplaceSourceOperationalReadiness[] = [
+  {
+    sourceFlowId: "target_walmart_catalog",
+    ownerRail: "silver",
+    readiness: "watch",
+    launchQuestion: "Do the most common service cards create a real quote_requested lead with add-ons and photos?",
+    nextAction: "Keep service cards short, route them through smart package defaults, and attach add-ons to the lead snapshot.",
+    publishProof: "A package, add-on, address, date, and photo can be seen on the lead card after submit.",
+    automationGate: "Smart booking package defaults and address/zone preview must run before quote approval.",
+    rewardClose: "Marketing or add-on JCMOVES only after a recoverable or converted lead exists.",
+  },
+  {
+    sourceFlowId: "goodwill_reuse",
+    ownerRail: "silver",
+    readiness: "build",
+    launchQuestion: "Can removal or delivery requests say donate, dispose, deliver, store, or reuse without a phone call?",
+    nextAction: "Add item destiny choices to photo/item capture and show those tags on job detail and completion proof.",
+    publishProof: "A test lead stores item photos plus disposition tags and workers can see the handling plan.",
+    automationGate: "Completion proof should separate donation/reuse notes from disposal, payout, and invoice records.",
+    rewardClose: "Reuse or donation JCMOVES only after approved proof is attached to the completed card.",
+  },
+  {
+    sourceFlowId: "mcdonalds_menu",
+    ownerRail: "silver",
+    readiness: "ready",
+    launchQuestion: "Can a customer pick the obvious package in under 60 seconds?",
+    nextAction: "Keep the default choices visible: 2 movers / 3 hours, 3 movers / 2 hours, or quote review.",
+    publishProof: "The smart booking path turns a package pick into crew size, hours, estimate range, and lead card context.",
+    automationGate: "Package suggestions must stay estimates until Gold or Platinum confirms pricing.",
+    rewardClose: "Quote-sampling JCMOVES only count when the sample helps an approved quote path.",
+  },
+  {
+    sourceFlowId: "two_men_ops",
+    ownerRail: "platinum",
+    readiness: "watch",
+    launchQuestion: "Does a priced card become scheduled, assigned, dispatched, completed, and green on the calendar?",
+    nextAction: "Keep lead status, date/window, assigned crew, and completion proof tied to the same operational card.",
+    publishProof: "A test card appears on admin and crew calendars, then completion closes the payout/review path once.",
+    automationGate: "Assigned job updates must notify assigned crew and admin, not the entire crew forever.",
+    rewardClose: "Completion JCMOVES and payout math run once after verified completion.",
+  },
+  {
+    sourceFlowId: "uhaul_movinghelp",
+    ownerRail: "gold",
+    readiness: "watch",
+    launchQuestion: "Do ZIP/date, load/unload/both, truck provider, truck size, crew, hours, and zone rate all land on the card?",
+    nextAction: "Keep MovingHelp-style rate rows connected to zone quote preview and quote snapshots.",
+    publishProof: "A moving-help test request shows the zone, rate row, minimum hours, discount threshold, and estimate range.",
+    automationGate: "No hard final price until Gold or Platinum approves the quote snapshot.",
+    rewardClose: "Quote helper JCMOVES unlock only after the quote card is useful or approved.",
+  },
+  {
+    sourceFlowId: "porch_hireahelper_consensus",
+    ownerRail: "gold",
+    readiness: "ready",
+    launchQuestion: "Can marketers or workers sample quote choices without accidentally approving price?",
+    nextAction: "Keep Bronze/Silver choices multiple-choice and require matching confidence or Gold/Platinum approval.",
+    publishProof: "Two or three matching guided quote picks raise confidence without bypassing authority rails.",
+    automationGate: "Consensus can recommend; approval rail controls the customer-facing quote.",
+    rewardClose: "Consensus bonuses pay only when the contribution ties to an approved card.",
+  },
+  {
+    sourceFlowId: "google_yelp_trust",
+    ownerRail: "platinum",
+    readiness: "watch",
+    launchQuestion: "Can a customer find an address fast, leave partial info, and still become recoverable if something fails?",
+    nextAction: "Keep smart address input, funnel events, errors, and recover-this-request connected to lead creation.",
+    publishProof: "An abandoned attempt with phone/email is visible in funnel analytics and can become quote_requested.",
+    automationGate: "Owner/admin alert fires on new request; funnel error capture preserves useful partial context.",
+    rewardClose: "Review or recovery JCMOVES require verified review, recovered card, or attributed booking.",
+  },
+  {
+    sourceFlowId: "facebook_craigslist_ads",
+    ownerRail: "bronze",
+    readiness: "ready",
+    launchQuestion: "Can a crew member make one simple tracked post and see whether it becomes a lead?",
+    nextAction: "Keep ad creation focused on area, photo, short text, tracked link, and Discord reminder.",
+    publishProof: "A campaign link stores source, rep, promo, and campaign on any resulting card or funnel event.",
+    automationGate: "Only tracked campaign links and recoverable requests count toward marketing credit.",
+    rewardClose: "Marketing JCMOVES pay after a recoverable or converted lead, not just a posted message.",
+  },
+  {
+    sourceFlowId: "pods_ubox_containers",
+    ownerRail: "silver",
+    readiness: "build",
+    launchQuestion: "Can container jobs price labor, box count, delivery, mileage, and access separately?",
+    nextAction: "Add container-specific intake and U-Box-style rate rows to the quote card path.",
+    publishProof: "A test U-Box/container request stores container count, access notes, labor split, mileage, and estimate.",
+    automationGate: "Container pricing must not collapse into a generic moving-labor estimate.",
+    rewardClose: "Container completion JCMOVES require verified box count/access completion proof.",
+  },
+  {
+    sourceFlowId: "square_collect",
+    ownerRail: "platinum",
+    readiness: "watch",
+    launchQuestion: "Can a confirmed quote produce a trusted payment link while cash payout remains safe for now?",
+    nextAction: "Keep Square link generation behind approval, with deposit gate, payment status, and payout preview visible.",
+    publishProof: "A test approved quote has payment URL/status, deposit flag, payout preview, and finance notes.",
+    automationGate: "No payout release before payment/deposit approval rules pass.",
+    rewardClose: "Customer spend JCMOVES only after payment clears; worker payout bonuses wait for completion approval.",
+  },
+  {
+    sourceFlowId: "discord_webhooks",
+    ownerRail: "platinum",
+    readiness: "ready",
+    launchQuestion: "Do lifecycle events notify the right audience without blasting everyone forever?",
+    nextAction: "Keep new-request alerts for owner/admin, available-job alerts for eligible crew, and assigned updates targeted.",
+    publishProof: "A test event posts to Discord and internal notifications with event type and audience recorded.",
+    automationGate: "Webhook delivery follows job lifecycle events, not loose manual blasts.",
+    rewardClose: "Reminder/task JCMOVES require the prompted action to be completed.",
+  },
+  {
+    sourceFlowId: "jcmoves_rewards",
+    ownerRail: "platinum",
+    readiness: "ready",
+    launchQuestion: "Do customers and workers have simple receive and redeem rails backed by one-safe ledger events?",
+    nextAction: "Keep receive/redeem visible in Wallet and Rewards, and keep idempotent source ids on reward writes.",
+    publishProof: "A verified booking, review, referral, completion, or redemption creates one ledger-safe reward event.",
+    automationGate: "Rewards must be tied to proof and source ids so duplicate payouts cannot sneak in.",
+    rewardClose: "Verified actions only: created lead, useful quote, completed job, review, referral, repeat booking.",
+  },
+  {
+    sourceFlowId: "generosity_fund",
+    ownerRail: "platinum",
+    readiness: "ready",
+    launchQuestion: "Is Mom's fund visible while staying separate from payout, discounts, and company profit?",
+    nextAction: "Keep Mom wallet, platform fund, nominees, and heart donations visible in admin and wallet surfaces.",
+    publishProof: "Mom stats, heart donations, nominee totals, and generosity ledger rows are visible and separated.",
+    automationGate: "Internal wallets are excluded from circular rewards and giveback credits use verified wallet events.",
+    rewardClose: "Giveback JCMOVES only after verified wallet credit, donation, nominee allocation, or approved task.",
+  },
+];
+
 export const MARKETPLACE_SMART_BOOKING_STEPS: MarketplaceSmartBookingStep[] = [
   {
     id: "where_when",
@@ -1280,6 +1426,10 @@ export function getMarketplaceSourceFlowsForActionTask(task: Pick<MarketplaceAct
     .map((flowId) => flowById.get(flowId))
     .filter((flow): flow is MarketplaceSourceFlow => Boolean(flow))
     .slice(0, Math.max(0, limit));
+}
+
+export function getMarketplaceReadinessForSourceFlow(sourceFlowId: string | null | undefined) {
+  return MARKETPLACE_SOURCE_READINESS.find((item) => item.sourceFlowId === sourceFlowId) || null;
 }
 
 export function getMarketplaceSmartBookingStepsForShape(id: MarketplaceRequestShapeId) {

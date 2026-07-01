@@ -33,6 +33,7 @@ import MarketplaceProcessGuide from "@/components/MarketplaceProcessGuide";
 import MarketplaceSmartBookingEngine from "@/components/MarketplaceSmartBookingEngine";
 import MarketplaceSourceActionDeck from "@/components/MarketplaceSourceActionDeck";
 import MarketplaceSourceLookup from "@/components/MarketplaceSourceLookup";
+import MarketplaceSourceReadinessBoard from "@/components/MarketplaceSourceReadinessBoard";
 import MarketplaceTaskSplit from "@/components/MarketplaceTaskSplit";
 
 const steps = [
@@ -264,6 +265,8 @@ export default function AdminMarketplacePlaybookPage() {
         <MarketplaceActionMatrix className="mt-5" />
 
         <MarketplaceSourceActionDeck className="mt-5" limit={6} />
+
+        <MarketplaceSourceReadinessBoard className="mt-5" />
 
         <section className="mt-5 rounded-lg border border-slate-800 bg-slate-900/70 p-5">
           <div className="flex items-center gap-2">

@@ -6,8 +6,10 @@ import {
   MARKETPLACE_REQUEST_SHAPES,
   MARKETPLACE_SIMPLE_SIDES,
   MARKETPLACE_SOURCE_FLOW_MATRIX,
+  MARKETPLACE_SOURCE_READINESS,
   MARKETPLACE_SMART_BOOKING_STEPS,
   getMarketplaceShapeForServiceCode,
+  getMarketplaceReadinessForSourceFlow,
   getMarketplaceReferenceBlueprintsForSource,
   getMarketplaceSourceFlowForSource,
   getMarketplaceSourceFlowsForActionTask,
@@ -239,6 +241,39 @@ test("links every source flow to at least one operational action task", () => {
 
   for (const flow of MARKETPLACE_SOURCE_FLOW_MATRIX) {
     assert.ok(linkedFlowIds.has(flow.id), `${flow.id} should be linked to at least one action task`);
+  }
+});
+
+test("assigns every source flow a publish-readiness owner, proof, gate, and reward close", () => {
+  const flowIds = new Set(MARKETPLACE_SOURCE_FLOW_MATRIX.map((flow) => flow.id));
+  const rails = new Set<MarketplaceActionRail>(["customer", "bronze", "silver", "gold", "platinum"]);
+  const levels = new Set(MARKETPLACE_SOURCE_READINESS.map((item) => item.readiness));
+  const seen = new Set<string>();
+
+  assert.equal(MARKETPLACE_SOURCE_READINESS.length, flowIds.size, "source readiness should track every source flow once");
+  for (const requiredLevel of ["ready", "watch", "build"] as const) {
+    assert.ok(levels.has(requiredLevel), `source readiness should include ${requiredLevel} work`);
+  }
+
+  for (const item of MARKETPLACE_SOURCE_READINESS) {
+    assert.ok(flowIds.has(item.sourceFlowId), `${item.sourceFlowId} should reference a known source flow`);
+    assert.ok(!seen.has(item.sourceFlowId), `${item.sourceFlowId} should have only one readiness row`);
+    assert.ok(rails.has(item.ownerRail), `${item.sourceFlowId} references unknown owner rail ${item.ownerRail}`);
+    assertFilled(item.launchQuestion, `${item.sourceFlowId}.launchQuestion`);
+    assertFilled(item.nextAction, `${item.sourceFlowId}.nextAction`);
+    assertFilled(item.publishProof, `${item.sourceFlowId}.publishProof`);
+    assertFilled(item.automationGate, `${item.sourceFlowId}.automationGate`);
+    assertFilled(item.rewardClose, `${item.sourceFlowId}.rewardClose`);
+    assert.equal(
+      getMarketplaceReadinessForSourceFlow(item.sourceFlowId)?.sourceFlowId,
+      item.sourceFlowId,
+      `${item.sourceFlowId} readiness helper should resolve the row`,
+    );
+    seen.add(item.sourceFlowId);
+  }
+
+  for (const flow of MARKETPLACE_SOURCE_FLOW_MATRIX) {
+    assert.ok(seen.has(flow.id), `${flow.id} should be represented in source readiness`);
   }
 });
 

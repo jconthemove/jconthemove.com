@@ -45,6 +45,7 @@ const anchors: CoverageAnchor[] = [
   { label: "JCMOVES Crypto", aliases: ["jcmoves", "crypto"], group: "growth" },
   { label: "Square", aliases: ["square", "invoice", "payment"], group: "payments" },
   { label: "Discord / Solbot", aliases: ["discord", "solbot", "webhook"], group: "growth" },
+  { label: "Generosity Fund", aliases: ["generosity", "giveback", "mom", "nominee"], group: "growth" },
 ];
 
 const groupLabels: Record<CoverageAnchor["group"], string> = {
