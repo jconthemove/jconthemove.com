@@ -143,6 +143,27 @@ export type MarketplaceSourceOperationalReadiness = {
   rewardClose: string;
 };
 
+export type MarketplaceLaunchTask = {
+  id: string;
+  sourceFlowId: string;
+  source: string;
+  category: string;
+  phase: MarketplaceActionPhase;
+  ownerRail: MarketplaceActionRail;
+  readiness: MarketplaceSourceReadinessLevel;
+  title: string;
+  launchQuestion: string;
+  action: string;
+  acceptanceCriteria: string;
+  automationGate: string;
+  rewardClose: string;
+  linkedActionTaskIds: string[];
+  totalMappedBonusJcMoves: number;
+  surfaces: string;
+  shapeIds: MarketplaceRequestShapeId[];
+  flywheelStages: MarketplaceFlywheelStageId[];
+};
+
 export type MarketplaceSmartBookingStepId =
   | "where_when"
   | "job_shape"
@@ -1430,6 +1451,62 @@ export function getMarketplaceSourceFlowsForActionTask(task: Pick<MarketplaceAct
 
 export function getMarketplaceReadinessForSourceFlow(sourceFlowId: string | null | undefined) {
   return MARKETPLACE_SOURCE_READINESS.find((item) => item.sourceFlowId === sourceFlowId) || null;
+}
+
+const launchTaskPhaseByReadiness: Record<MarketplaceSourceReadinessLevel, MarketplaceActionPhase> = {
+  build: "start",
+  watch: "progress",
+  ready: "finish",
+};
+
+const launchTaskTitleByReadiness: Record<MarketplaceSourceReadinessLevel, string> = {
+  build: "Build",
+  watch: "Verify",
+  ready: "Protect",
+};
+
+export function getMarketplaceLaunchTasks(): MarketplaceLaunchTask[] {
+  const flowById = new Map(MARKETPLACE_SOURCE_FLOW_MATRIX.map((flow) => [flow.id, flow]));
+
+  return MARKETPLACE_SOURCE_READINESS
+    .map((readiness): MarketplaceLaunchTask | null => {
+      const flow = flowById.get(readiness.sourceFlowId);
+      if (!flow) return null;
+      const linkedTasks = MARKETPLACE_ACTION_TASKS.filter((task) => task.flowIds.includes(flow.id));
+      const ownerTasks = linkedTasks.filter((task) => task.rail === readiness.ownerRail);
+      const visibleTasks = ownerTasks.length > 0 ? ownerTasks : linkedTasks;
+      const readinessVerb = launchTaskTitleByReadiness[readiness.readiness];
+
+      return {
+        id: `launch_${flow.id}`,
+        sourceFlowId: flow.id,
+        source: flow.source,
+        category: flow.category,
+        phase: launchTaskPhaseByReadiness[readiness.readiness],
+        ownerRail: readiness.ownerRail,
+        readiness: readiness.readiness,
+        title: `${readinessVerb} ${flow.source}`,
+        launchQuestion: readiness.launchQuestion,
+        action: readiness.nextAction,
+        acceptanceCriteria: readiness.publishProof,
+        automationGate: readiness.automationGate,
+        rewardClose: readiness.rewardClose,
+        linkedActionTaskIds: visibleTasks.map((task) => task.id),
+        totalMappedBonusJcMoves: visibleTasks.reduce((sum, task) => sum + Math.max(0, task.bonusJcMoves || 0), 0),
+        surfaces: flow.surfaces,
+        shapeIds: flow.shapeIds,
+        flywheelStages: flow.flywheelStages,
+      };
+    })
+    .filter((task): task is MarketplaceLaunchTask => Boolean(task));
+}
+
+export function getMarketplaceLaunchTasksForRail(rail: MarketplaceActionRail) {
+  return getMarketplaceLaunchTasks().filter((task) => task.ownerRail === rail);
+}
+
+export function getMarketplaceLaunchTasksForReadiness(readiness: MarketplaceSourceReadinessLevel) {
+  return getMarketplaceLaunchTasks().filter((task) => task.readiness === readiness);
 }
 
 export function getMarketplaceSmartBookingStepsForShape(id: MarketplaceRequestShapeId) {

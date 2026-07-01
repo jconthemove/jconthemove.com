@@ -9,6 +9,9 @@ import {
   MARKETPLACE_SOURCE_READINESS,
   MARKETPLACE_SMART_BOOKING_STEPS,
   getMarketplaceShapeForServiceCode,
+  getMarketplaceLaunchTasks,
+  getMarketplaceLaunchTasksForRail,
+  getMarketplaceLaunchTasksForReadiness,
   getMarketplaceReadinessForSourceFlow,
   getMarketplaceReferenceBlueprintsForSource,
   getMarketplaceSourceFlowForSource,
@@ -275,6 +278,44 @@ test("assigns every source flow a publish-readiness owner, proof, gate, and rewa
   for (const flow of MARKETPLACE_SOURCE_FLOW_MATRIX) {
     assert.ok(seen.has(flow.id), `${flow.id} should be represented in source readiness`);
   }
+});
+
+test("derives launch tasks from source readiness with rail, proof, and mapped JCMOVES context", () => {
+  const launchTasks = getMarketplaceLaunchTasks();
+  const flowIds = new Set(MARKETPLACE_SOURCE_FLOW_MATRIX.map((flow) => flow.id));
+  const readinessIds = new Set(MARKETPLACE_SOURCE_READINESS.map((item) => item.sourceFlowId));
+  const actionTaskIds = new Set(MARKETPLACE_ACTION_TASKS.map((task) => task.id));
+
+  assert.equal(launchTasks.length, flowIds.size, "launch task queue should contain one task per source flow");
+
+  for (const task of launchTasks) {
+    assert.ok(flowIds.has(task.sourceFlowId), `${task.id} should reference a known source flow`);
+    assert.ok(readinessIds.has(task.sourceFlowId), `${task.id} should be backed by readiness data`);
+    assertFilled(task.title, `${task.id}.title`);
+    assertFilled(task.launchQuestion, `${task.id}.launchQuestion`);
+    assertFilled(task.action, `${task.id}.action`);
+    assertFilled(task.acceptanceCriteria, `${task.id}.acceptanceCriteria`);
+    assertFilled(task.automationGate, `${task.id}.automationGate`);
+    assertFilled(task.rewardClose, `${task.id}.rewardClose`);
+    assertFilled(task.surfaces, `${task.id}.surfaces`);
+    assert.ok(task.linkedActionTaskIds.length > 0, `${task.id} should link to at least one bonus/action task`);
+    assert.ok(task.totalMappedBonusJcMoves >= 0, `${task.id} mapped JCMOVES cannot be negative`);
+
+    for (const linkedTaskId of task.linkedActionTaskIds) {
+      assert.ok(actionTaskIds.has(linkedTaskId), `${task.id} references unknown action task ${linkedTaskId}`);
+    }
+  }
+
+  assert.equal(
+    getMarketplaceLaunchTasksForRail("platinum").every((task) => task.ownerRail === "platinum"),
+    true,
+    "rail filter should only return the requested owner rail",
+  );
+  assert.equal(
+    getMarketplaceLaunchTasksForReadiness("build").every((task) => task.readiness === "build"),
+    true,
+    "readiness filter should only return the requested readiness state",
+  );
 });
 
 test("resolves every action task into visible source play chips", () => {
