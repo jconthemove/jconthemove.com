@@ -300,6 +300,11 @@ test("derives launch tasks from source readiness with rail, proof, and mapped JC
     assertFilled(task.surfaces, `${task.id}.surfaces`);
     assert.ok(task.linkedActionTaskIds.length > 0, `${task.id} should link to at least one bonus/action task`);
     assert.ok(task.totalMappedBonusJcMoves >= 0, `${task.id} mapped JCMOVES cannot be negative`);
+    assert.ok(task.completionBonusJcMoves > 0, `${task.id} should have a controlled completion bonus`);
+    assert.ok(
+      task.completionBonusJcMoves <= task.totalMappedBonusJcMoves || task.totalMappedBonusJcMoves === 0,
+      `${task.id} launch bonus should stay below mapped operational task context when context exists`,
+    );
 
     for (const linkedTaskId of task.linkedActionTaskIds) {
       assert.ok(actionTaskIds.has(linkedTaskId), `${task.id} references unknown action task ${linkedTaskId}`);

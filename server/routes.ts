@@ -71,7 +71,13 @@ import { ensureBookingCatalogSeeded } from "./services/bookingCatalogSeed";
 import { getWeeklyCrewRuleForDate, normalizeCrewName } from "@shared/weeklyCrewSchedule";
 import { getAppUrl } from "./appUrl";
 import { smsService } from "./services/sms";
-import { MARKETPLACE_ACTION_TASKS } from "@shared/marketplaceShapes";
+import {
+  MARKETPLACE_ACTION_TASKS,
+  getMarketplaceLaunchTasks,
+  type MarketplaceActionRail,
+  type MarketplaceLaunchTask,
+  type MarketplaceSourceReadinessLevel,
+} from "@shared/marketplaceShapes";
 
 const STAKING_TREASURY_USER_ID = "staking-treasury-system";
 const CHATBOT_DRIVE_BASE_LAT = 46.4539;
@@ -1318,6 +1324,23 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
         ON ops_task_completions(completed_by_user_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_ops_task_completions_lead
         ON ops_task_completions(lead_id, task_key);
+      CREATE TABLE IF NOT EXISTS launch_task_completions (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        task_id TEXT NOT NULL,
+        source_flow_id TEXT NOT NULL,
+        completed_by_user_id VARCHAR NOT NULL REFERENCES users(id),
+        authority_tier TEXT NOT NULL,
+        bonus_tokens NUMERIC(18,8) NOT NULL DEFAULT 0,
+        proof_notes TEXT NOT NULL,
+        metadata JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_launch_task_completion_user_task
+        ON launch_task_completions(task_id, completed_by_user_id);
+      CREATE INDEX IF NOT EXISTS idx_launch_task_completions_user
+        ON launch_task_completions(completed_by_user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_launch_task_completions_task
+        ON launch_task_completions(task_id, created_at DESC);
     `);
     console.log('worker authority and quote approval tables ready');
   } catch (migErr) {
@@ -6214,6 +6237,232 @@ export async function registerRoutes(app: Express, httpServer: Server = createSe
 
     return options.slice(0, 6);
   };
+
+  const launchTaskById = () => new Map(getMarketplaceLaunchTasks().map((task) => [task.id, task]));
+  const launchTaskRank = (rail: MarketplaceActionRail): number => {
+    if (rail === "customer") return 0;
+    return tierRank[rail as WorkerTier] ?? tierRank.platinum;
+  };
+  const launchTaskPriority = (readiness: MarketplaceSourceReadinessLevel): number => {
+    if (readiness === "build") return 1;
+    if (readiness === "watch") return 2;
+    return 3;
+  };
+  const canSeeLaunchTask = (authority: { rank: number }, task: MarketplaceLaunchTask): boolean => (
+    authority.rank >= launchTaskRank(task.ownerRail)
+  );
+
+  const serializeLaunchTask = (
+    task: MarketplaceLaunchTask,
+    authority: { rank: number },
+    completion?: {
+      completion_count?: number;
+      completed_by_me?: boolean;
+      last_completed_at?: string | Date | null;
+    },
+  ) => {
+    const completedByMe = Boolean(completion?.completed_by_me);
+    const authorized = canSeeLaunchTask(authority, task);
+    return {
+      ...task,
+      bonusTokens: task.completionBonusJcMoves,
+      completedByMe,
+      completionCount: Number(completion?.completion_count || 0),
+      lastCompletedAt: completion?.last_completed_at || null,
+      canComplete: authorized && !completedByMe,
+      completionReason: completedByMe
+        ? "You already claimed this launch task."
+        : authorized
+          ? "Add proof notes to claim this launch task bonus."
+          : `${String(task.ownerRail).toUpperCase()} authority or higher required.`,
+      actionUrl: `/admin/marketplace-playbook#${task.id}`,
+    };
+  };
+
+  app.get("/api/marketplace/launch-tasks", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const user = req.currentUser;
+      const authority = await getWorkerAuthority(user);
+      const railFilter = typeof req.query.rail === "string" ? req.query.rail : "";
+      const readinessFilter = typeof req.query.readiness === "string" ? req.query.readiness : "";
+      const allTasks = getMarketplaceLaunchTasks()
+        .filter((task) => canSeeLaunchTask(authority, task))
+        .filter((task) => !railFilter || task.ownerRail === railFilter)
+        .filter((task) => !readinessFilter || task.readiness === readinessFilter)
+        .sort((a, b) => {
+          const readinessDelta = launchTaskPriority(a.readiness) - launchTaskPriority(b.readiness);
+          if (readinessDelta !== 0) return readinessDelta;
+          const railDelta = launchTaskRank(b.ownerRail) - launchTaskRank(a.ownerRail);
+          if (railDelta !== 0) return railDelta;
+          return b.completionBonusJcMoves - a.completionBonusJcMoves;
+        });
+
+      const taskIds = allTasks.map((task) => task.id);
+      const completionByTask = new Map<string, any>();
+      if (taskIds.length > 0) {
+        const completionRows = await pool.query(
+          `SELECT
+             task_id,
+             COUNT(*)::int AS completion_count,
+             BOOL_OR(completed_by_user_id = $1) AS completed_by_me,
+             MAX(created_at) AS last_completed_at
+           FROM launch_task_completions
+           WHERE task_id = ANY($2::text[])
+           GROUP BY task_id`,
+          [user.id, taskIds],
+        );
+        for (const row of completionRows.rows) {
+          completionByTask.set(row.task_id, row);
+        }
+      }
+
+      const tasks = allTasks.map((task) => serializeLaunchTask(task, authority, completionByTask.get(task.id)));
+      const openTasks = tasks.filter((task) => !task.completedByMe).length;
+      const readyCount = tasks.filter((task) => task.readiness === "ready").length;
+      const watchCount = tasks.filter((task) => task.readiness === "watch").length;
+      const buildCount = tasks.filter((task) => task.readiness === "build").length;
+      const availableBonusTokens = tasks
+        .filter((task) => !task.completedByMe)
+        .reduce((sum, task) => sum + Number(task.bonusTokens || 0), 0);
+
+      res.json({
+        authority: {
+          tier: authority.authorityTier,
+          rank: authority.rank,
+          canPostLead: authority.rank >= tierRank.bronze,
+          canBuildQuote: authority.rank >= tierRank.silver,
+          canApproveQuote: authority.rank >= tierRank.gold,
+          canManageOps: authority.rank >= tierRank.platinum,
+        },
+        summary: {
+          totalTasks: tasks.length,
+          openTasks,
+          readyCount,
+          watchCount,
+          buildCount,
+          availableBonusTokens,
+        },
+        tasks,
+      });
+    } catch (error) {
+      console.error("marketplace launch task load error:", error);
+      res.status(500).json({ message: "Failed to load marketplace launch tasks" });
+    }
+  });
+
+  app.post("/api/marketplace/launch-tasks/:taskId/complete", isAuthenticated, requireEmployee, async (req: any, res) => {
+    try {
+      const user = req.currentUser;
+      const authority = await getWorkerAuthority(user);
+      const task = launchTaskById().get(String(req.params.taskId || ""));
+      if (!task) return res.status(404).json({ error: "Launch task not found" });
+      if (!canSeeLaunchTask(authority, task)) {
+        return res.status(403).json({ error: `${String(task.ownerRail).toUpperCase()} authority or higher required.` });
+      }
+
+      const proofNotes = String(req.body?.proofNotes || "").trim().slice(0, 1200);
+      if (proofNotes.length < 8) {
+        return res.status(400).json({ error: "Proof notes are required before claiming a launch task bonus." });
+      }
+
+      const tokenAmount = Number(task.completionBonusJcMoves || 0);
+      const cashValue = tokensToDollars(tokenAmount).toFixed(2);
+      const metadata = {
+        source: "marketplace_launch_task",
+        taskId: task.id,
+        sourceFlowId: task.sourceFlowId,
+        sourceName: task.source,
+        ownerRail: task.ownerRail,
+        readiness: task.readiness,
+        phase: task.phase,
+        linkedActionTaskIds: task.linkedActionTaskIds,
+        mappedBonusJcMoves: task.totalMappedBonusJcMoves,
+      };
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const inserted = await client.query(
+          `INSERT INTO launch_task_completions
+            (task_id, source_flow_id, completed_by_user_id, authority_tier, bonus_tokens, proof_notes, metadata)
+           VALUES ($1, $2, $3, $4, $5::numeric, $6, $7::jsonb)
+           ON CONFLICT (task_id, completed_by_user_id) DO NOTHING
+           RETURNING id`,
+          [
+            task.id,
+            task.sourceFlowId,
+            user.id,
+            authority.authorityTier,
+            tokenAmount.toFixed(8),
+            proofNotes,
+            JSON.stringify(metadata),
+          ],
+        );
+
+        if (inserted.rowCount === 0) {
+          await client.query("ROLLBACK");
+          return res.json({
+            awarded: false,
+            bonusTokens: 0,
+            reason: "Launch task already completed by this worker.",
+          });
+        }
+
+        await client.query(
+          `INSERT INTO wallet_accounts (user_id)
+           VALUES ($1)
+           ON CONFLICT (user_id) DO NOTHING`,
+          [user.id],
+        );
+        await client.query(
+          `UPDATE wallet_accounts
+           SET token_balance = COALESCE(token_balance, 0)::numeric + $2::numeric,
+               total_earned = COALESCE(total_earned, 0)::numeric + $2::numeric,
+               last_activity = NOW()
+           WHERE user_id = $1`,
+          [user.id, tokenAmount.toFixed(8)],
+        );
+        await client.query(
+          `INSERT INTO rewards
+            (user_id, reward_type, token_amount, cash_value, status, earned_date, reference_id, metadata)
+           VALUES ($1, 'ops_task_launch', $2::numeric, $3::numeric, 'confirmed', NOW(), $4, $5::jsonb)`,
+          [
+            user.id,
+            tokenAmount.toFixed(8),
+            cashValue,
+            task.id,
+            JSON.stringify({ ...metadata, completionId: inserted.rows[0]?.id, proofNotes }),
+          ],
+        );
+        await client.query("COMMIT");
+
+        try {
+          const { notificationService } = await import("./services/notification");
+          await notificationService.notifyRewardAvailable(user.id, task.title, tokenAmount);
+        } catch (notifyError) {
+          console.error("launch task reward notification failed:", notifyError);
+        }
+
+        res.json({
+          awarded: true,
+          completionId: inserted.rows[0]?.id,
+          bonusTokens: tokenAmount,
+          task: serializeLaunchTask(task, authority, {
+            completion_count: 1,
+            completed_by_me: true,
+            last_completed_at: new Date(),
+          }),
+        });
+      } catch (error) {
+        try { await client.query("ROLLBACK"); } catch {}
+        throw error;
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error("marketplace launch task completion error:", error);
+      res.status(500).json({ error: "Failed to complete marketplace launch task" });
+    }
+  });
 
   async function evaluateOpsTaskCompletion(taskKey: OpsTaskKey, lead: any) {
     if (!lead) return { ok: false, reason: "Lead not found", metadata: {} };

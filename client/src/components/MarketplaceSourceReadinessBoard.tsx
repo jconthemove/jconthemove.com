@@ -1,3 +1,5 @@
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BadgeDollarSign,
   CheckCircle2,
@@ -15,11 +17,33 @@ import {
   type MarketplaceLaunchTask,
   type MarketplaceSourceReadinessLevel,
 } from "@shared/marketplaceShapes";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 type MarketplaceSourceReadinessBoardProps = {
   className?: string;
   compact?: boolean;
   limit?: number;
+};
+
+type LaunchTaskView = MarketplaceLaunchTask & {
+  bonusTokens?: number;
+  completedByMe?: boolean;
+  completionCount?: number;
+  canComplete?: boolean;
+  completionReason?: string;
+};
+
+type LaunchTasksResponse = {
+  summary?: {
+    totalTasks: number;
+    openTasks: number;
+    readyCount: number;
+    watchCount: number;
+    buildCount: number;
+    availableBonusTokens: number;
+  };
+  tasks: LaunchTaskView[];
 };
 
 const readinessClasses: Record<MarketplaceSourceReadinessLevel, string> = {
@@ -42,7 +66,7 @@ const railClasses: Record<MarketplaceActionRail, string> = {
   platinum: "border-purple-400/30 bg-purple-500/10 text-purple-200",
 };
 
-function visibleRows(limit?: number) {
+function fallbackRows(limit?: number): LaunchTaskView[] {
   const rows = getMarketplaceLaunchTasks();
 
   return typeof limit === "number" ? rows.slice(0, Math.max(0, limit)) : rows;
@@ -59,12 +83,45 @@ export default function MarketplaceSourceReadinessBoard({
   compact = false,
   limit,
 }: MarketplaceSourceReadinessBoardProps) {
-  const rows = visibleRows(limit);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [proofByTask, setProofByTask] = useState<Record<string, string>>({});
+  const { data } = useQuery<LaunchTasksResponse>({
+    queryKey: ["/api/marketplace/launch-tasks"],
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    retry: false,
+  });
+  const completeMutation = useMutation({
+    mutationFn: async ({ taskId, proofNotes }: { taskId: string; proofNotes: string }) => {
+      const res = await apiRequest("POST", `/api/marketplace/launch-tasks/${taskId}/complete`, { proofNotes });
+      return res.json();
+    },
+    onSuccess: (result, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/marketplace/launch-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rewards/wallet"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rewards/history"] });
+      setProofByTask((current) => ({ ...current, [variables.taskId]: "" }));
+      toast({
+        title: result.awarded ? "Launch bonus issued" : "Already claimed",
+        description: result.awarded
+          ? `${Number(result.bonusTokens || 0).toLocaleString()} JCMOVES added.`
+          : result.reason || "This launch task was already recorded.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Launch task not claimed", description: error.message, variant: "destructive" });
+    },
+  });
+  const rows = useMemo(() => {
+    const source = data?.tasks && data.tasks.length > 0 ? data.tasks : fallbackRows(limit);
+    return typeof limit === "number" ? source.slice(0, Math.max(0, limit)) : source;
+  }, [data?.tasks, limit]);
   if (rows.length === 0) return null;
 
-  const ready = rows.filter((row) => row.readiness === "ready").length;
-  const watch = rows.filter((row) => row.readiness === "watch").length;
-  const build = rows.filter((row) => row.readiness === "build").length;
+  const ready = data?.summary?.readyCount ?? rows.filter((row) => row.readiness === "ready").length;
+  const watch = data?.summary?.watchCount ?? rows.filter((row) => row.readiness === "watch").length;
+  const build = data?.summary?.buildCount ?? rows.filter((row) => row.readiness === "build").length;
 
   return (
     <section className={`rounded-xl border border-violet-400/20 bg-violet-500/10 p-4 ${className}`}>
@@ -91,7 +148,15 @@ export default function MarketplaceSourceReadinessBoard({
 
       <div className={`mt-4 grid gap-3 ${compact ? "" : "lg:grid-cols-2"}`}>
         {rows.map((task) => (
-          <ReadinessCard key={task.id} task={task} compact={compact} />
+          <ReadinessCard
+            key={task.id}
+            task={task}
+            compact={compact}
+            proofNote={proofByTask[task.id] || ""}
+            onProofNoteChange={(value) => setProofByTask((current) => ({ ...current, [task.id]: value }))}
+            onComplete={() => completeMutation.mutate({ taskId: task.id, proofNotes: proofByTask[task.id] || "" })}
+            completing={completeMutation.isPending && completeMutation.variables?.taskId === task.id}
+          />
         ))}
       </div>
     </section>
@@ -101,11 +166,22 @@ export default function MarketplaceSourceReadinessBoard({
 function ReadinessCard({
   task,
   compact,
+  proofNote,
+  onProofNoteChange,
+  onComplete,
+  completing,
 }: {
-  task: MarketplaceLaunchTask;
+  task: LaunchTaskView;
   compact: boolean;
+  proofNote: string;
+  onProofNoteChange: (value: string) => void;
+  onComplete: () => void;
+  completing: boolean;
 }) {
   const ReadyIcon = readinessIcons[task.readiness];
+  const canComplete = Boolean(task.canComplete);
+  const completed = Boolean(task.completedByMe);
+  const bonusTokens = Number(task.bonusTokens ?? task.completionBonusJcMoves ?? 0);
 
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-950/65 p-3">
@@ -150,12 +226,46 @@ function ReadinessCard({
             {task.totalMappedBonusJcMoves.toLocaleString()} JCMOVES mapped
           </span>
         )}
+        {bonusTokens > 0 && (
+          <span className="rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-200">
+            +{bonusTokens.toLocaleString()} claim bonus
+          </span>
+        )}
         {task.flywheelStages.map((stageId) => (
           <span key={stageId} className="rounded-full border border-violet-400/20 bg-violet-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-violet-200">
             {stageId}
           </span>
         ))}
       </div>
+
+      {(canComplete || completed || task.completionReason) && (
+        <div className="mt-3 rounded-md border border-slate-800 bg-slate-900/65 p-2.5">
+          <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500">
+            {completed ? "Claimed" : "Claim"}
+          </p>
+          <p className="mt-1 text-[11px] leading-4 text-slate-400">
+            {task.completionReason || "Add proof notes to claim the launch task."}
+          </p>
+          {canComplete && (
+            <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]">
+              <textarea
+                value={proofNote}
+                onChange={(event) => onProofNoteChange(event.target.value)}
+                placeholder="Proof note: what changed, where it can be verified..."
+                className="min-h-16 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 outline-none focus:border-violet-400"
+              />
+              <button
+                type="button"
+                onClick={onComplete}
+                disabled={completing}
+                className="rounded-md border border-emerald-400/30 bg-emerald-500/15 px-3 py-2 text-xs font-black uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {completing ? "Claiming" : "Claim"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -159,6 +159,7 @@ export type MarketplaceLaunchTask = {
   rewardClose: string;
   linkedActionTaskIds: string[];
   totalMappedBonusJcMoves: number;
+  completionBonusJcMoves: number;
   surfaces: string;
   shapeIds: MarketplaceRequestShapeId[];
   flywheelStages: MarketplaceFlywheelStageId[];
@@ -1465,6 +1466,12 @@ const launchTaskTitleByReadiness: Record<MarketplaceSourceReadinessLevel, string
   ready: "Protect",
 };
 
+const launchTaskBonusByReadiness: Record<MarketplaceSourceReadinessLevel, number> = {
+  build: 400,
+  watch: 250,
+  ready: 150,
+};
+
 export function getMarketplaceLaunchTasks(): MarketplaceLaunchTask[] {
   const flowById = new Map(MARKETPLACE_SOURCE_FLOW_MATRIX.map((flow) => [flow.id, flow]));
 
@@ -1493,6 +1500,7 @@ export function getMarketplaceLaunchTasks(): MarketplaceLaunchTask[] {
         rewardClose: readiness.rewardClose,
         linkedActionTaskIds: visibleTasks.map((task) => task.id),
         totalMappedBonusJcMoves: visibleTasks.reduce((sum, task) => sum + Math.max(0, task.bonusJcMoves || 0), 0),
+        completionBonusJcMoves: launchTaskBonusByReadiness[readiness.readiness],
         surfaces: flow.surfaces,
         shapeIds: flow.shapeIds,
         flywheelStages: flow.flywheelStages,
